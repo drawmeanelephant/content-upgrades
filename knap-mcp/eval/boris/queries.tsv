@@ -1,0 +1,25 @@
+-	point-in-time snapshots
+1	point-in-time snapshots
+-	Does AcmeDB have managed backups?
+20	acmedb
+3	AcmeDB
+20	a
+20	the
+20	id
+10	docs — backups
+20	—
+-	zzz-nothing
+5	kubernetes operator
+-	wikilink
+2	cites
+4	replication roadmap
+-	Point-in-time snapshots are coming soon.
+-	write-ahead log
+7	p99   reads
+20	source reliability
+0	acmedb
+1	AcmeDB supports SQL
+6	  Cross-Region replication  
+-	EREFERENCEMISSING
+20	single-region only
+-	unverified laptop benchmark
