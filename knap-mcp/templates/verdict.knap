@@ -1,0 +1,23 @@
+{{ title | h1 }}
+
+{{ verdict | bold }} — {{ take }}
+
+{{ "The case" | h2 }}
+
+{{ summary }}
+
+{% if blockers %}
+{{ "Blockers" | h2 }}
+
+{{ blockers | list }}
+{% endif %}
+
+{% if receipts %}
+{{ "Receipts" | h2 }}
+
+{{ receipts | table }}
+{% endif %}
+
+{{ "Verdict" | h2 }}
+
+{{ bottom_line }}

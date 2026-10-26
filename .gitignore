@@ -22,3 +22,11 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Zig
+zig-out/
+.zig-cache/
+zig-cache/
+
+# knap-mcp runtime artifacts
+.knap-mcp/

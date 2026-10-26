@@ -1,0 +1,25 @@
+{
+  "title": "Apparatus: AcmeDB verdict",
+  "subtitle": "every claim, pinned to the thing it came from",
+  "sources": [
+    {
+      "name": "AcmeDB docs — backups",
+      "url": "https://example.com/acmedb/docs#backups",
+      "reliability": "high",
+      "gaf": "high",
+      "quotes": [
+        "Point-in-time snapshots are coming soon.",
+        "Cross-region replication is on the roadmap."
+      ]
+    },
+    {
+      "name": "AcmeDB launch post",
+      "url": "https://example.com/acmedb/launch",
+      "reliability": "medium",
+      "gaf": "low",
+      "quotes": [
+        "p99 read latency under 2ms on a laptop."
+      ]
+    }
+  ]
+}

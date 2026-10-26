@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "comment": "Seeded-breakage corpus for the repair-eval harness. Each seed mutates a shipped template through a pinned error class, then the repair loop runs bounded (max 4). The mock backend carries canned patches for the first four classes — it proves plumbing, not capability. orphan-endif is deliberate: non-convergence must show up in the table.",
+  "seeds": [
+    {
+      "id": "unclosed-if",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "remove", "find": "{% endif %}", "occurrence": 0}
+    },
+    {
+      "id": "unclosed-for",
+      "template_id": "apparatus",
+      "data": "@data/apparatus.sample.json",
+      "break": {"kind": "remove", "find": "{% endfor %}", "occurrence": 0}
+    },
+    {
+      "id": "unclosed-var",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "remove", "find": " }}", "occurrence": 0}
+    },
+    {
+      "id": "unknown-filter",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "| h2", "replace": "| head2", "occurrence": 0}
+    },
+    {
+      "id": "dangling-filter",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "{{ title | h1 }}", "replace": "{{ title |", "occurrence": 0}
+    },
+    {
+      "id": "clean-control",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "none"}
+    },
+    {
+      "id": "orphan-endif",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "remove", "find": "{% if blockers %}", "occurrence": 0}
+    }
+  ]
+}
