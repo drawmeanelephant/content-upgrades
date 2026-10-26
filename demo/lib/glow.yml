@@ -1,0 +1,5 @@
+# Pinned glow config so a user's own glow.yml can't change the demo look.
+style: "dark"
+width: 100
+pager: false
+mouse: false
