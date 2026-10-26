@@ -1,0 +1,123 @@
+//! Engine dispatch. k4o and dogbed are pinned external binaries invoked
+//! by path/env override — never vendored, never reimplemented. The server
+//! trusts their contract: buffered output, diagnostics on stderr, exit 1.
+
+const std = @import("std");
+const Ctx = @import("ctx.zig").Ctx;
+
+pub const Config = struct {
+    k4o: []const u8,
+    dogbed: []const u8,
+};
+
+pub const Target = enum { markdown, gfm, textile, html };
+
+pub const Diag = struct {
+    kind: []const u8 = "error",
+    line: u32 = 0,
+    col: u32 = 0,
+    detail: []const u8 = "",
+};
+
+pub const Outcome = union(enum) {
+    ok: []const u8,
+    diags: []Diag,
+};
+
+pub const Error = error{ ToolFailed, OutOfMemory, WriteFailed } || std.process.RunError;
+
+/// `k4o render <tpl> --data <data> --format <fmt>` for markdown/gfm/textile,
+/// `dogbed render <tpl> --data <data>` for html.
+pub fn render(ctx: *Ctx, target: Target, template_path: []const u8, data_path: []const u8) Error!Outcome {
+    const argv: []const []const u8 = switch (target) {
+        .html => &.{ ctx.engines.dogbed, "render", template_path, "--data", data_path },
+        .markdown, .gfm, .textile => &.{
+            ctx.engines.k4o, "render", template_path, "--data", data_path, "--format", @tagName(target),
+        },
+    };
+    const result = std.process.run(ctx.arena, ctx.io, .{
+        .argv = argv,
+        .stdout_limit = .limited(64 * 1024 * 1024),
+        .stderr_limit = .limited(4 * 1024 * 1024),
+    }) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ argv[0], @errorName(e) }),
+    };
+    return finishRun(ctx, result);
+}
+
+/// `k4o lint <tpl>` — exit 0 and "clean" output means no findings.
+pub fn lint(ctx: *Ctx, template_path: []const u8) Error!Outcome {
+    const result = std.process.run(ctx.arena, ctx.io, .{
+        .argv = &.{ ctx.engines.k4o, "lint", template_path },
+        .stdout_limit = .limited(16 * 1024 * 1024),
+        .stderr_limit = .limited(4 * 1024 * 1024),
+    }) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ ctx.engines.k4o, @errorName(e) }),
+    };
+    switch (result.term) {
+        .exited => |code| if (code == 0) return .{ .ok = result.stdout },
+        else => {},
+    }
+    // Lint findings go to stdout on exit 1; real failures go to stderr.
+    if (result.stdout.len > 0) return .{ .ok = result.stdout };
+    return .{ .diags = try parseDiags(ctx, result.stderr) };
+}
+
+fn finishRun(ctx: *Ctx, result: std.process.RunResult) Error!Outcome {
+    switch (result.term) {
+        .exited => |code| {
+            if (code == 0) return .{ .ok = result.stdout };
+            const diags = try parseDiags(ctx, result.stderr);
+            if (diags.len == 0)
+                return ctx.fail("engine exited {d} with no diagnostics", .{code});
+            return .{ .diags = diags };
+        },
+        else => return ctx.fail("engine terminated abnormally", .{}),
+    }
+}
+
+/// Engine stderr contract: `<prog>: <kind> at line <L>, column <C>: <detail>`
+/// per line. Anything unparseable degrades to a generic diag so repair
+/// always has something to point at.
+pub fn parseDiags(ctx: *Ctx, stderr: []const u8) ![]Diag {
+    var out: std.ArrayList(Diag) = .empty;
+    var lines = std.mem.splitScalar(u8, stderr, '\n');
+    while (lines.next()) |line| {
+        const trimmed = std.mem.trim(u8, line, " \r\t");
+        if (trimmed.len == 0) continue;
+        try out.append(ctx.arena, parseDiagLine(trimmed) orelse .{
+            .detail = trimmed,
+        });
+    }
+    return out.items;
+}
+
+fn parseDiagLine(line: []const u8) ?Diag {
+    // Strip the "prog: " prefix if present.
+    var s = line;
+    if (std.mem.indexOf(u8, s, ": ")) |i| {
+        if (std.mem.indexOfScalar(u8, s[0..i], '/') == null and
+            std.mem.indexOfScalar(u8, s[0..i], ' ') == null)
+            s = s[i + 2 ..];
+    }
+    const marker = " at line ";
+    const mi = std.mem.indexOf(u8, s, marker) orelse return null;
+    const kind = s[0..mi];
+    const rest = s[mi + marker.len ..];
+    const comma = std.mem.indexOf(u8, rest, ", column ") orelse return null;
+    const line_n = std.fmt.parseInt(u32, rest[0..comma], 10) catch return null;
+    const after = rest[comma + ", column ".len ..];
+    const colon = std.mem.indexOf(u8, after, ": ") orelse return null;
+    const col_n = std.fmt.parseInt(u32, after[0..colon], 10) catch return null;
+    return .{ .kind = kind, .line = line_n, .col = col_n, .detail = after[colon + 2 ..] };
+}
+
+pub fn targetFromName(name: []const u8) ?Target {
+    const info = @typeInfo(Target).@"enum";
+    inline for (info.field_names, 0..) |fname, i| {
+        if (std.mem.eql(u8, name, fname)) return @enumFromInt(info.field_values[i]);
+    }
+    return null;
+}
