@@ -19,8 +19,8 @@ zig build test
 ```
 
 Engines resolve from `KNAP_K4O_PATH` / `KNAP_DOGBED_PATH`, else `PATH`.
-The pins live in `../scripts/engines.sh`: k4o `bdfb838` (k4o main;
-markdown or oliver) and dogbed `a7f8c27` (html). `make engines` builds a
+The pins live in `../scripts/engines.sh`: k4o `aeba163` (k4o main;
+markdown or oliver) and dogbed `188ccac` (html). `make engines` builds a
 missing pin into `~/.cache/knap-engines/`; the root `Makefile` exports
 both paths for every target.
 
