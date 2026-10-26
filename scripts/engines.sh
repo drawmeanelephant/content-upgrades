@@ -12,7 +12,7 @@
 # and an existing pin dir is never rebuilt or overwritten.
 set -eu
 
-K4O_SHA=bdfb838a115e86483d9ef1f14d6768a9b9ea0754
+K4O_SHA=aeba16352a7b6c7fd8d54db53cb506bdf5ead994
 DOGBED_SHA=a7f8c2716fb4e8d04c2c6cff88e0d3401ce8bd9e
 
 ENGINES_DIR=${KNAP_ENGINES_DIR:-$HOME/.cache/knap-engines}
