@@ -150,7 +150,7 @@ fn resourcesList(ctx: *Ctx, out: *Allocating) !void {
     for (artifacts) |a| {
         if (!first) try out.writer.writeAll(",");
         first = false;
-        try out.writer.print("{{\"uri\":\"knap://docs/{s}\",\"name\":\"{s}.{s}\",\"mimeType\":\"text/plain\"}}", .{ a.doc_id, a.doc_id, a.extension });
+        try out.writer.print("{{\"uri\":\"knap://docs/{s}\",\"name\":\"{s}.{s}\",\"mimeType\":\"{s}\"}}", .{ a.doc_id, a.doc_id, a.extension, mimeFor(a.extension) });
     }
     try out.writer.writeAll("]}");
 }
@@ -176,10 +176,25 @@ fn resourcesRead(ctx: *Ctx, params: ?std.json.Value, out: *Allocating) !void {
         const id = uri["knap://docs/".len..];
         const text = (store.read(ctx, id) catch null) orelse
             return ctx.fail("no such doc '{s}'", .{id});
-        try writeContents(out, uri, "text/plain", text);
+        try writeContents(out, uri, mimeFor(docExtension(ctx, id)), text);
         return;
     }
     return ctx.fail("unknown resource uri '{s}'", .{uri});
+}
+
+/// Rendered docs are `md` (markdown and oliver targets) or `html`; eval
+/// reports are `json`. Anything else stays text/plain.
+fn mimeFor(ext: []const u8) []const u8 {
+    if (std.mem.eql(u8, ext, "md")) return "text/markdown";
+    if (std.mem.eql(u8, ext, "html")) return "text/html";
+    if (std.mem.eql(u8, ext, "json")) return "application/json";
+    return "text/plain";
+}
+
+fn docExtension(ctx: *Ctx, doc_id: []const u8) []const u8 {
+    const artifacts = store.list(ctx) catch return "";
+    for (artifacts) |a| if (std.mem.eql(u8, a.doc_id, doc_id)) return a.extension;
+    return "";
 }
 
 fn writeContents(out: *Allocating, uri: []const u8, mime: []const u8, text: []const u8) !void {

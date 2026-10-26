@@ -89,7 +89,7 @@ const usage_tail =
     \\
     \\Options:
     \\  -d, --data <file|->     JSON data file; - reads stdin (default {})
-    \\  --target <t>            markdown (default) | gfm | textile | html
+    \\  --target <t>            markdown (default) | oliver | html
     \\  --backend <b>           mock (default) | spark | wonder | baseten
     \\  --tone <t>              voice tone: mild | spicy | feral
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
