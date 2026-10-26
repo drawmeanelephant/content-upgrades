@@ -12,6 +12,13 @@ demo/build.sh rough          # all rendered beats -> demo/out/rough-cut.mp4 (tim
 demo/build.sh smoke          # toolchain smoke test -> demo/out/smoke.mp4
 ```
 
+`make demo` (`demo/run.sh`) runs every beat below as one scripted terminal run on
+the mock backend, with no vhs and no network. It uses the shipped commands the
+tapes still mark as TODO (`voice`, `structhash`, `publish-check`, `density`,
+`ratchet`) and writes a normalized transcript and the beat artifacts to
+`demo/out/demo/` (see `docs/tracks/I1.md`). Use it as the per-beat reference
+text when re-recording a tape.
+
 Status key:
 
 - **ready**: the tape renders the beat's final content today.
