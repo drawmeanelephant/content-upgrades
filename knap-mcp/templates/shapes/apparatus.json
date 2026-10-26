@@ -1,16 +1,32 @@
 {
   "template_id": "apparatus",
-  "description": "The second-page citations apparatus: every source wikilinked and deep-linked with reliability, give-a-shit rating, and the quotes it backs.",
+  "description": "The second page, the citations: every source behind a verdict with its standing in a ledger table, every quote deep-linked to the passage it came from in a quote callout, the claim map, open questions folded into a collapsed warning callout, and object-keyed footnotes. Renders from its own data or from the same data as verdict.knap: the heading falls back from the apparatus page name to `title`, and the back-link to the verdict appears only when it names a different page. Section headings, callout kinds and callout titles belong to the template; write values only. Plain strings, no markdown: the template does all formatting.",
   "fields": {
-    "title":    {"type": "string", "role": "page heading"},
-    "subtitle": {"type": "string", "role": "deck line, rendered italic", "voice": true},
-    "sources":  {"type": "array<object>", "role": "citation list", "fields": {
-      "name":        {"type": "string", "role": "target name for [[wikilink]] heading"},
-      "url":         {"type": "string", "role": "deep link target (http/https only)"},
-      "rel":         {"type": "string", "role": "relationship tag, e.g. documentation|self-published|benchmark"},
-      "reliability": {"type": "string", "role": "high|medium|low"},
-      "gaf":         {"type": "string", "role": "high|medium|low"},
-      "quotes":      {"type": "array<string>", "optional": true, "role": "verbatim pulls"}
-    }}
+    "title":    {"type": "string", "role": "page heading and frontmatter `title`; the apparatus page name when `apparatus_page` is absent"},
+    "subtitle": {"type": "string", "role": "deck line, rendered italic; falls back to a stock line via ??", "optional": true, "voice": true},
+    "apparatus_page": {"type": "string", "role": "name of this apparatus page; wins over `title` for the heading via ??", "optional": true},
+    "verdict_page":   {"type": "string", "role": "name of the verdict page this apparatus backs; a [[wikilink]] in frontmatter `verdict` and the 'receipts behind' line. Omit (or equal to the heading) to drop the back-link", "optional": true},
+    "date":     {"type": "string", "role": "curation date, YYYY-MM-DD; frontmatter `date`", "optional": true},
+    "sources":  {"type": "array<object>", "role": "citation list: one ledger row and one h3 section each, names rendered as [[wikilinks]]", "fields": {
+      "name":        {"type": "string", "role": "target name for [[wikilink]]; name only pages that exist, an invented name is a dangling wikilink"},
+      "url":         {"type": "string", "role": "deep link target (http/https, no #fragment); the 'Read the source' link and the deep-link target for every quote"},
+      "rel":         {"type": "string", "role": "relationship tag, rendered as inline code, e.g. documentation|self-published|benchmark"},
+      "reliability": {"type": "string", "role": "high|medium|low, rendered bold"},
+      "gaf":         {"type": "string", "role": "how much this source moved the verdict: high|medium|low"},
+      "accessed":    {"type": "string", "role": "access date, YYYY-MM-DD; falls back to undated via ??", "optional": true},
+      "quotes":      {"type": "array<object>", "role": "verbatim pulls, one 'Pulled quote' callout each", "optional": true, "fields": {
+        "text":     {"type": "string", "role": "verbatim quote copied from the page at `url`, one line. Deep-linked with #:~:text=, so it must match the source text exactly; no unbalanced parentheses"},
+        "used_for": {"type": "string", "role": "what the quote backs, one line", "optional": true, "voice": true}
+      }}
+    }},
+    "receipts": {"type": "array<object>", "role": "the claim map: one pipe-table row per claim; header row is fixed in the template", "optional": true, "fields": {
+      "claim":      {"type": "string", "role": "the claim, one line", "voice": true},
+      "evidence":   {"type": "string", "role": "what backs it (verdict page only)", "optional": true, "voice": true},
+      "source":     {"type": "string", "role": "name of a page in `sources`, rendered as a [[wikilink]]; omit for 'nothing yet'", "optional": true},
+      "confidence": {"type": "string", "role": "high|medium|low; falls back to unrated via ??", "optional": true},
+      "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the claim. Must match a `footnotes` key exactly", "optional": true}
+    }},
+    "caveats":  {"type": "array<string>", "role": "open questions, bulleted inside the collapsed 'Open questions' warning callout", "optional": true, "voice": true},
+    "footnotes": {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key should be referenced by some receipt `note`, and every `note` must be a key here; format_check flags strays", "optional": true}
   }
 }
