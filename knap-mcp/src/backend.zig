@@ -12,6 +12,11 @@ const engine = @import("engine.zig");
 
 pub const Kind = enum { mock, spark, wonder, baseten };
 
+/// What a model call is for. Every task uses the same endpoint and model
+/// per backend today; callers pass it so routing can split per task later
+/// without touching them.
+pub const Task = enum { repair, voice, verify, judge };
+
 pub const Error = error{ ToolFailed, OutOfMemory, WriteFailed } || std.process.RunError;
 
 pub fn parseKind(name: []const u8) ?Kind {
@@ -113,6 +118,22 @@ fn trimDanglingFilter(ctx: *Ctx, region: []const u8) !?[]const u8 {
 // --- remote (OpenAI-compatible, via curl) -----------------------------------
 
 fn remotePatch(ctx: *Ctx, kind: Kind, region: []const u8, diag: engine.Diag) Error!?[]const u8 {
+    var user: std.Io.Writer.Allocating = .init(ctx.arena);
+    try user.writer.print(
+        "diagnostic: {s} at line {d}, column {d}: {s}\n\nregion:\n{s}\n",
+        .{ diag.kind, diag.line, diag.col, diag.detail, region },
+    );
+
+    const body = try complete(ctx, kind, .repair, repair_prefix, user.written());
+    return if (body.len == 0) null else body;
+}
+
+/// One chat completion on a live backend: resolves the endpoint and model
+/// for `kind`, needs MODEL_API_KEY, returns the first choice's content.
+/// `mock` has no endpoint; callers keep their own canned path for it.
+pub fn complete(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user: []const u8) Error![]const u8 {
+    if (kind == .mock)
+        return ctx.fail("backend 'mock' has no live completion (task '{s}')", .{@tagName(task)});
     const key = ctx.environ.get("MODEL_API_KEY") orelse
         return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
     const url = switch (kind) {
@@ -126,15 +147,7 @@ fn remotePatch(ctx: *Ctx, kind: Kind, region: []const u8, diag: engine.Diag) Err
         .baseten => "meta-models/muse-spark-open-1026",
         .mock => unreachable,
     };
-
-    var user: std.Io.Writer.Allocating = .init(ctx.arena);
-    try user.writer.print(
-        "diagnostic: {s} at line {d}, column {d}: {s}\n\nregion:\n{s}\n",
-        .{ diag.kind, diag.line, diag.col, diag.detail, region },
-    );
-
-    const body = try chatCompletion(ctx, url, key, model, repair_prefix, user.written());
-    return if (body.len == 0) null else body;
+    return chatCompletion(ctx, url, key, model, system, user);
 }
 
 /// POST an OpenAI-compatible chat completion through curl; return the
