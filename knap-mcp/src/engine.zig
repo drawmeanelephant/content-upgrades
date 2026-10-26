@@ -10,7 +10,22 @@ pub const Config = struct {
     dogbed: []const u8,
 };
 
-pub const Target = enum { markdown, gfm, textile, html };
+/// `markdown` is k4o's CommonMark, `oliver` its Oliver-targeted variant
+/// (still markdown; `comment` and table delimiters differ), `html` goes
+/// through dogbed.
+pub const Target = enum { markdown, oliver, html };
+
+/// For schemas, help and error strings.
+pub const target_names = "markdown|oliver|html";
+
+/// Artifact extension for a rendered doc. Oliver docs are markdown files
+/// (oliver reads them with `--from markdown`).
+pub fn extension(target: Target) []const u8 {
+    return switch (target) {
+        .markdown, .oliver => "md",
+        .html => "html",
+    };
+}
 
 pub const Diag = struct {
     kind: []const u8 = "error",
@@ -26,12 +41,12 @@ pub const Outcome = union(enum) {
 
 pub const Error = error{ ToolFailed, OutOfMemory, WriteFailed } || std.process.RunError;
 
-/// `k4o render <tpl> --data <data> --format <fmt>` for markdown/gfm/textile,
+/// `k4o render <tpl> --data <data> --format <fmt>` for markdown/oliver,
 /// `dogbed render <tpl> --data <data>` for html.
 pub fn render(ctx: *Ctx, target: Target, template_path: []const u8, data_path: []const u8) Error!Outcome {
     const argv: []const []const u8 = switch (target) {
         .html => &.{ ctx.engines.dogbed, "render", template_path, "--data", data_path },
-        .markdown, .gfm, .textile => &.{
+        .markdown, .oliver => &.{
             ctx.engines.k4o, "render", template_path, "--data", data_path, "--format", @tagName(target),
         },
     };
@@ -120,4 +135,24 @@ pub fn targetFromName(name: []const u8) ?Target {
         if (std.mem.eql(u8, name, fname)) return @enumFromInt(info.field_values[i]);
     }
     return null;
+}
+
+test "targets are markdown, oliver, html" {
+    try std.testing.expectEqual(Target.oliver, targetFromName("oliver").?);
+    try std.testing.expectEqual(@as(?Target, null), targetFromName("latex"));
+    try std.testing.expectEqualStrings("md", extension(.oliver));
+    try std.testing.expectEqualStrings("html", extension(.html));
+}
+
+test "parseDiags reads k4o main's stderr shape" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx: Ctx = undefined;
+    ctx.arena = arena.allocator();
+    const diags = try parseDiags(&ctx, "k4o: syntax error at line 3, column 14: unclosed '{{' tag (missing '}}')\n");
+    try std.testing.expectEqual(@as(usize, 1), diags.len);
+    try std.testing.expectEqualStrings("syntax error", diags[0].kind);
+    try std.testing.expectEqual(@as(u32, 3), diags[0].line);
+    try std.testing.expectEqual(@as(u32, 14), diags[0].col);
+    try std.testing.expectEqualStrings("unclosed '{{' tag (missing '}}')", diags[0].detail);
 }
