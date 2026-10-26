@@ -11,11 +11,12 @@ Nothing here is Zig. `src/voice.zig` (lane C1) loads these files at runtime.
 | `system.md` | The contract: rewrite one value, keep facts exact, return only the string, add no markup, stay within length bounds. | Yes, verbatim |
 | `mild.md`, `spicy.md`, `feral.md` | Tone guides. | Yes, verbatim, one per call |
 | `examples/<tone>.jsonl` | Few-shot pairs, 11 per tone, with the same inputs in every tone. | Yes, rendered into the system message |
-| `mock/<tone>.jsonl` | Canned replies for every `voice: true` value in the verdict and apparatus sample data, for the mock backend. | No |
+| `mock/<tone>.jsonl` | Canned replies for every `voice: true` value in the four `data/*.sample.json` files, for the mock backend. | No |
 | `voice.awk` | The guard (fact and markup checks) and the reference prompt assembler. | No |
 | `check.sh` | Runs the guard over every example and mock reply, plus `testdata/bad.jsonl`. | No |
 | `assemble.sh` | Prints the exact system and user messages for one call. | No |
 | `testdata/bad.jsonl` | Known-bad rewrites. Each must trip the guard with the expected reason. | No |
+| `testdata/system.<tone>.txt`, `testdata/user.take.txt` | `assemble.sh` output, checked in. `src/voice.zig`'s tests compare its own assembly with them. Regenerate them when a prompt file or example changes. | No |
 
 The `.md` files are prompt text, sent byte for byte apart from trailing whitespace. Don't add front matter, comments or notes to them; put notes in this README.
 
@@ -25,7 +26,7 @@ One JSON object per line: UTF-8, LF line endings, no blank lines, no comments. E
 
 | Key | Meaning |
 |---|---|
-| `template` | Template id: `verdict` or `apparatus`. |
+| `template` | Template id: `verdict`, `apparatus`, `release-notes` or `reading-note`. |
 | `field` | JSON path inside the data, without the template id: `take`, `blockers[0]`, `receipts[1][0]`, `subtitle`. A dot separates object keys; `[n]` is an array index. |
 | `field_role` | The shape descriptor's `role` for the field, verbatim. An element of an `array<string>` adds ` (one item)`. |
 | `input` | The value before the voice pass. |
@@ -140,7 +141,7 @@ The guard can't see everything. When examples change, a person checks the verdic
 
 ## Mock replies
 
-`mock/<tone>.jsonl` holds hand-written replies for the six `voice: true` values in `data/verdict.sample.json` and `data/apparatus.sample.json`. A mock backend looks up `(template, field, input)` and returns `output`. On a miss it returns the input unchanged, and the field counts as unchanged. These lines are never sent to a model. `check.sh` warns when a mock input no longer matches the sample data.
+`mock/<tone>.jsonl` holds hand-written replies for the 33 `voice: true` values in `data/*.sample.json` (verdict 5, apparatus 1, release-notes 15, reading-note 12). A mock backend looks up `(template, field, input)` and returns `output`. On a miss it returns the input unchanged, and the field counts as unchanged. These lines are never sent to a model. `check.sh` warns when a mock input no longer matches the sample data.
 
 ## Why the examples use other subjects
 
@@ -155,7 +156,7 @@ sh knap-mcp/prompts/voice/check.sh
 It needs only POSIX sh and awk, and it was tested with macOS `/usr/bin/awk` and gawk. It prints one line per problem, then a summary, and exits non-zero on any failure:
 
 ```
-voice check: 33 examples, 18 mock replies, 19/19 selftest breaks caught, 0 warnings, 0 failures
+voice check: 33 examples, 99 mock replies, 19/19 selftest breaks caught, 0 warnings, 0 failures
 ```
 
 It checks that every line parses with the right keys, that every example and mock reply passes the guard, that each tone has at least 6 examples, that all three tones share the same `template`, `field`, `field_role` and `input` sequence, that no example input is copied from the sample data, and that every line in `testdata/bad.jsonl` is caught with the expected reason.

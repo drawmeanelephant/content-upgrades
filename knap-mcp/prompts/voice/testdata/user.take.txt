@@ -1,0 +1,3 @@
+Field: take
+Role: one-line hot take
+Input: the boring database that actually ships
