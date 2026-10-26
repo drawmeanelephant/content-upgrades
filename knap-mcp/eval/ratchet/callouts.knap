@@ -1,0 +1,13 @@
+{# callouts.knap: ratchet eval fixture (next-phase plan section 2.3).
+   Enumerated callout kinds: the kind is data, picked from a shape enum;
+   the callout type and title stay template-authored literals. The pull
+   quote is an evidence slot: it must be copied verbatim from a source. #}{{ title | h1 }}
+
+{{ intro }}{% if pull_quote %}
+
+
+{{ pull_quote | blockquote }}{% endif %}{% for c in callouts %}
+
+
+
+{% if c.kind == "warning" %}{{ c.body | callout:("warning", "Heads up") }}{% elseif c.kind == "tip" %}{{ c.body | callout:("tip", "Tip") }}{% else %}{{ c.body | callout:("note", "Note") }}{% endif %}{% endfor %}

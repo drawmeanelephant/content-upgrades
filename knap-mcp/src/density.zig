@@ -1075,7 +1075,8 @@ test "writeJson is deterministic and parses" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const doc = try loadFixture(a, "verdict.md");
+    // Frozen, and it carries format_check warnings (the T2 verdict has none).
+    const doc = try loadFixture(a, "verdict-v1.pipe-table.md");
     var first: std.Io.Writer.Allocating = .init(a);
     var second: std.Io.Writer.Allocating = .init(a);
     try writeJson(try score(a, doc), &first.writer);
@@ -1113,7 +1114,8 @@ test "calibration fixtures rank as the rubric says" {
     const generic = (try score(a, try loadFixture(a, "generic.md"))).total;
     const apparatus = (try score(a, try loadFixture(a, "apparatus.md"))).total;
     const verdict = (try score(a, try loadFixture(a, "verdict.md"))).total;
-    const verdict_gfm = (try score(a, try loadFixture(a, "verdict.gfm.md"))).total;
+    const v1_pipe = (try score(a, try loadFixture(a, "verdict-v1.pipe-table.md"))).total;
+    const v1_html = (try score(a, try loadFixture(a, "verdict-v1.html-table.md"))).total;
     const cunty = (try score(a, try loadFixture(a, "cunty.md"))).total;
     const confetti = (try score(a, try loadFixture(a, "confetti.md"))).total;
 
@@ -1123,8 +1125,17 @@ test "calibration fixtures rank as the rubric says" {
     try testing.expect(barf < apparatus);
     // Dense is not noisy: piling on markup must not beat the real doc.
     try testing.expect(confetti < verdict);
-    // Same doc, pipe table vs HTML table.
-    try testing.expectApproxEqAbs(verdict, verdict_gfm, 2.0);
+    // Same doc (the pre-T2 verdict), pipe table (k4o main) vs HTML table
+    // (k4o f97c5db markdown).
+    try testing.expectApproxEqAbs(v1_pipe, v1_html, 2.0);
+    // The ratchet's start and finish lines: the required-fields-only render
+    // of each T1 template scores well below its full sample.
+    inline for (.{ "release-notes", "reading-note" }) |t| {
+        const min = (try score(a, try loadFixture(a, t ++ ".min.md"))).total;
+        const full = (try score(a, try loadFixture(a, t ++ ".md"))).total;
+        try testing.expect(min + 15 < full);
+        try testing.expect(generic < min);
+    }
 }
 
 test "scoring every fixture takes under 50ms" {
@@ -1136,7 +1147,10 @@ test "scoring every fixture takes under 50ms" {
         try loadFixture(a, "generic.md"),
         try loadFixture(a, "apparatus.md"),
         try loadFixture(a, "verdict.md"),
-        try loadFixture(a, "verdict.gfm.md"),
+        try loadFixture(a, "verdict-v1.pipe-table.md"),
+        try loadFixture(a, "verdict-v1.html-table.md"),
+        try loadFixture(a, "release-notes.md"),
+        try loadFixture(a, "reading-note.md"),
         try loadFixture(a, "cunty.md"),
         try loadFixture(a, "confetti.md"),
     };

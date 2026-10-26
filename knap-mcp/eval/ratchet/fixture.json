@@ -1,0 +1,9 @@
+{
+  "title": "Upgrading AcmeDB to 2.0",
+  "intro": "AcmeDB 2.0 adds online snapshots and renames one config key. Most installs upgrade with one restart; drivers older than 1.8 need a bump first.",
+  "callouts": [],
+  "sources": [
+    {"id": "changelog", "quote": "Snapshots are online, incremental, and restorable to any point in the last seven days."},
+    {"id": "changelog", "quote": "Drivers older than 1.8 can no longer connect."}
+  ]
+}
