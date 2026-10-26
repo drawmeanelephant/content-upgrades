@@ -65,6 +65,7 @@ const commands = [_]Command{
     .{ .name = "repair", .usage = "repair <id> [options]", .summary = "bounded repair loop (max 4)", .run = .{ .tool = .{ .tool = "knap_repair", .key = "template_id" } } },
     .{ .name = "lint", .usage = "lint <file.knap>", .summary = "k4o lint passthrough", .run = .{ .tool = .{ .tool = "knap_lint", .key = "template_text", .exactly_one = "template file", .read_file = true } } },
     .{ .name = "format-check", .usage = "format-check <doc_id>", .summary = "advisory structure lint (warnings only)", .run = .{ .tool = .{ .tool = "knap_format_check", .key = "doc_id", .exactly_one = "doc_id" } } },
+    .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
     .{ .name = "backends", .usage = "backends", .summary = "backend availability", .run = .{ .custom = cmdBackends } },
     .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
@@ -75,7 +76,7 @@ const commands = [_]Command{
 
 /// `--<name> <v>` / `--<name>=<v>` options passed to tools as same-named
 /// string arguments.
-const tool_flags = [_][]const u8{ "target", "backend" };
+const tool_flags = [_][]const u8{ "target", "backend", "evidence", "verifier" };
 
 const usage_head =
     \\knap-mcp — AI can't do layout. So we don't let it.
@@ -92,6 +93,8 @@ const usage_tail =
     \\  --backend <b>           mock (default) | spark | wonder | baseten
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
+    \\  --evidence <text>       evidence quote for verify-citation
+    \\  --verifier <v>          heuristic (default) | none | decision
     \\
     \\Environment:
     \\  KNAP_K4O_PATH / KNAP_DOGBED_PATH   engine binaries (default: PATH)
@@ -417,4 +420,6 @@ test {
     _ = @import("tools/repair.zig");
     _ = @import("tools/templates.zig");
     _ = @import("tools/validate.zig");
+    _ = @import("tools/verify_citation.zig");
+    _ = @import("verifier.zig");
 }
