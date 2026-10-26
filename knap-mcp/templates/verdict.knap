@@ -1,41 +1,91 @@
-{% if frontmatter %}
+{# verdict.knap: the taste verdict. Should you give a shit? The page a reader
+   lands on: frontmatter built key by key, the verdict and the take, the case
+   with a deep-linked pull quote, dealbreakers in a danger callout, a receipts
+   table whose rows cite source pages and footnotes, fine print folded away,
+   the source list, and the whole apparatus page folded in as an embed.
+   apparatus.knap renders the second page, the citations, from the same data.
+   Callout kinds and titles, table headers and section headings belong to the
+   template; the model writes values only. Shape: shapes/verdict.json.
+   Engine notes (k4o main, knap 0.6 semantics):
+   - fragment_link links only arrays of two or more items and passes a lone
+     string through, so a single quote is padded with an empty item by merge,
+     linked, then unwrapped with first.
+   - Tables are written out with --- delimiter rows. The table filter emits
+     single-dash rows, which dogbed does not render as an html table.
+   - An optional block opens with its if tag and an empty string output on
+     one line. That line renders as the blank separator when the block is
+     taken and disappears when it is not, so every combination of fields
+     gets single blank lines and one trailing newline.
+   - Whitespace right after an opening tag, or after an inline block that
+     rendered nothing, is dropped. Inline conditionals therefore always take
+     a branch (if/else) and keep their spaces outside the tags. #}{% set subj = subject ?? title %}
+{% set level = gaf ?? "unrated" %}
+{% set as_of = date ?? "press time" %}
 ---
-{{ frontmatter | yaml }}
----
+{{ title | yaml_property:"title" }}
+{{ subj | yaml_property:"subject" }}
+{{ verdict | yaml_property:"verdict" }}
+{{ level | yaml_property:"gaf" }}
+{% if subject %}{{ subject | kebab | yaml_property:"slug" }}
 {% endif %}
+{% if date %}{{ date | yaml_property:"date" }}
+{% endif %}
+{% if tags %}{{ tags | yaml_property:"tags" }}
+{% endif %}
+{% if sources %}{{ sources | map:"name" | wikilink | yaml_property:"sources" }}
+{% endif %}
+{% if apparatus_page %}{{ apparatus_page | wikilink | yaml_property:"apparatus" }}
+{% endif %}
+{% if related %}{{ related | wikilink | yaml_property:"related" }}
+{% endif %}
+---
 {{ title | h1 }}
 
 {{ verdict | bold }} — {{ take }}
 
+Give-a-shit level: {{ level | bold }} · sources cited: {{ sources | length }} · as of {{ as_of }}
+
 {{ "The case" | h2 }}
 
 {{ summary }}
-
-{% if blockers %}
+{% if pull_quote %}{{ "" }}
+{{ pull_quote.text | merge:"" | fragment_link:pull_quote.url | first | callout:("quote", "Straight from the source") }}
+{% endif %}
+{% if blockers %}{{ "" }}
 {{ "Blockers" | h2 }}
 
-{{ blockers | list }}
+{{ blockers | list | callout:("danger", "Dealbreakers") }}
 {% endif %}
-
-{% if receipts %}
+{% if receipts %}{{ "" }}
 {{ "Receipts" | h2 }}
 
-{{ receipts | table }}
+| Claim | Evidence | Source |
+| --- | --- | --- |
+{% for r in receipts %}
+| {{ r.claim }} | {% if r.note %}{{ r.evidence }}[^{{ r.note | kebab }}]{% else %}{{ r.evidence }}{% endif %} | {% if r.source %}{{ r.source | wikilink }}{% else %}unsourced{% endif %} |
+{% endfor %}
 {% endif %}
 
 {{ "Verdict" | h2 }}
 
 {{ bottom_line }}
-
-{% if sources %}
+{% if caveats %}{{ "" }}
+{{ caveats | list | callout:("warning", "Fine print", true) }}
+{% endif %}
+{% if sources %}{{ "" }}
 {{ "Sources" | h2 }}
 
 {% for s in sources %}
-- {{ s.name | wikilink }} — {{ s.url }} ({{ s.rel }}, reliability {{ s.reliability }}, gaf {{ s.gaf }})
+- {{ s.name | wikilink }} · {{ s.rel | code }} · reliability {{ s.reliability | bold }} · give-a-shit {{ s.gaf }} · {{ s.url | link:"source" }}
 {% endfor %}
 {% endif %}
-
-{% if footnotes %}
+{% if apparatus_page %}{{ "" }}
+{{ apparatus_page | embed | callout:("info", "The full apparatus", true) }}
+{% endif %}
+{% if related %}{{ "" }}
+See also: {{ related | wikilink | join:" · " }}
+{% endif %}
+{% if footnotes %}{{ "" }}
 {{ "Footnotes" | h2 }}
 
 {{ footnotes | footnote }}
