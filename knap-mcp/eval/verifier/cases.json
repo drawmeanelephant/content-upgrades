@@ -1,0 +1,313 @@
+{
+  "note": "Labeled (claim, evidence) pairs for the verifier gate. expected is what a careful human says: entails = the evidence states it; contradicts = the evidence states otherwise; neutral = same topic, neither; unknown = the evidence does not bear on it. Evidence strings are copied from the source file named in each case. Classes: verbatim, paraphrase, negated, unrelated, near-miss.",
+  "cases": [
+    {
+      "id": "verbatim-backups-snapshots",
+      "class": "verbatim",
+      "source": "data/apparatus.sample.json",
+      "claim": "Point-in-time snapshots are coming soon.",
+      "evidence": ["Point-in-time snapshots are coming soon.", "Cross-region replication is on the roadmap."],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-launch-p99",
+      "class": "verbatim",
+      "source": "data/apparatus.sample.json",
+      "claim": "p99 read latency under 2ms on a laptop.",
+      "evidence": ["p99 read latency under 2ms on a laptop."],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-arch-wrapped-line",
+      "class": "verbatim",
+      "source": "boris-site/content/claims/durable-writes.md",
+      "claim": "Every write is appended to the write-ahead log and fsynced before it is acknowledged.",
+      "evidence": [
+        "Every write is appended to the write-ahead\n  log and fsynced before it is acknowledged.",
+        "A single manifest file records the live set of sorted tables.",
+        "AcmeDB does not shard. One node owns the whole keyspace."
+      ],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-machine-bee",
+      "class": "verbatim",
+      "source": "data/reading-note.sample.json",
+      "claim": "Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee.",
+      "evidence": [
+        "Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee.",
+        "I see something like you in this plate, but I do not see you.",
+        "Beware of first-hand ideas!",
+        "The Machine is much, but it is not everything."
+      ],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-curly-wrapped",
+      "class": "verbatim",
+      "source": "data/reading-note.sample.json",
+      "claim": "\u201cBeware of first-hand ideas!\u201d",
+      "evidence": [
+        "I see something like you in this plate, but I do not see you.",
+        "Beware of first-hand ideas!"
+      ],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-curly-inner",
+      "class": "verbatim",
+      "source": "data/verdict.sample.json",
+      "claim": "docs page lists snapshots as \u2018coming soon\u2019",
+      "evidence": ["vendor benchmark, unreplicated claim", "docs page lists snapshots as 'coming soon'"],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-substring",
+      "class": "verbatim",
+      "source": "data/release-notes.sample.json",
+      "claim": "Cross-region replication is on the roadmap",
+      "evidence": [
+        "Snapshots of databases over 2 TB take hours, not minutes.",
+        "Still single-region. Cross-region replication is on the roadmap. Again."
+      ],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-case",
+      "class": "verbatim",
+      "source": "data/reading-note.sample.json",
+      "claim": "THE MACHINE IS MUCH, BUT IT IS NOT EVERYTHING.",
+      "evidence": ["Beware of first-hand ideas!", "The Machine is much, but it is not everything."],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-issue-412",
+      "class": "verbatim",
+      "source": "boris-site/content/sources/acmedb-issue-412-cross-region-replication.md",
+      "claim": "Multi-region is not planned for this year.",
+      "evidence": ["Multi-region is not planned for this year. Run one region and ship your\ndumps somewhere else."],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-release-claim",
+      "class": "verbatim",
+      "source": "data/release-notes.sample.json",
+      "claim": "Snapshots are online, incremental, and restorable to any point in the last seven days.",
+      "evidence": [
+        "Snapshots are online, incremental, and restorable to any point in the last seven days.",
+        "Cold start on a 500 GB database fell from 4 minutes to 9 seconds."
+      ],
+      "expected": "entails"
+    },
+    {
+      "id": "verbatim-footnote",
+      "class": "verbatim",
+      "source": "data/verdict.sample.json",
+      "claim": "Benchmark numbers are vendor-reported; treat them as the ceiling, not the floor.",
+      "evidence": [
+        "Benchmark numbers are vendor-reported; treat them as the ceiling, not the floor.",
+        "Backup gap confirmed against the docs page on demo-freeze day."
+      ],
+      "expected": "entails"
+    },
+    {
+      "id": "paraphrase-one-node",
+      "class": "paraphrase",
+      "source": "boris-site/content/sources/acmedb-docs-architecture.md",
+      "claim": "A single node owns the entire keyspace.",
+      "evidence": [
+        "Every write is appended to the write-ahead log and fsynced before it is acknowledged.",
+        "A single manifest file records the live set of sorted tables.",
+        "AcmeDB does not shard. One node owns the whole keyspace."
+      ],
+      "expected": "entails"
+    },
+    {
+      "id": "paraphrase-snapshots-soon",
+      "class": "paraphrase",
+      "source": "boris-site/content/sources/acmedb-docs-backups.md",
+      "claim": "Snapshots that restore to a point in time are coming soon.",
+      "evidence": ["Point-in-time snapshots are coming soon.", "Cross-region replication is on the roadmap."],
+      "expected": "entails"
+    },
+    {
+      "id": "paraphrase-durable",
+      "class": "paraphrase",
+      "source": "boris-site/content/claims/durable-writes.md",
+      "claim": "Writes are fsynced to the write-ahead log before AcmeDB acknowledges them.",
+      "evidence": ["Every write is appended to the write-ahead log and fsynced before it is acknowledged."],
+      "expected": "entails"
+    },
+    {
+      "id": "paraphrase-cold-start",
+      "class": "paraphrase",
+      "source": "data/release-notes.sample.json",
+      "claim": "Cold starts on a 500 GB database dropped from 4 minutes to 9 seconds.",
+      "evidence": ["Cold start on a 500 GB database fell from 4 minutes to 9 seconds."],
+      "expected": "entails"
+    },
+    {
+      "id": "paraphrase-plate",
+      "class": "paraphrase",
+      "source": "data/reading-note.sample.json",
+      "claim": "Kuno sees something like his mother in the plate but does not see her.",
+      "evidence": ["I see something like you in this plate, but I do not see you."],
+      "expected": "entails"
+    },
+    {
+      "id": "paraphrase-backup-gap",
+      "class": "paraphrase",
+      "source": "boris-site/content/claims/backup-gap.md",
+      "claim": "AcmeDB has no managed backup and no point-in-time restore today.",
+      "evidence": [
+        "Point-in-time snapshots are coming soon.",
+        "The page documents one operation: a manual dump to a local file. There is no scheduled backup, no managed snapshot, and no restore-to-timestamp."
+      ],
+      "expected": "entails"
+    },
+    {
+      "id": "negated-replication",
+      "class": "negated",
+      "source": "boris-site/content/sources/acmedb-docs-backups.md",
+      "claim": "Cross-region replication is not on the roadmap.",
+      "evidence": ["Point-in-time snapshots are coming soon.", "Cross-region replication is on the roadmap."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "negated-sharding",
+      "class": "negated",
+      "source": "boris-site/content/claims/horizontal-sharding.md",
+      "claim": "AcmeDB shards its keyspace across nodes.",
+      "evidence": [
+        "Every write is appended to the write-ahead log and fsynced before it is acknowledged.",
+        "AcmeDB does not shard. One node owns the whole keyspace."
+      ],
+      "expected": "contradicts"
+    },
+    {
+      "id": "negated-snapshots-never",
+      "class": "negated",
+      "source": "data/apparatus.sample.json",
+      "claim": "Point-in-time snapshots are never coming.",
+      "evidence": ["Point-in-time snapshots are coming soon."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "negated-machine",
+      "class": "negated",
+      "source": "data/reading-note.sample.json",
+      "claim": "The Machine is everything.",
+      "evidence": ["Beware of first-hand ideas!", "The Machine is much, but it is not everything."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "negated-drivers",
+      "class": "negated",
+      "source": "data/release-notes.sample.json",
+      "claim": "Drivers older than 1.8 can still connect.",
+      "evidence": ["Drivers older than 1.8 can no longer connect. Bump the driver first, then the server. Not the other way round, unless you enjoy pages at 3am."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "negated-ack-order",
+      "class": "negated",
+      "source": "boris-site/content/sources/acmedb-docs-architecture.md",
+      "claim": "Writes are acknowledged before they are fsynced to the write-ahead log.",
+      "evidence": ["Every write is appended to the write-ahead log and fsynced before it is acknowledged."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "negated-boots-old-key",
+      "class": "negated",
+      "source": "data/release-notes.sample.json",
+      "claim": "2.0 boots fine on the old wal_dir name.",
+      "evidence": ["Rename the key in acmedb.toml. 2.0 refuses to boot on the old name instead of quietly ignoring it, which is rude but correct."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "unrelated-forster-vs-acme",
+      "class": "unrelated",
+      "source": "data/reading-note.sample.json",
+      "claim": "Forster wrote this before radio broadcasting existed.",
+      "evidence": ["Point-in-time snapshots are coming soon.", "Cross-region replication is on the roadmap."],
+      "expected": "unknown"
+    },
+    {
+      "id": "unrelated-acme-vs-forster",
+      "class": "unrelated",
+      "source": "boris-site/content/claims/durable-writes.md",
+      "claim": "AcmeDB fsyncs every write.",
+      "evidence": [
+        "Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee.",
+        "I see something like you in this plate, but I do not see you.",
+        "Beware of first-hand ideas!",
+        "The Machine is much, but it is not everything."
+      ],
+      "expected": "unknown"
+    },
+    {
+      "id": "unrelated-cache",
+      "class": "unrelated",
+      "source": "data/verdict.sample.json",
+      "claim": "Ship it behind a cache.",
+      "evidence": ["p99 read latency under 2ms on a laptop.", "AcmeDB is a durable key-value store. No consensus, no sharding, no surprises."],
+      "expected": "unknown"
+    },
+    {
+      "id": "unrelated-hexagonal",
+      "class": "unrelated",
+      "source": "data/reading-note.sample.json",
+      "claim": "Humanity lives underground in identical hexagonal rooms.",
+      "evidence": ["Snapshots of databases over 2 TB take hours, not minutes.", "Still single-region. Cross-region replication is on the roadmap. Again."],
+      "expected": "unknown"
+    },
+    {
+      "id": "unrelated-wells",
+      "class": "unrelated",
+      "source": "data/reading-note.sample.json",
+      "claim": "Forster later described the story as a reaction to H. G. Wells.",
+      "evidence": ["A single manifest file records the live set of sorted tables.", "AcmeDB does not shard. One node owns the whole keyspace."],
+      "expected": "unknown"
+    },
+    {
+      "id": "near-miss-cold-start",
+      "class": "near-miss",
+      "source": "data/release-notes.sample.json",
+      "claim": "Cold start on a 500 GB database fell from 4 minutes to 19 seconds.",
+      "evidence": ["Cold start on a 500 GB database fell from 4 minutes to 9 seconds."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "near-miss-retention",
+      "class": "near-miss",
+      "source": "data/release-notes.sample.json",
+      "claim": "Snapshots are online, incremental, and restorable to any point in the last 14 days.",
+      "evidence": ["Snapshots are online, incremental, and restorable to any point in the last seven days."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "near-miss-driver-version",
+      "class": "near-miss",
+      "source": "data/release-notes.sample.json",
+      "claim": "Drivers older than 1.9 can no longer connect.",
+      "evidence": ["Drivers older than 1.8 can no longer connect. Bump the driver first, then the server."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "near-miss-year",
+      "class": "near-miss",
+      "source": "data/reading-note.sample.json",
+      "claim": "First published in The Oxford and Cambridge Review in November 1919.",
+      "evidence": ["First published in The Oxford and Cambridge Review in November 1909, then collected in The Eternal Moment and Other Stories (1928)."],
+      "expected": "contradicts"
+    },
+    {
+      "id": "near-miss-snapshot-size",
+      "class": "near-miss",
+      "source": "data/release-notes.sample.json",
+      "claim": "Snapshots of databases over 20 TB take hours, not minutes.",
+      "evidence": ["Snapshots of databases over 2 TB take hours, not minutes."],
+      "expected": "entails"
+    }
+  ]
+}

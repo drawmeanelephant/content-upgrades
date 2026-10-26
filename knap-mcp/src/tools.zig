@@ -32,6 +32,9 @@ pub const all = [_]Tool{
     @import("tools/format_check.zig").tool,
     @import("tools/voice.zig").tool,
     @import("tools/structure_hash.zig").tool,
+    @import("tools/verify_citation.zig").tool,
+    @import("tools/boris_ask.zig").tool,
+    @import("tools/boris_check.zig").tool,
     @import("tools/publish_check.zig").tool,
 };
 

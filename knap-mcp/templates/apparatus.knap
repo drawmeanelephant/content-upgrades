@@ -1,15 +1,67 @@
-{{ title | h1 }}
+{# apparatus.knap: the second page, the citations. Every source behind a
+   verdict with its standing, every quote deep-linked to the passage it came
+   from, the claim map, open questions folded away, and footnotes. It renders
+   from its own data or from the same data as verdict.knap: the heading falls
+   back from the apparatus page name to the title, and the back-link to the
+   verdict appears only when it names a different page. Callout kinds and
+   titles, table headers and section headings belong to the template; the
+   model writes values only. Shape: shapes/apparatus.json. The engine notes
+   in verdict.knap apply here too: fragment_link padding, written-out tables,
+   the optional-block opener, and inline if/else. #}{% set heading = apparatus_page ?? title %}
+{% set back = verdict_page ?? title %}
+{% set deck = subtitle ?? "the receipts, all of them" %}
+---
+{{ heading | yaml_property:"title" }}
+{{ "apparatus" | yaml_property:"type" }}
+{% if back != heading %}{{ back | wikilink | yaml_property:"verdict" }}
+{% endif %}
+{% if date %}{{ date | yaml_property:"date" }}
+{% endif %}
+{{ sources | map:"name" | wikilink | yaml_property:"sources" }}
+---
+{{ heading | h1 }}
 
-{{ subtitle | italic }}
+{{ deck | italic }}
+{% if back != heading %}{{ "" }}
+The receipts behind {{ back | wikilink }}. Sources cited: {{ sources | length }}.
+{% endif %}
 
+{{ "Reliability is how far we trust a source. Give-a-shit is how much it moved the verdict. Every quote links to the exact passage it came from." | callout:("info", "How to read this page") }}
+
+{{ "Source ledger" | h2 }}
+
+| Source | Kind | Reliability | Give-a-shit | Accessed |
+| --- | --- | --- | --- | --- |
 {% for s in sources %}
+| {{ s.name | wikilink }} | {{ s.rel | code }} | {{ s.reliability | bold }} | {{ s.gaf }} | {{ s.accessed ?? "undated" }} |
+{% endfor %}
+
+{{ "Sources" | h2 }}
+{% for s in sources %}{{ "" }}
 {{ s.name | wikilink | h3 }}
 
-{{ s.url }}
-
-Reliability: {{ s.reliability | bold }} — rel: {{ s.rel }} — Give-a-shit: {{ s.gaf }}
-
-{% if s.quotes %}
-{{ s.quotes | list }}
+{{ s.url | link:"Read the source" }} · {{ s.rel | code }} · reliability {{ s.reliability | bold }} · give-a-shit {{ s.gaf }}
+{% for q in s.quotes %}{{ "" }}
+{{ q.text | merge:"" | fragment_link:s.url | first | callout:("quote", "Pulled quote") }}
+{% if q.used_for %}{{ "" }}
+Backs {{ q.used_for }}.
 {% endif %}
 {% endfor %}
+{% endfor %}
+{% if receipts %}{{ "" }}
+{{ "Claim map" | h2 }}
+
+| Claim | Backed by | Confidence |
+| --- | --- | --- |
+{% for r in receipts %}
+| {% if r.note %}{{ r.claim }}[^{{ r.note | kebab }}]{% else %}{{ r.claim }}{% endif %} | {% if r.source %}{{ r.source | wikilink }}{% else %}nothing yet{% endif %} | {{ r.confidence ?? "unrated" }} |
+{% endfor %}
+{% endif %}
+{% if caveats %}{{ "" }}
+{{ caveats | list | callout:("warning", "Open questions", true) }}
+{% endif %}
+{% if footnotes %}{{ "" }}
+{{ "Footnotes" | h2 }}
+
+{{ footnotes | footnote }}
+{% endif %}
