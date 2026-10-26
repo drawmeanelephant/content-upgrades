@@ -24,7 +24,7 @@
 {% endif %}---
 {{ title | h1 }}
 
-by {% if author %}{{ author | wikilink }}{% else %}{{ byline }}{% endif %}{% if year %}, {{ year }}{% endif %} · {{ "read it free" | link:source_url }}
+by {% if author %}{{ author | wikilink }}{% else %}{{ byline }}{% endif %}{% if year %}, {{ year }}{% endif %} · {{ source_url | link:"read it free" }}
 {% if cover %}
 
 {{ cover | image:title }}

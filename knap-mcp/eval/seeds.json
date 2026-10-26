@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "comment": "Seeded-breakage corpus on the demo templates (verdict, apparatus) plus one corpus-only template (eval/templates/verdict-callout.knap) that exercises the k4o #71 parser tranche: {% set %}, ??, callout tuples. Each seed mutates its template through a pinned error class, then the repair loop runs bounded (max 4). Controls must render clean untouched; every other seed must fail before repair or the harness reports it as a no-op seed. The mock backend carries canned patches for unclosed if/for, unclosed output tags, unknown filters and dangling pipes. It proves plumbing, not capability, so the other classes are expected NO under mock (see docs/tracks/E1.md).",
+  "comment": "Seeded-breakage corpus on the demo templates (verdict, apparatus), release-notes (yaml_property is the shipped filter with a required argument), and one corpus-only template (eval/templates/verdict-callout.knap) that exercises {% set %}, ?? and callout tuples. Every break fails under the pinned k4o main; seeds k4o main accepts were re-broken or replaced (docs/tracks/P1.md). Each seed mutates its template through a pinned error class, then the repair loop runs bounded (max 4). Controls must render clean untouched; every other seed must fail before repair or the harness reports it as a no-op seed. The mock backend carries canned patches keyed on k4o main diagnostics: unclosed if/for, unclosed output and logic tags, unknown filters, dangling pipes, orphan and mismatched closers. It proves plumbing, not capability, so the other classes are expected NO under mock (see docs/tracks/E1.md, docs/tracks/P1.md).",
   "classes": ["unclosed-if", "unclosed-for", "unclosed-output", "unknown-filter", "dangling-pipe", "orphan-endif", "orphan-endfor", "mismatched-close", "unclosed-block-tag", "unknown-tag", "missing-value", "bad-filter-arg", "missing-filter-arg", "empty-filter-arg", "unclosed-tuple", "unclosed-comment"],
   "seeds": [
     {
@@ -60,11 +60,11 @@
       "break": {"kind": "remove", "find": "{% endfor %}", "occurrence": 0}
     },
     {
-      "id": "wikilink-bad-arg",
+      "id": "yaml-property-empty-arg",
       "class": "empty-filter-arg",
-      "template_id": "verdict",
-      "data": "@data/verdict.sample.json",
-      "break": {"kind": "replace", "find": "{{ s.name | wikilink }}", "replace": "{{ s.name | wikilink: }}", "occurrence": 0}
+      "template_id": "release-notes",
+      "data": "@data/release-notes.sample.json",
+      "break": {"kind": "replace", "find": "| yaml_property:\"codename\"", "replace": "| yaml_property:", "occurrence": 0}
     },
     {
       "id": "yaml-property-missing-arg",
@@ -130,11 +130,11 @@
       "break": {"kind": "replace", "find": "{% if receipts %}", "replace": "{% if %}", "occurrence": 0}
     },
     {
-      "id": "footnote-extra-arg",
+      "id": "heading-extra-arg",
       "class": "bad-filter-arg",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
-      "break": {"kind": "replace", "find": "{{ footnotes | footnote }}", "replace": "{{ footnotes | footnote:\"1\" }}", "occurrence": 0}
+      "break": {"kind": "replace", "find": "{{ \"Footnotes\" | h2 }}", "replace": "{{ \"Footnotes\" | h2:\"1\" }}", "occurrence": 0}
     },
     {
       "id": "callout-control",
@@ -158,11 +158,11 @@
       "break": {"kind": "replace", "find": "verdict ?? \"undecided\"", "replace": "verdict ??", "occurrence": 0}
     },
     {
-      "id": "callout-missing-arg",
+      "id": "yaml-property-dropped-arg",
       "class": "missing-filter-arg",
-      "template_path": "templates/verdict-callout.knap",
-      "data": "@data/verdict.sample.json",
-      "break": {"kind": "replace", "find": "| callout:(\"note\", \"The take\")", "replace": "| callout", "occurrence": 0}
+      "template_id": "release-notes",
+      "data": "@data/release-notes.sample.json",
+      "break": {"kind": "replace", "find": "| yaml_property:\"version\"", "replace": "| yaml_property", "occurrence": 0}
     },
     {
       "id": "callout-unclosed-tuple",
@@ -172,11 +172,11 @@
       "break": {"kind": "replace", "find": "\"The take\")", "replace": "\"The take\"", "occurrence": 0}
     },
     {
-      "id": "callout-variable-in-tuple",
+      "id": "bold-extra-arg",
       "class": "bad-filter-arg",
       "template_path": "templates/verdict-callout.knap",
       "data": "@data/verdict.sample.json",
-      "break": {"kind": "replace", "find": "\"The take\")", "replace": "label)", "occurrence": 0}
+      "break": {"kind": "replace", "find": "{{ label | bold }}", "replace": "{{ label | bold:\"strong\" }}", "occurrence": 0}
     }
   ]
 }

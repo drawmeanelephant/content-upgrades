@@ -79,7 +79,7 @@
 
 {{ "Receipts" | h2 }}
 
-{{ "Full changelog" | link:changelog_url }}{% if docs_url %} · {{ "Upgrade docs" | link:docs_url }}{% endif %}{% if related %}
+{{ changelog_url | link:"Full changelog" }}{% if docs_url %} · {{ docs_url | link:"Upgrade docs" }}{% endif %}{% if related %}
 
 
 Filed under:

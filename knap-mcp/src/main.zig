@@ -90,7 +90,7 @@ const usage_tail =
     \\
     \\Options:
     \\  -d, --data <file|->     JSON data file; - reads stdin (default {})
-    \\  --target <t>            markdown (default) | gfm | textile | html
+    \\  --target <t>            markdown (default) | oliver | html
     \\  --backend <b>           mock (default) | spark | wonder | baseten
     \\  --tone <t>              voice tone: mild | spicy | feral
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
@@ -243,7 +243,7 @@ fn optValue(ctx: *Ctx, args: [][]const u8, i: *usize, comptime opt: []const u8) 
 fn readData(ctx: *Ctx, path: []const u8) !std.json.Value {
     const bytes = if (std.mem.eql(u8, path, "-")) blk: {
         var buf: [8192]u8 = undefined;
-        var r = std.Io.File.stdin().reader(ctx.io, &buf);
+        var r = std.Io.File.stdin().readerStreaming(ctx.io, &buf);
         var aw: std.Io.Writer.Allocating = .init(ctx.arena);
         _ = r.interface.streamRemaining(&aw.writer) catch
             return ctx.fail("cannot read stdin", .{});
@@ -293,18 +293,18 @@ fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
         return 1;
     };
 
+    const parsed = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, out.written(), .{}) catch null;
+    const result: ?std.json.ObjectMap = if (parsed) |v| (if (v == .object) v.object else null) else null;
+
     // render --out <file>: the JSON result carries the doc_id; the file
     // form is for vhs/CLI demos — copy the artifact bytes back out.
     if (o.out) |path| {
-        const parsed = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, out.written(), .{}) catch null;
-        if (parsed) |v| {
-            if (v == .object) {
-                if (v.object.get("doc_id")) |id_v| {
-                    if (id_v == .string) {
-                        if (store.read(ctx, id_v.string) catch null) |bytes| {
-                            std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = bytes }) catch
-                                return fail(ctx, "cannot write --out file");
-                        }
+        if (result) |r| {
+            if (r.get("doc_id")) |id_v| {
+                if (id_v == .string) {
+                    if (store.read(ctx, id_v.string) catch null) |bytes| {
+                        std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = bytes }) catch
+                            return fail(ctx, "cannot write --out file");
                     }
                 }
             }
@@ -312,11 +312,14 @@ fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
     }
 
     var obuf: [8192]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &obuf);
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &obuf);
     w.interface.writeAll(out.written()) catch return 1;
     w.interface.writeAll("\n") catch return 1;
     w.flush() catch return 1;
-    return 0;
+    // `{"ok":false,...}` (a render or validate with diagnostics) is an
+    // error: the JSON still goes to stdout, the exit code says so.
+    const ok = if (result) |r| r.get("ok") else null;
+    return if (ok != null and ok.? == .bool and !ok.?.bool) 1 else 0;
 }
 
 fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
@@ -326,7 +329,7 @@ fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     else
         ctx.backend_kind;
     var buf: [8192]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &buf);
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &buf);
     const code = eval_mod.run(ctx, o.corpus, kind, &w.interface) catch {
         w.flush() catch {};
         return fail(ctx, if (ctx.err_msg.len > 0) ctx.err_msg else "eval failed");
@@ -338,7 +341,7 @@ fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
 fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     _ = args;
     var buf: [4096]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &buf);
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &buf);
     const has_key = ctx.environ.get("MODEL_API_KEY") != null;
     try w.interface.writeAll("backend    status\n");
     try w.interface.writeAll("mock       always available (canned patches)\n");
@@ -392,7 +395,7 @@ fn usage(ctx: *Ctx, msg: []const u8) u8 {
 
 fn printStdout(ctx: *Ctx, text: []const u8) !void {
     var buf: [4096]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &buf);
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &buf);
     try w.interface.writeAll(text);
     try w.flush();
 }

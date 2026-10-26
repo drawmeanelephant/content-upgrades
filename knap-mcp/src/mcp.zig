@@ -15,9 +15,9 @@ const Allocating = std.Io.Writer.Allocating;
 
 pub fn serve(init: std.process.Init, ctx: *Ctx) !u8 {
     var in_buf: [4 * 1024 * 1024]u8 = undefined;
-    var r = std.Io.File.stdin().reader(init.io, &in_buf);
+    var r = std.Io.File.stdin().readerStreaming(init.io, &in_buf);
     var out_buf: [64 * 1024]u8 = undefined;
-    var w = std.Io.File.stdout().writer(init.io, &out_buf);
+    var w = std.Io.File.stdout().writerStreaming(init.io, &out_buf);
 
     var arena_state = std.heap.ArenaAllocator.init(init.gpa);
     defer arena_state.deinit();
@@ -85,7 +85,7 @@ fn dispatch(ctx: *Ctx, method: []const u8, params: ?std.json.Value, out: *Alloca
     if (std.mem.eql(u8, method, "initialize")) {
         try out.writer.writeAll("{\"protocolVersion\":\"" ++ protocol_version ++ "\",\"capabilities\":{\"tools\":{},\"resources\":{}},\"serverInfo\":{\"name\":\"knap-mcp\",\"version\":");
         try std.json.Stringify.value(@import("build_options").version, .{}, &out.writer);
-        try out.writer.writeAll("}");
+        try out.writer.writeAll("}}");
         return;
     }
     if (std.mem.eql(u8, method, "ping")) {
@@ -150,7 +150,7 @@ fn resourcesList(ctx: *Ctx, out: *Allocating) !void {
     for (artifacts) |a| {
         if (!first) try out.writer.writeAll(",");
         first = false;
-        try out.writer.print("{{\"uri\":\"knap://docs/{s}\",\"name\":\"{s}.{s}\",\"mimeType\":\"text/plain\"}}", .{ a.doc_id, a.doc_id, a.extension });
+        try out.writer.print("{{\"uri\":\"knap://docs/{s}\",\"name\":\"{s}.{s}\",\"mimeType\":\"{s}\"}}", .{ a.doc_id, a.doc_id, a.extension, mimeFor(a.extension) });
     }
     try out.writer.writeAll("]}");
 }
@@ -176,10 +176,25 @@ fn resourcesRead(ctx: *Ctx, params: ?std.json.Value, out: *Allocating) !void {
         const id = uri["knap://docs/".len..];
         const text = (store.read(ctx, id) catch null) orelse
             return ctx.fail("no such doc '{s}'", .{id});
-        try writeContents(out, uri, "text/plain", text);
+        try writeContents(out, uri, mimeFor(docExtension(ctx, id)), text);
         return;
     }
     return ctx.fail("unknown resource uri '{s}'", .{uri});
+}
+
+/// Rendered docs are `md` (markdown and oliver targets) or `html`; eval
+/// reports are `json`. Anything else stays text/plain.
+fn mimeFor(ext: []const u8) []const u8 {
+    if (std.mem.eql(u8, ext, "md")) return "text/markdown";
+    if (std.mem.eql(u8, ext, "html")) return "text/html";
+    if (std.mem.eql(u8, ext, "json")) return "application/json";
+    return "text/plain";
+}
+
+fn docExtension(ctx: *Ctx, doc_id: []const u8) []const u8 {
+    const artifacts = store.list(ctx) catch return "";
+    for (artifacts) |a| if (std.mem.eql(u8, a.doc_id, doc_id)) return a.extension;
+    return "";
 }
 
 fn writeContents(out: *Allocating, uri: []const u8, mime: []const u8, text: []const u8) !void {
@@ -204,4 +219,16 @@ fn writeResponse(w: anytype, id: std.json.Value, body: []const u8, comptime fiel
     try std.json.Stringify.value(id, .{}, &w.interface);
     try w.interface.print(",\"{s}\":{s}}}\n", .{ field, body });
     try w.flush();
+}
+
+test "initialize returns one valid JSON object" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx: Ctx = undefined;
+    ctx.arena = arena.allocator();
+    var body: Allocating = .init(ctx.arena);
+    try dispatch(&ctx, "initialize", null, &body);
+    const v = try std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, body.written(), .{});
+    try std.testing.expectEqualStrings(protocol_version, v.object.get("protocolVersion").?.string);
+    try std.testing.expectEqualStrings("knap-mcp", v.object.get("serverInfo").?.object.get("name").?.string);
 }
