@@ -33,7 +33,7 @@ Enter
 Sleep 3s
 
 # One call from the client; the server runs render -> region -> patch -> re-render.
-Type "knap-mcp repair verdict -d data/verdict.sample.json --target gfm --backend mock --out repaired.md | jq"
+Type "knap-mcp repair verdict -d data/verdict.sample.json --target markdown --backend mock --out repaired.md | jq"
 Enter
 Sleep 4.5s
 

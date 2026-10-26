@@ -24,26 +24,28 @@ Status key:
 |---|---|---|---|---|---|---|
 | 1 | Cold open: the generic AI doc | 5s | 4.9s | `01-cold-open.tape` | fixture only; density score: D1 | ready |
 | 2 | Ask for a verdict: model drafts data only | 20s | 20.8s | `02-verdict-data.tape` | main; `boris_ask`: B3 (B1's `ask.sh` works now); live drafting: M1 + MCP client | partial |
-| 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.0s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
-| 4 | The doc | 30s | 29.2s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: K2; art: Muse Image (human) | partial |
+| 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.2s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
+| 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
 | 4b | *(optional)* Density ratchet | 15s | 14.6s | `04b-density-ratchet.tape` | D1 + D2 | placeholder |
 | 5 | The boris catch | 15s | 14.4s | `05-boris-catch.tape` | B1 (`stage-check.sh`, now); `knap_publish_check`: B2 | partial |
 | 6 | Same template, mild vs feral | 20s | 18.4s | `06-voice.tape` | C3 (mock replies, now); `knap_voice`: C1; structure hash: C2 | partial |
-| 7 | One source -> md + apparatus + textile | 15s | 19.0s | `07-one-source.tape` | main; html: K2; one shared data file: T2/I5 | partial |
-| 8 | Numbers card, measured only | 10s | 11.4s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
+| 7 | One source -> md + html + apparatus | 15s | 18.6s | `07-one-source.tape` | main; oliver target: P1; one shared data file: T2/I5 | partial |
+| 8 | Numbers card, measured only | 10s | 12.0s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
 
 **Runtime.** SPEC calls the demo "~2 min", but its per-beat targets add up to 2:20
-(2:35 with beat 4b). The current rough cut of all 9 tapes runs 2:36 (2:21 without
-4b); beat 7 is the one tape well over its target (19.0s vs 15s). If the submission
+(2:35 with beat 4b). The current rough cut of all 9 tapes runs 2:36 (2:22 without
+4b); beat 7 is the one tape well over its target (18.6s vs 15s). If the submission
 cap turns out to be 2:00, drop 4b and cut beat 4 (30s to 20s), beat 2 (20s to 15s),
 and beat 6 (20s to 15s): that brings the rendered beats to about 2:03, and trimming
 beat 7 to its target gets under 2:00. Typing can also be sped up in Kdenlive. The
 video length limit is still unconfirmed (see `docs/tracks/V0.md`).
 
-**Engine pin risk.** K3 found that k4o `main` (181/188) dropped the gfm and textile
-outputs. If the pin moves from the #71 lineage to `main`, beat 4 (gfm) and beat 7
-(textile, which SPEC names explicitly) break. The pin decision (captain / K2) has to
-account for the demo.
+**Engines and targets.** Tapes take the engine pins from `scripts/engines.sh`, now k4o
+main `bdfb838` and dogbed main `d7ffaba` (#15). That k4o has no gfm or textile output,
+and lane P1 narrows the targets to markdown | oliver | html, so the tapes use only
+markdown and html. SPEC's beat 7 names textile; on screen it is html now, and oliver
+can join once P1 lands. The k4o main markdown target emits pipe tables, so glow
+renders the receipts table properly.
 
 **Retakes.** Inputs are fixed, so every take prints the same text. The one exception is
 the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timestamp.
@@ -100,14 +102,15 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   diff templates/verdict.knap seeded/verdict.knap
   export KNAP_TEMPLATES_DIR=seeded
   knap-mcp validate verdict -d data/verdict.sample.json | jq '.diagnostics[0]'
-  knap-mcp repair verdict -d data/verdict.sample.json --target gfm --backend mock --out repaired.md | jq
+  knap-mcp repair verdict -d data/verdict.sample.json --target markdown --backend mock --out repaired.md | jq
   glow -p repaired.md
   ```
   `seeded/verdict.knap` is derived at take time by `demo_seed_unclosed_if` in
   `demo/lib/env.sh`, so it follows template edits.
-- **Not byte-exact:** the mock closes the block at EOF, which moves one blank line, so
-  E1's eval reports this seed as converged but not `exact`. The difference is not
-  visible on screen.
+- **Template not byte-exact:** the mock closes the block at EOF, so the repaired
+  template differs from the shipped one and E1's eval does not count this seed as
+  `exact`. On k4o `bdfb838` the repaired doc is byte-identical to a clean render
+  (checked with `diff`), so nothing differs on screen.
 - **Why this seed:** the unknown-filter seed also converges with mock, but the mock
   patch deletes `| head2` instead of fixing it to `| h2`, so "The case" loses its
   heading. Converged is not the same as correct, and that should not be on screen.
@@ -117,21 +120,22 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 
 ### 4. The doc (30s): partial
 
-- **On screen:** the verdict rendered to gfm, paged in glow: H1, bold verdict and hot
+- **On screen:** the verdict rendered to markdown, paged in glow: H1, bold verdict and hot
   take, blockers list, receipts table, wikilinked sources with deep links, footnotes.
   glow hides the YAML frontmatter.
 - **Commands:**
   ```sh
-  knap-mcp render verdict -d data/verdict.sample.json --target gfm --out verdict.md | jq -c '{ok, target, bytes}'
+  knap-mcp render verdict -d data/verdict.sample.json --target markdown --out verdict.md | jq -c '{ok, target, bytes}'
   glow -p verdict.md     # Space for page 2
   ```
 - **Missing:** callouts (T2, now that the pinned k4o has `callout`). The Muse Image
-  art is a Kdenlive overlay (human). The better hero shot is dogbed HTML in a browser,
-  which needs K2.
-- **Visual bugs to fix before the final take:** the gfm `table` output has an empty
-  header row, with "claim | evidence" rendered as a data row (the markdown target gets
-  this right). The footnotes have no in-text references, and `format-check` flags them
-  plus 2 bare URLs (T2). Keep `format-check` off screen until those are fixed.
+  art is a Kdenlive overlay (human). The better hero shot is dogbed HTML in a browser.
+  The pinned dogbed renders both templates to html now, but nobody has styled or
+  captured it (human, OBS or a headless screenshot).
+- **Visual bugs to fix before the final take:** the markdown `table` output has an
+  empty header row, with "claim | evidence" rendered as a data row (k4o or T2). The
+  footnotes have no in-text references, and `format-check` flags them plus 2 bare URLs
+  (T2). Keep `format-check` off screen until those are fixed.
 
 ### 4b. Density ratchet (15s, optional): placeholder
 
@@ -146,7 +150,7 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 
 - **On screen:** a verdict with one invented source renders with `ok: true`. Staged
   into a copy of the frozen boris site, it fails:
-  `v1.md:44:3: error: EREFERENCEMISSING: wiki-link target "acmedb-soc-2-audit-report" not found in the page graph`,
+  `v1.md:37:3: error: EREFERENCEMISSING: wiki-link target "acmedb-soc-2-audit-report" not found in the page graph`,
   then `[[AcmeDB SOC 2 audit report]] -> acmedb-soc-2-audit-report` and a FAIL line
   (exit 1). Re-rendered from the real sample data, the same check passes with "2
   wiki-link(s) resolve against the frozen site (13 pages)".
@@ -168,7 +172,7 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 
 ### 6. Same template, mild vs feral (20s): partial
 
-- **On screen:** the verdict rendered in two tones, `wc -l` showing 52 lines each, and
+- **On screen:** the verdict rendered in two tones, `wc -l` showing 43 lines each, and
   `diff` showing exactly four changed lines: the heading, verdict + take, the summary,
   and the bottom line. Everything else (table, sources, footnotes) is identical.
 - **Commands:**
@@ -186,34 +190,38 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 
 ### 7. One source -> several views (15s): partial
 
-- **On screen:** three renders from the CLI (verdict markdown, verdict textile,
-  apparatus markdown), then `grep -c '<script'` printing 0 for each file.
+- **On screen:** three renders from the CLI (verdict markdown, verdict html, apparatus
+  html), then `grep -c '<script'` printing 0 for each file.
 - **Commands:**
   ```sh
   knap-mcp render verdict -d data/verdict.sample.json --target markdown --out verdict.md | jq -c '{ok, bytes}'
-  knap-mcp render verdict -d data/verdict.sample.json --target textile --out verdict.textile | jq -c '{ok, bytes}'
-  knap-mcp render apparatus -d data/apparatus.sample.json --target markdown --out apparatus.md | jq -c '{ok, bytes}'
-  grep -c '<script' verdict.md verdict.textile apparatus.md
+  knap-mcp render verdict -d data/verdict.sample.json --target html --out verdict.html | jq -c '{ok, bytes}'
+  knap-mcp render apparatus -d data/apparatus.sample.json --target html --out apparatus.html | jq -c '{ok, bytes}'
+  grep -c '<script' verdict.md verdict.html apparatus.html
   ```
-- **Missing:** `apparatus.html` (K2). The pinned dogbed bundles a pre-#70 k4o, so html
-  fails on `yaml` (verdict) and `wikilink` (apparatus). "One source" also needs one
-  data file behind both templates (T2/I5); today apparatus has its own sample file.
+- **Changed from SPEC:** SPEC's beat 7 says textile. The pinned k4o has no textile
+  output and P1 drops it, so the tape shows html; add oliver when P1 ships it.
+- **Missing:** "one source" needs one data file behind both templates (T2/I5); today
+  apparatus has its own sample file.
 
 ### 8. Numbers (10s): partial
 
-- **On screen:** the mock eval summary on E1's 2nap corpus, K3's conformance lineage
-  headline, and the server's line count. This tape is the provenance shot. The
+- **On screen:** the mock eval summary on E1's 2nap corpus, K3's conformance totals
+  for the pinned k4o, and the server's line count. This tape is the provenance shot. The
   card itself is a still built by I4 and placed in Kdenlive.
 - **Commands:**
   ```sh
-  knap-mcp eval --corpus eval/seeds.2nap.json --backend mock | grep '^converged'
-  jq -r .headline eval/conformance/results/summary-lineage.json
+  knap-mcp eval --corpus eval/seeds.2nap.json --backend mock 2>/dev/null | grep '^converged'
+  jq -c '{label, totals}' eval/conformance/results/k4o-main-bdfb838.json
   cat $(find src/ -name '*.zig') | wc -l
   ```
-- **Today's values (pinned k4o f97c5db, mock):** `seeds.2nap.json` converged 38/185,
-  exact 4/35. `seeds.json` (demo templates only, not on tape) converged 6/22, exact 0/6. Conformance:
-  `k4o base 15/188 → #70 43/188 → #71 48/188`. Per K3, quote this same-lineage line,
-  never main → #70 → #71 as a progression.
+- **Today's values (pinned k4o bdfb838, mock):** `seeds.2nap.json` converged 36/179,
+  exact 8/30, 6 no-op seeds. `seeds.json` (demo templates only, not on tape) converged
+  5/18, exact 0/5, 4 no-op seeds. Conformance: k4o main 181/188 (7 fail, 0 unsupported).
+  Per K3, never quote main → #70 → #71 as a progression. Under this k4o, three 2nap
+  base templates don't render (no `codeblock` or `numbered` filter), and their 12
+  seeds plus the no-op seeds each print a warning on stderr, so the tape sends stderr
+  to `/dev/null`.
 - **Missing:** the real-backend runs (M1, I2); mock numbers prove the plumbing, not
   the model. "Calls x mean slice size" has no instrumentation, so it stays off the
   card. No token-cost numbers.
