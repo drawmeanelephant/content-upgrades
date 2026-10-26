@@ -8,10 +8,9 @@
       "related[+]": ["Verdict: AcmeDB", "AcmeDB docs — backups", "Apparatus: AcmeDB verdict"],
       "tags[+]": ["release-notes", "databases", "acmedb"],
       "upgrade_matrix[+]": [
-        ["you are on", "effort", "downtime", "should you bother"],
-        ["1.9.x", "rename one config key", "one restart", "yes, today"],
-        ["1.8.x", "config key plus driver bump", "one restart", "yes, this week"],
-        ["1.7 or older", "dump and reload", "plan a window", "yes, but bring snacks"]
+        {"on": "1.9.x", "effort": "rename one config key", "downtime": "one restart", "bother": "yes, today"},
+        {"on": "1.8.x", "effort": "config key plus driver bump", "downtime": "one restart", "bother": "yes, this week"},
+        {"on": "1.7 or older", "effort": "dump and reload", "downtime": "plan a window", "bother": "yes, but bring snacks"}
       ],
       "known_issues[+]": [
         "Snapshots of databases over 2 TB take hours, not minutes.",
@@ -35,11 +34,10 @@
         {"text": "The Machine is much, but it is not everything.", "why": "Kuno's whole thesis in nine words."}
       ],
       "aged[+]": [
-        ["Forster, 1909", "us, now", "called it?"],
-        ["talking through glowing plates", "video calls", "dead on"],
-        ["lectures compiled out of other lectures", "content about content", "dead on"],
-        ["the Book of the Machine", "terms of service nobody reads", "close enough"],
-        ["the Mending Apparatus", "a status page that says all systems operational", "painfully"]
+        {"then": "talking through glowing plates", "now": "video calls", "called_it": "dead on"},
+        {"then": "lectures compiled out of other lectures", "now": "content about content", "called_it": "dead on"},
+        {"then": "the Book of the Machine", "now": "terms of service nobody reads", "called_it": "close enough"},
+        {"then": "the Mending Apparatus", "now": "a status page that says all systems operational", "called_it": "painfully"}
       ],
       "thoughts[+]": [
         "Vashti is not a villain. She is just very, very comfortable, which is scarier.",

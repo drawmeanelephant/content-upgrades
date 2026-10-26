@@ -42,10 +42,9 @@
     }
   ],
   "upgrade_matrix": [
-    ["you are on", "effort", "downtime", "should you bother"],
-    ["1.9.x", "rename one config key", "one restart", "yes, today"],
-    ["1.8.x", "config key plus driver bump", "one restart", "yes, this week"],
-    ["1.7 or older", "dump and reload", "plan a window", "yes, but bring snacks"]
+    {"on": "1.9.x", "effort": "rename one config key", "downtime": "one restart", "bother": "yes, today"},
+    {"on": "1.8.x", "effort": "config key plus driver bump", "downtime": "one restart", "bother": "yes, this week"},
+    {"on": "1.7 or older", "effort": "dump and reload", "downtime": "plan a window", "bother": "yes, but bring snacks"}
   ],
   "known_issues": [
     "Snapshots of databases over 2 TB take hours, not minutes.",

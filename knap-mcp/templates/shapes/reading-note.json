@@ -18,7 +18,11 @@
       "why":  {"type": "string", "role": "why this quote matters, 1-2 sentences", "voice": true},
       "note": {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref. Must match a `notes` key exactly", "optional": true, "ref": "notes"}
     }},
-    "aged":        {"type": "array<array<string>>", "role": "pipe table; first row is the header: [\"<author surname>, <year>\", \"us, now\", \"called it?\"], then one row per prediction. Every row has 3 cells; no | or newlines in cells", "optional": true, "apparatus": "table", "max_items": 5, "cells": 3, "words": 3},
+    "aged":        {"type": "array<object>", "role": "rows of the 'How it aged' pipe table, one per prediction; the header (<author surname>, <year> | us, now | called it?) is fixed in the template. `then` is what the book predicted, `now` the modern equivalent, `called_it` the verdict on it. No | or newlines in values", "optional": true, "apparatus": "table", "max_items": 5, "words": 3, "fields": {
+      "then":      {"type": "string"},
+      "now":       {"type": "string"},
+      "called_it": {"type": "string"}
+    }},
     "thoughts":    {"type": "array<string>", "role": "marginalia, one bullet each, 1-2 sentences", "optional": true, "voice": true, "apparatus": "list", "max_items": 3, "words": 15},
     "spoilers":    {"type": "string", "role": "the ending, single paragraph, body of the collapsed 'Spoilers' warning callout", "optional": true, "voice": true, "apparatus": "callout", "words": 30},
     "bottom_line": {"type": "string", "role": "closing verdict, 1-2 sentences", "voice": true},
