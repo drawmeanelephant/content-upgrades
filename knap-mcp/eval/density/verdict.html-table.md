@@ -23,11 +23,15 @@ AcmeDB does one thing — durable key-value storage — and does it without a op
 
 ## Receipts
 
-|  |  |
-| - | - |
-| claim | evidence |
-| p99 reads under 2ms | vendor benchmark, unreplicated claim |
-| backup gap confirmed | docs page lists snapshots as 'coming soon' |
+<table>
+<thead>
+<tr><th>claim</th><th>evidence</th></tr>
+</thead>
+<tbody>
+<tr><td>p99 reads under 2ms</td><td>vendor benchmark, unreplicated claim</td></tr>
+<tr><td>backup gap confirmed</td><td>docs page lists snapshots as 'coming soon'</td></tr>
+</tbody>
+</table>
 
 
 ## Verdict

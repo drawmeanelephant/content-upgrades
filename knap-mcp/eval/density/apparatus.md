@@ -10,7 +10,6 @@ Reliability: **high** — rel: documentation — Give-a-shit: high
 
 - Point-in-time snapshots are coming soon.
 - Cross-region replication is on the roadmap.
-
 ### [[AcmeDB launch post]]
 
 https://example.com/acmedb/launch
@@ -18,4 +17,3 @@ https://example.com/acmedb/launch
 Reliability: **medium** — rel: self-published — Give-a-shit: low
 
 - p99 read latency under 2ms on a laptop.
-

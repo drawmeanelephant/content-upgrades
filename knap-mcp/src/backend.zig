@@ -16,7 +16,7 @@ pub const Kind = enum { mock, spark, wonder, baseten };
 /// What a model call is for. Every task uses the same endpoint and model
 /// per backend today; callers pass it so routing can split per task later
 /// without touching them.
-pub const Task = enum { repair, voice, verify, judge };
+pub const Task = enum { repair, voice, verify, judge, enrich };
 
 pub const Error = error{ ToolFailed, OutOfMemory, WriteFailed } || std.process.RunError;
 
