@@ -30,6 +30,8 @@ pub const all = [_]Tool{
     @import("tools/repair.zig").tool,
     @import("tools/lint.zig").tool,
     @import("tools/format_check.zig").tool,
+    @import("tools/boris_ask.zig").tool,
+    @import("tools/boris_check.zig").tool,
 };
 
 pub const templatePath = common.templatePath;

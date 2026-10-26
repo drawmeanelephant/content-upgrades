@@ -65,6 +65,8 @@ const commands = [_]Command{
     .{ .name = "repair", .usage = "repair <id> [options]", .summary = "bounded repair loop (max 4)", .run = .{ .tool = .{ .tool = "knap_repair", .key = "template_id" } } },
     .{ .name = "lint", .usage = "lint <file.knap>", .summary = "k4o lint passthrough", .run = .{ .tool = .{ .tool = "knap_lint", .key = "template_text", .exactly_one = "template file", .read_file = true } } },
     .{ .name = "format-check", .usage = "format-check <doc_id>", .summary = "advisory structure lint (warnings only)", .run = .{ .tool = .{ .tool = "knap_format_check", .key = "doc_id", .exactly_one = "doc_id" } } },
+    .{ .name = "boris-ask", .usage = "boris-ask <query> [--limit n]", .summary = "ranked snippets from the boris artifact", .run = .{ .tool = .{ .tool = "boris_ask", .key = "query", .exactly_one = "query" } } },
+    .{ .name = "boris-check", .usage = "boris-check <claim>", .summary = "yes/no/unknown from boris claim pages", .run = .{ .tool = .{ .tool = "boris_check", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
     .{ .name = "backends", .usage = "backends", .summary = "backend availability", .run = .{ .custom = cmdBackends } },
     .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
@@ -75,7 +77,7 @@ const commands = [_]Command{
 
 /// `--<name> <v>` / `--<name>=<v>` options passed to tools as same-named
 /// string arguments.
-const tool_flags = [_][]const u8{ "target", "backend" };
+const tool_flags = [_][]const u8{ "target", "backend", "limit" };
 
 const usage_head =
     \\knap-mcp — AI can't do layout. So we don't let it.
@@ -92,6 +94,7 @@ const usage_tail =
     \\  --backend <b>           mock (default) | spark | wonder | baseten
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
+    \\  --limit <n>             boris-ask hits (default 5)
     \\
     \\Environment:
     \\  KNAP_K4O_PATH / KNAP_DOGBED_PATH   engine binaries (default: PATH)
@@ -100,6 +103,7 @@ const usage_tail =
     \\  KNAP_BACKEND                       default backend kind
     \\  MODEL_API_KEY                      enables spark/wonder/baseten
     \\  KNAP_BASETEN_URL                   baseten endpoint override
+    \\  KNAP_BORIS_SITE                    boris site dir (default <templates>/../../boris-site)
     \\
 ;
 
@@ -401,6 +405,7 @@ fn report(comptime fmt: []const u8, args: anytype) void {
 // one line per file under src/.
 test {
     _ = @import("backend.zig");
+    _ = @import("borisrag.zig");
     _ = @import("ctx.zig");
     _ = @import("density.zig");
     _ = @import("engine.zig");
@@ -410,6 +415,8 @@ test {
     _ = @import("repair.zig");
     _ = @import("store.zig");
     _ = @import("tools.zig");
+    _ = @import("tools/boris_ask.zig");
+    _ = @import("tools/boris_check.zig");
     _ = @import("tools/common.zig");
     _ = @import("tools/format_check.zig");
     _ = @import("tools/lint.zig");
