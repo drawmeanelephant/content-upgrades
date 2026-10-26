@@ -174,7 +174,7 @@ not a message pump. Rules:
   - Oracle scaffolding exists: the 188-case portable corpus already exercises
     the referential filters (footnote ×2, wikilink ×5, callout ×2, embed ×3,
     image ×3, fragment_link ×2, yaml ×11, yaml_property ×6) plus k4o's
-    `tools/differential` live-diff. Measured: k4o main passes 181/188
+    `tools/differential` live-diff. Measured: k4o main passes 187/188
     (`knap-mcp/eval/conformance/`). Note: the corpus is ~98% happy-path
     (2 error, 3 warning cases) — cite the *seeded-breakage* corpus for
     repair-path claims, not the 188.
