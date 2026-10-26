@@ -1,4 +1,4 @@
-.PHONY: all test eval engines clean
+.PHONY: all test eval voice-eval engines clean
 
 # Pinned engine binaries; the pins live in scripts/engines.sh. Override for
 # one run with `make eval KNAP_K4O_PATH=...`.
@@ -14,6 +14,9 @@ test:
 eval: all engines
 	cd knap-mcp && zig-out/bin/knap-mcp eval --corpus eval/seeds.json
 	cd knap-mcp && zig-out/bin/knap-mcp eval --corpus eval/seeds.2nap.json
+
+voice-eval: all engines
+	knap-mcp/eval/voice/run.sh
 
 engines:
 	@scripts/engines.sh
