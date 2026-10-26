@@ -5,6 +5,27 @@ everything after its `<!-- boris-rag-doc: ... -->` marker through the next
 marker (or the end of the file).
 
 
+<!-- boris-rag-doc: id="content/acmedb-2-0-migration-guide" source="published/acmedb-2-0-migration-guide.md" category="content" -->
+---
+id: acmedb-2-0-migration-guide
+title: AcmeDB 2.0 migration guide
+parent: published
+tags: [published, guide]
+summary: Upgrade steps from AcmeDB 1.x to 2.0, in order.
+---
+
+# AcmeDB 2.0 migration guide
+
+1. Upgrade every driver to 1.8 or newer. 2.0 drops the v1 wire protocol.
+2. Rename `wal_dir` to `storage.wal_path` in `acmedb.toml`. 2.0 refuses to
+   start on the old key.
+3. Restart the server on 2.0.
+4. Run `acmedb doctor` and fix anything it flags.
+5. Take a first snapshot with `acmedb snapshot create`.
+
+From 1.7 or older, dump and reload instead of upgrading in place.
+
+
 <!-- boris-rag-doc: id="content/acmedb-docs-architecture" source="sources/acmedb-docs-architecture.md" category="content" -->
 ---
 id: acmedb-docs-architecture
@@ -146,6 +167,24 @@ and nobody has reproduced it.
 ## Used for
 
 - [[claims/p99-reads-under-2ms]]
+
+
+<!-- boris-rag-doc: id="content/apparatus-acmedb-verdict" source="published/apparatus-acmedb-verdict.md" category="content" -->
+---
+id: apparatus-acmedb-verdict
+title: "Apparatus: AcmeDB verdict"
+parent: published
+tags: [published, apparatus]
+summary: The published apparatus; every quote in the verdict, pinned to its source.
+---
+
+# Apparatus: AcmeDB verdict
+
+- Companion to: [[verdict-acmedb]]
+- Published: 2026-10-24, demo-freeze day
+
+The apparatus lists each source the verdict cites, with its reliability and
+the exact quotes used. The source pages are under [[sources]].
 
 
 <!-- boris-rag-doc: id="content/claims" source="claims.md" category="content" -->
@@ -300,6 +339,44 @@ say it is not planned this year.
   for this year."
 
 
+<!-- boris-rag-doc: id="content/e-m-forster" source="library/e-m-forster.md" category="content" -->
+---
+id: e-m-forster
+title: E. M. Forster
+parent: library
+tags: [library, author]
+summary: English novelist, 1879 to 1970; wrote "The Machine Stops" in 1909.
+---
+
+# E. M. Forster
+
+- Born: 1879
+- Died: 1970
+- Known for: *A Room with a View*, *Howards End*, *A Passage to India*
+
+His one piece of science fiction, "The Machine Stops", is collected in
+[[the-eternal-moment-and-other-stories]].
+
+
+<!-- boris-rag-doc: id="content/h-g-wells" source="library/h-g-wells.md" category="content" -->
+---
+id: h-g-wells
+title: H. G. Wells
+parent: library
+tags: [library, author]
+summary: English writer, 1866 to 1946; the scientific romances Forster was answering.
+---
+
+# H. G. Wells
+
+- Born: 1866
+- Died: 1946
+- Known for: *The Time Machine*, *The War of the Worlds*, *A Modern Utopia*
+
+[[e-m-forster]] wrote "The Machine Stops" as a reaction to one of Wells's
+early utopias.
+
+
 <!-- boris-rag-doc: id="content/index" source="index.md" category="content" -->
 ---
 title: AcmeDB research desk
@@ -327,6 +404,72 @@ A knap template writes a source name as a wiki-link, for example
 staging step rewrites the target to its slug (`acmedb-launch-post`) and keeps
 the name as the label. Each source page declares that slug as its `id`. A
 name that has no page fails the check with `EREFERENCEMISSING`.
+
+
+<!-- boris-rag-doc: id="content/library" source="library.md" category="content" -->
+---
+title: Library
+parent: index
+tags: [library]
+summary: Authors and books that reading notes link to by name.
+---
+
+# Library
+
+Authors and books a reading note can link to. A name such as
+`[[E. M. Forster]]` stages as its slug, `e-m-forster`.
+
+| Page | What |
+|---|---|
+| [[e-m-forster]] | Author |
+| [[h-g-wells]] | Author |
+| [[the-eternal-moment-and-other-stories]] | Collection |
+
+What went out from this desk is under [[published]].
+
+Back to the [[index|research desk]].
+
+
+<!-- boris-rag-doc: id="content/published" source="published.md" category="content" -->
+---
+title: Published
+parent: index
+tags: [published]
+summary: Docs knap has published from this desk; rendered docs link and embed them by name.
+---
+
+# Published
+
+Docs that went out from this desk. A knap template names them with a
+wiki-link or an embed, for example `[[Verdict: AcmeDB]]`; staging rewrites
+the name to its slug, and each page here declares that slug as its `id`.
+
+| Page | What |
+|---|---|
+| [[verdict-acmedb]] | The verdict |
+| [[apparatus-acmedb-verdict]] | The verdict's sources and quotes |
+| [[acmedb-2-0-migration-guide]] | Upgrade steps, embedded by the 2.0 release notes |
+| [[reading-queue]] | What to read next, embedded by reading notes |
+
+Back to the [[index|research desk]].
+
+
+<!-- boris-rag-doc: id="content/reading-queue" source="published/reading-queue.md" category="content" -->
+---
+id: reading-queue
+title: Reading queue
+parent: published
+tags: [published, reading]
+summary: Short fiction queued for a reading note.
+---
+
+# Reading queue
+
+1. "The Point of It", from [[the-eternal-moment-and-other-stories]].
+2. "The Star", by [[h-g-wells]].
+3. "The Story of the Days to Come", by [[h-g-wells]].
+
+Authors and collections are in the [[library]].
 
 
 <!-- boris-rag-doc: id="content/sources" source="sources.md" category="content" -->
@@ -358,4 +501,42 @@ name, so a knap `wikilink` on the name resolves here.
 - **low**: hearsay, screenshots, or unsourced benchmarks.
 
 Back to the [[index|research desk]].
+
+
+<!-- boris-rag-doc: id="content/the-eternal-moment-and-other-stories" source="library/the-eternal-moment-and-other-stories.md" category="content" -->
+---
+id: the-eternal-moment-and-other-stories
+title: The Eternal Moment and Other Stories
+parent: library
+tags: [library, book]
+summary: Forster's 1928 story collection; it opens with "The Machine Stops".
+---
+
+# The Eternal Moment and Other Stories
+
+- Author: [[e-m-forster]]
+- Published: 1928
+- Free text: https://www.gutenberg.org/ebooks/72890
+
+"The Machine Stops" first appeared in *The Oxford and Cambridge Review* in
+November 1909 and is the first story here.
+
+
+<!-- boris-rag-doc: id="content/verdict-acmedb" source="published/verdict-acmedb.md" category="content" -->
+---
+id: verdict-acmedb
+title: "Verdict: AcmeDB"
+parent: published
+tags: [published, verdict]
+summary: The published verdict; ship it behind a cache.
+---
+
+# Verdict: AcmeDB
+
+- Verdict: give a shit
+- Bottom line: ship it behind a cache.
+- Published: 2026-10-24, demo-freeze day
+
+The rendered verdict is a knap doc, not a page on this desk. Its evidence is
+under [[sources]] and its conclusions are under [[claims]].
 

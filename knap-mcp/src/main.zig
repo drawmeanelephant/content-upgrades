@@ -70,6 +70,7 @@ const commands = [_]Command{
     .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "boris-ask", .usage = "boris-ask <query> [--limit n]", .summary = "ranked snippets from the boris artifact", .run = .{ .tool = .{ .tool = "boris_ask", .key = "query", .exactly_one = "query" } } },
     .{ .name = "boris-check", .usage = "boris-check <claim>", .summary = "yes/no/unknown from boris claim pages", .run = .{ .tool = .{ .tool = "boris_check", .key = "claim", .exactly_one = "claim" } } },
+    .{ .name = "publish-check", .usage = "publish-check <doc_id>", .summary = "stage md doc in boris site; exit 1 unless ok", .run = .{ .custom = @import("tools/publish_check.zig").cli } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
     .{ .name = "backends", .usage = "backends", .summary = "backend availability", .run = .{ .custom = cmdBackends } },
     .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
@@ -111,6 +112,7 @@ const usage_tail =
     \\  MODEL_API_KEY                      enables spark/wonder/baseten
     \\  KNAP_BASETEN_URL                   baseten endpoint override
     \\  KNAP_BORIS_SITE                    boris site dir (default <templates>/../../boris-site)
+    \\  KNAP_BORIS_PATH                    boris binary for publish-check (default: PATH)
     \\
 ;
 
@@ -415,6 +417,7 @@ fn report(comptime fmt: []const u8, args: anytype) void {
 // one line per file under src/.
 test {
     _ = @import("backend.zig");
+    _ = @import("boris.zig");
     _ = @import("borisrag.zig");
     _ = @import("ctx.zig");
     _ = @import("density.zig");
@@ -431,6 +434,7 @@ test {
     _ = @import("tools/common.zig");
     _ = @import("tools/format_check.zig");
     _ = @import("tools/lint.zig");
+    _ = @import("tools/publish_check.zig");
     _ = @import("tools/render.zig");
     _ = @import("tools/repair.zig");
     _ = @import("tools/structure_hash.zig");

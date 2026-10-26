@@ -3,6 +3,14 @@
   "schema_version": 1,
   "documents": [
     {
+      "path": "acmedb-2-0-migration-guide.html",
+      "title": "AcmeDB 2.0 migration guide",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB 2.0 migration guide", "fragment": "acmedb-20-migration-guide", "text": "Upgrade every driver to 1.8 or newer. 2.0 drops the v1 wire protocol. Rename to in . 2.0 refuses to start on the old key. Restart the server on 2.0. Run and fix anything it flags. Take a first snapshot with . From 1.7 or older, dump and reload instead of upgrading in place.", "code": "wal_dir storage.wal_path acmedb.toml acmedb doctor acmedb snapshot create"}
+      ]
+    },
+    {
       "path": "acmedb-docs-architecture.html",
       "title": "AcmeDB docs — architecture",
       "sections": [
@@ -44,6 +52,14 @@
         {"level": 2, "heading": "What it says", "fragment": "what-it-says", "text": "p99 read latency under 2ms on a laptop. AcmeDB is a durable key-value store. No consensus, no sharding, no surprises. The post links no benchmark harness, names no dataset size, and reports no write latency.", "code": ""},
         {"level": 2, "heading": "Why it matters", "fragment": "why-it-matters", "text": "It is marketing. The latency number is the vendor's best case on one machine, and nobody has reproduced it.", "code": ""},
         {"level": 2, "heading": "Used for", "fragment": "used-for", "text": "AcmeDB serves p99 reads under 2ms", "code": ""}
+      ]
+    },
+    {
+      "path": "apparatus-acmedb-verdict.html",
+      "title": "Apparatus: AcmeDB verdict",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "Apparatus: AcmeDB verdict", "fragment": "apparatus-acmedb-verdict", "text": "Companion to: Verdict: AcmeDB Published: 2026-10-24, demo-freeze day The apparatus lists each source the verdict cites, with its reliability and the exact quotes used. The source pages are under Sources.", "code": ""}
       ]
     },
     {
@@ -110,6 +126,22 @@
       ]
     },
     {
+      "path": "e-m-forster.html",
+      "title": "E. M. Forster",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "E. M. Forster", "fragment": "e-m-forster", "text": "Born: 1879 Died: 1970 Known for: A Room with a View, Howards End, A Passage to India His one piece of science fiction, \"The Machine Stops\", is collected in The Eternal Moment and Other Stories.", "code": ""}
+      ]
+    },
+    {
+      "path": "h-g-wells.html",
+      "title": "H. G. Wells",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "H. G. Wells", "fragment": "h-g-wells", "text": "Born: 1866 Died: 1946 Known for: The Time Machine, The War of the Worlds, A Modern Utopia E. M. Forster wrote \"The Machine Stops\" as a reaction to one of Wells's early utopias.", "code": ""}
+      ]
+    },
+    {
       "path": "index.html",
       "title": "AcmeDB research desk",
       "sections": [
@@ -119,12 +151,52 @@
       ]
     },
     {
+      "path": "library.html",
+      "title": "Library",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "Library", "fragment": "library", "text": "Authors and books a reading note can link to. A name such as stages as its slug, . Page What E. M. Forster Author H. G. Wells Author The Eternal Moment and Other Stories Collection What went out from this desk is under Published. Back to the research desk.", "code": "[[E. M. Forster]] e-m-forster"}
+      ]
+    },
+    {
+      "path": "published.html",
+      "title": "Published",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "Published", "fragment": "published", "text": "Docs that went out from this desk. A knap template names them with a wiki-link or an embed, for example ; staging rewrites the name to its slug, and each page here declares that slug as its . Page What Verdict: AcmeDB The verdict Apparatus: AcmeDB verdict The verdict's sources and quotes AcmeDB 2.0 migration guide Upgrade steps, embedded by the 2.0 release notes Reading queue What to read next, embedded by reading notes Back to the research desk.", "code": "[[Verdict: AcmeDB]] id"}
+      ]
+    },
+    {
+      "path": "reading-queue.html",
+      "title": "Reading queue",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "Reading queue", "fragment": "reading-queue", "text": "\"The Point of It\", from The Eternal Moment and Other Stories. \"The Star\", by H. G. Wells. \"The Story of the Days to Come\", by H. G. Wells. Authors and collections are in the Library.", "code": ""}
+      ]
+    },
+    {
       "path": "sources.html",
       "title": "Sources",
       "sections": [
         {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
         {"level": 1, "heading": "Sources", "fragment": "sources", "text": "Every source an AcmeDB verdict cites. A source page's id is the slug of its name, so a knap on the name resolves here. Source Kind Reliability Give-a-shit AcmeDB docs — backups documentation high high AcmeDB docs — architecture documentation high medium AcmeDB launch post self-published medium low AcmeDB issue #412 — cross-region replication issue tracker medium high", "code": "wikilink"},
         {"level": 2, "heading": "Reliability scale", "fragment": "reliability-scale", "text": "high: the vendor's own reference documentation, versioned with the product. medium: vendor marketing or a maintainer comment; true at the time, never re-checked. low: hearsay, screenshots, or unsourced benchmarks. Back to the research desk.", "code": ""}
+      ]
+    },
+    {
+      "path": "the-eternal-moment-and-other-stories.html",
+      "title": "The Eternal Moment and Other Stories",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "The Eternal Moment and Other Stories", "fragment": "the-eternal-moment-and-other-stories", "text": "Author: E. M. Forster Published: 1928 Free text: https://www.gutenberg.org/ebooks/72890 \"The Machine Stops\" first appeared in The Oxford and Cambridge Review in November 1909 and is the first story here.", "code": ""}
+      ]
+    },
+    {
+      "path": "verdict-acmedb.html",
+      "title": "Verdict: AcmeDB",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "Verdict: AcmeDB", "fragment": "verdict-acmedb", "text": "Verdict: give a shit Bottom line: ship it behind a cache. Published: 2026-10-24, demo-freeze day The rendered verdict is a knap doc, not a page on this desk. Its evidence is under Sources and its conclusions are under Claims.", "code": ""}
       ]
     }
   ]

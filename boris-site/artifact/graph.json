@@ -4,126 +4,174 @@
   "nodes": [
     {
       "index": 0,
+      "id": "acmedb-2-0-migration-guide",
+      "sourcePath": "published/acmedb-2-0-migration-guide.md",
+      "role": "satellite",
+      "parent": "published",
+      "parentIndex": 16,
+      "title": "AcmeDB 2.0 migration guide",
+      "status": null,
+      "tags": ["published", "guide"],
+      "bodyOffset": 173
+    },
+    {
+      "index": 1,
       "id": "acmedb-docs-architecture",
       "sourcePath": "sources/acmedb-docs-architecture.md",
       "role": "satellite",
       "parent": "sources",
-      "parentIndex": 11,
+      "parentIndex": 18,
       "title": "AcmeDB docs — architecture",
       "status": null,
       "tags": ["source", "documentation", "reliability-high", "gaf-medium"],
       "bodyOffset": 231
     },
     {
-      "index": 1,
+      "index": 2,
       "id": "acmedb-docs-backups",
       "sourcePath": "sources/acmedb-docs-backups.md",
       "role": "satellite",
       "parent": "sources",
-      "parentIndex": 11,
+      "parentIndex": 18,
       "title": "AcmeDB docs — backups",
       "status": null,
       "tags": ["source", "documentation", "reliability-high", "gaf-high"],
       "bodyOffset": 224
     },
     {
-      "index": 2,
+      "index": 3,
       "id": "acmedb-issue-412-cross-region-replication",
       "sourcePath": "sources/acmedb-issue-412-cross-region-replication.md",
       "role": "satellite",
       "parent": "sources",
-      "parentIndex": 11,
+      "parentIndex": 18,
       "title": "AcmeDB issue #412 — cross-region replication",
       "status": null,
       "tags": ["source", "issue-tracker", "reliability-medium", "gaf-high"],
       "bodyOffset": 272
     },
     {
-      "index": 3,
+      "index": 4,
       "id": "acmedb-launch-post",
       "sourcePath": "sources/acmedb-launch-post.md",
       "role": "satellite",
       "parent": "sources",
-      "parentIndex": 11,
+      "parentIndex": 18,
       "title": "AcmeDB launch post",
       "status": null,
       "tags": ["source", "self-published", "reliability-medium", "gaf-low"],
       "bodyOffset": 217
     },
     {
-      "index": 4,
+      "index": 5,
+      "id": "apparatus-acmedb-verdict",
+      "sourcePath": "published/apparatus-acmedb-verdict.md",
+      "role": "satellite",
+      "parent": "published",
+      "parentIndex": 16,
+      "title": "Apparatus: AcmeDB verdict",
+      "status": null,
+      "tags": ["published", "apparatus"],
+      "bodyOffset": 203
+    },
+    {
+      "index": 6,
       "id": "claims",
       "sourcePath": "claims.md",
       "role": "satellite",
       "parent": "index",
-      "parentIndex": 10,
+      "parentIndex": 14,
       "title": "Claims",
       "status": null,
       "tags": ["claims"],
       "bodyOffset": 139
     },
     {
-      "index": 5,
+      "index": 7,
       "id": "claims/backup-gap",
       "sourcePath": "claims/backup-gap.md",
       "role": "satellite",
       "parent": "claims",
-      "parentIndex": 4,
+      "parentIndex": 6,
       "title": "AcmeDB has no managed backups",
       "status": null,
       "tags": ["claim", "supported"],
       "bodyOffset": 205
     },
     {
-      "index": 6,
+      "index": 8,
       "id": "claims/durable-writes",
       "sourcePath": "claims/durable-writes.md",
       "role": "satellite",
       "parent": "claims",
-      "parentIndex": 4,
+      "parentIndex": 6,
       "title": "AcmeDB acknowledges only durable writes",
       "status": null,
       "tags": ["claim", "supported"],
       "bodyOffset": 232
     },
     {
-      "index": 7,
+      "index": 9,
       "id": "claims/horizontal-sharding",
       "sourcePath": "claims/horizontal-sharding.md",
       "role": "satellite",
       "parent": "claims",
-      "parentIndex": 4,
+      "parentIndex": 6,
       "title": "AcmeDB shards the keyspace across nodes",
       "status": null,
       "tags": ["claim", "refuted"],
       "bodyOffset": 212
     },
     {
-      "index": 8,
+      "index": 10,
       "id": "claims/p99-reads-under-2ms",
       "sourcePath": "claims/p99-reads-under-2ms.md",
       "role": "satellite",
       "parent": "claims",
-      "parentIndex": 4,
+      "parentIndex": 6,
       "title": "AcmeDB serves p99 reads under 2ms",
       "status": null,
       "tags": ["claim", "unverified"],
       "bodyOffset": 224
     },
     {
-      "index": 9,
+      "index": 11,
       "id": "claims/single-region-only",
       "sourcePath": "claims/single-region-only.md",
       "role": "satellite",
       "parent": "claims",
-      "parentIndex": 4,
+      "parentIndex": 6,
       "title": "AcmeDB is single-region only",
       "status": null,
       "tags": ["claim", "supported"],
       "bodyOffset": 270
     },
     {
-      "index": 10,
+      "index": 12,
+      "id": "e-m-forster",
+      "sourcePath": "library/e-m-forster.md",
+      "role": "satellite",
+      "parent": "library",
+      "parentIndex": 15,
+      "title": "E. M. Forster",
+      "status": null,
+      "tags": ["library", "author"],
+      "bodyOffset": 161
+    },
+    {
+      "index": 13,
+      "id": "h-g-wells",
+      "sourcePath": "library/h-g-wells.md",
+      "role": "satellite",
+      "parent": "library",
+      "parentIndex": 15,
+      "title": "H. G. Wells",
+      "status": null,
+      "tags": ["library", "author"],
+      "bodyOffset": 167
+    },
+    {
+      "index": 14,
       "id": "index",
       "sourcePath": "index.md",
       "role": "trunk",
@@ -135,22 +183,93 @@
       "bodyOffset": 119
     },
     {
-      "index": 11,
+      "index": 15,
+      "id": "library",
+      "sourcePath": "library.md",
+      "role": "satellite",
+      "parent": "index",
+      "parentIndex": 14,
+      "title": "Library",
+      "status": null,
+      "tags": ["library"],
+      "bodyOffset": 116
+    },
+    {
+      "index": 16,
+      "id": "published",
+      "sourcePath": "published.md",
+      "role": "satellite",
+      "parent": "index",
+      "parentIndex": 14,
+      "title": "Published",
+      "status": null,
+      "tags": ["published"],
+      "bodyOffset": 149
+    },
+    {
+      "index": 17,
+      "id": "reading-queue",
+      "sourcePath": "published/reading-queue.md",
+      "role": "satellite",
+      "parent": "published",
+      "parentIndex": 16,
+      "title": "Reading queue",
+      "status": null,
+      "tags": ["published", "reading"],
+      "bodyOffset": 142
+    },
+    {
+      "index": 18,
       "id": "sources",
       "sourcePath": "sources.md",
       "role": "satellite",
       "parent": "index",
-      "parentIndex": 10,
+      "parentIndex": 14,
       "title": "Sources",
       "status": null,
       "tags": ["sources"],
       "bodyOffset": 145
+    },
+    {
+      "index": 19,
+      "id": "the-eternal-moment-and-other-stories",
+      "sourcePath": "library/the-eternal-moment-and-other-stories.md",
+      "role": "satellite",
+      "parent": "library",
+      "parentIndex": 15,
+      "title": "The Eternal Moment and Other Stories",
+      "status": null,
+      "tags": ["library", "book"],
+      "bodyOffset": 208
+    },
+    {
+      "index": 20,
+      "id": "verdict-acmedb",
+      "sourcePath": "published/verdict-acmedb.md",
+      "role": "satellite",
+      "parent": "published",
+      "parentIndex": 16,
+      "title": "Verdict: AcmeDB",
+      "status": null,
+      "tags": ["published", "verdict"],
+      "bodyOffset": 153
     }
   ],
   "edges": [
     {
       "from": {
         "type": "page",
+        "value": "acmedb-2-0-migration-guide"
+      },
+      "to": {
+        "type": "page",
+        "value": "published"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
         "value": "acmedb-docs-architecture"
       },
       "to": {
@@ -261,6 +380,39 @@
     {
       "from": {
         "type": "page",
+        "value": "apparatus-acmedb-verdict"
+      },
+      "to": {
+        "type": "page",
+        "value": "published"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "apparatus-acmedb-verdict"
+      },
+      "to": {
+        "type": "page",
+        "value": "sources"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "apparatus-acmedb-verdict"
+      },
+      "to": {
+        "type": "page",
+        "value": "verdict-acmedb"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
         "value": "claims"
       },
       "to": {
@@ -459,6 +611,50 @@
     {
       "from": {
         "type": "page",
+        "value": "e-m-forster"
+      },
+      "to": {
+        "type": "page",
+        "value": "library"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "e-m-forster"
+      },
+      "to": {
+        "type": "page",
+        "value": "the-eternal-moment-and-other-stories"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "h-g-wells"
+      },
+      "to": {
+        "type": "page",
+        "value": "e-m-forster"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "h-g-wells"
+      },
+      "to": {
+        "type": "page",
+        "value": "library"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
         "value": "index"
       },
       "to": {
@@ -475,6 +671,182 @@
       "to": {
         "type": "page",
         "value": "sources"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "library"
+      },
+      "to": {
+        "type": "page",
+        "value": "e-m-forster"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "library"
+      },
+      "to": {
+        "type": "page",
+        "value": "h-g-wells"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "library"
+      },
+      "to": {
+        "type": "page",
+        "value": "index"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "library"
+      },
+      "to": {
+        "type": "page",
+        "value": "index"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "library"
+      },
+      "to": {
+        "type": "page",
+        "value": "published"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "library"
+      },
+      "to": {
+        "type": "page",
+        "value": "the-eternal-moment-and-other-stories"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "published"
+      },
+      "to": {
+        "type": "page",
+        "value": "acmedb-2-0-migration-guide"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "published"
+      },
+      "to": {
+        "type": "page",
+        "value": "apparatus-acmedb-verdict"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "published"
+      },
+      "to": {
+        "type": "page",
+        "value": "index"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "published"
+      },
+      "to": {
+        "type": "page",
+        "value": "index"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "published"
+      },
+      "to": {
+        "type": "page",
+        "value": "reading-queue"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "published"
+      },
+      "to": {
+        "type": "page",
+        "value": "verdict-acmedb"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "reading-queue"
+      },
+      "to": {
+        "type": "page",
+        "value": "h-g-wells"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "reading-queue"
+      },
+      "to": {
+        "type": "page",
+        "value": "library"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "reading-queue"
+      },
+      "to": {
+        "type": "page",
+        "value": "published"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "reading-queue"
+      },
+      "to": {
+        "type": "page",
+        "value": "the-eternal-moment-and-other-stories"
       },
       "kind": "reference"
     },
@@ -541,6 +913,61 @@
       "to": {
         "type": "page",
         "value": "index"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "the-eternal-moment-and-other-stories"
+      },
+      "to": {
+        "type": "page",
+        "value": "e-m-forster"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "the-eternal-moment-and-other-stories"
+      },
+      "to": {
+        "type": "page",
+        "value": "library"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "verdict-acmedb"
+      },
+      "to": {
+        "type": "page",
+        "value": "claims"
+      },
+      "kind": "reference"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "verdict-acmedb"
+      },
+      "to": {
+        "type": "page",
+        "value": "published"
+      },
+      "kind": "parent"
+    },
+    {
+      "from": {
+        "type": "page",
+        "value": "verdict-acmedb"
+      },
+      "to": {
+        "type": "page",
+        "value": "sources"
       },
       "kind": "reference"
     }
@@ -549,172 +976,298 @@
     {
       "target": {
         "type": "page",
+        "value": "acmedb-2-0-migration-guide"
+      },
+      "incomingEdges": [44]
+    },
+    {
+      "target": {
+        "type": "page",
         "value": "acmedb-docs-architecture"
       },
-      "incomingEdges": [19, 21, 30]
+      "incomingEdges": [23, 25, 54]
     },
     {
       "target": {
         "type": "page",
         "value": "acmedb-docs-backups"
       },
-      "incomingEdges": [17, 25, 31]
+      "incomingEdges": [21, 29, 55]
     },
     {
       "target": {
         "type": "page",
         "value": "acmedb-issue-412-cross-region-replication"
       },
-      "incomingEdges": [26, 32]
+      "incomingEdges": [30, 56]
     },
     {
       "target": {
         "type": "page",
         "value": "acmedb-launch-post"
       },
-      "incomingEdges": [23, 33]
+      "incomingEdges": [27, 57]
+    },
+    {
+      "target": {
+        "type": "page",
+        "value": "apparatus-acmedb-verdict"
+      },
+      "incomingEdges": [45]
     },
     {
       "target": {
         "type": "page",
         "value": "claims"
       },
-      "incomingEdges": [18, 20, 22, 24, 27, 28]
+      "incomingEdges": [22, 24, 26, 28, 31, 36, 62]
     },
     {
       "target": {
         "type": "page",
         "value": "claims/backup-gap"
       },
-      "incomingEdges": [3, 10]
+      "incomingEdges": [4, 14]
     },
     {
       "target": {
         "type": "page",
         "value": "claims/durable-writes"
       },
-      "incomingEdges": [0, 11]
+      "incomingEdges": [1, 15]
     },
     {
       "target": {
         "type": "page",
         "value": "claims/horizontal-sharding"
       },
-      "incomingEdges": [1, 12]
+      "incomingEdges": [2, 16]
     },
     {
       "target": {
         "type": "page",
         "value": "claims/p99-reads-under-2ms"
       },
-      "incomingEdges": [8, 13]
+      "incomingEdges": [9, 17]
     },
     {
       "target": {
         "type": "page",
         "value": "claims/single-region-only"
       },
-      "incomingEdges": [4, 6, 14]
+      "incomingEdges": [5, 7, 18]
+    },
+    {
+      "target": {
+        "type": "page",
+        "value": "e-m-forster"
+      },
+      "incomingEdges": [34, 38, 60]
+    },
+    {
+      "target": {
+        "type": "page",
+        "value": "h-g-wells"
+      },
+      "incomingEdges": [39, 50]
     },
     {
       "target": {
         "type": "page",
         "value": "index"
       },
-      "incomingEdges": [15, 16, 34, 35]
+      "incomingEdges": [19, 20, 40, 41, 46, 47, 58, 59]
+    },
+    {
+      "target": {
+        "type": "page",
+        "value": "library"
+      },
+      "incomingEdges": [32, 35, 51, 61]
+    },
+    {
+      "target": {
+        "type": "page",
+        "value": "published"
+      },
+      "incomingEdges": [0, 11, 42, 52, 63]
+    },
+    {
+      "target": {
+        "type": "page",
+        "value": "reading-queue"
+      },
+      "incomingEdges": [48]
     },
     {
       "target": {
         "type": "page",
         "value": "sources"
       },
-      "incomingEdges": [2, 5, 7, 9, 29]
+      "incomingEdges": [3, 6, 8, 10, 12, 37, 64]
+    },
+    {
+      "target": {
+        "type": "page",
+        "value": "the-eternal-moment-and-other-stories"
+      },
+      "incomingEdges": [33, 43, 53]
+    },
+    {
+      "target": {
+        "type": "page",
+        "value": "verdict-acmedb"
+      },
+      "incomingEdges": [13, 49]
     }
   ],
   "nav": [
     {
       "index": 0,
+      "id": "acmedb-2-0-migration-guide",
+      "breadcrumb": [14, 16, 0],
+      "children": [],
+      "siblings": [5, 17, 20]
+    },
+    {
+      "index": 1,
       "id": "acmedb-docs-architecture",
-      "breadcrumb": [10, 11, 0],
+      "breadcrumb": [14, 18, 1],
+      "children": [],
+      "siblings": [2, 3, 4]
+    },
+    {
+      "index": 2,
+      "id": "acmedb-docs-backups",
+      "breadcrumb": [14, 18, 2],
+      "children": [],
+      "siblings": [1, 3, 4]
+    },
+    {
+      "index": 3,
+      "id": "acmedb-issue-412-cross-region-replication",
+      "breadcrumb": [14, 18, 3],
+      "children": [],
+      "siblings": [1, 2, 4]
+    },
+    {
+      "index": 4,
+      "id": "acmedb-launch-post",
+      "breadcrumb": [14, 18, 4],
       "children": [],
       "siblings": [1, 2, 3]
     },
     {
-      "index": 1,
-      "id": "acmedb-docs-backups",
-      "breadcrumb": [10, 11, 1],
-      "children": [],
-      "siblings": [0, 2, 3]
-    },
-    {
-      "index": 2,
-      "id": "acmedb-issue-412-cross-region-replication",
-      "breadcrumb": [10, 11, 2],
-      "children": [],
-      "siblings": [0, 1, 3]
-    },
-    {
-      "index": 3,
-      "id": "acmedb-launch-post",
-      "breadcrumb": [10, 11, 3],
-      "children": [],
-      "siblings": [0, 1, 2]
-    },
-    {
-      "index": 4,
-      "id": "claims",
-      "breadcrumb": [10, 4],
-      "children": [5, 6, 7, 8, 9],
-      "siblings": [11]
-    },
-    {
       "index": 5,
-      "id": "claims/backup-gap",
-      "breadcrumb": [10, 4, 5],
+      "id": "apparatus-acmedb-verdict",
+      "breadcrumb": [14, 16, 5],
       "children": [],
-      "siblings": [6, 7, 8, 9]
+      "siblings": [0, 17, 20]
     },
     {
       "index": 6,
-      "id": "claims/durable-writes",
-      "breadcrumb": [10, 4, 6],
-      "children": [],
-      "siblings": [5, 7, 8, 9]
+      "id": "claims",
+      "breadcrumb": [14, 6],
+      "children": [7, 8, 9, 10, 11],
+      "siblings": [15, 16, 18]
     },
     {
       "index": 7,
-      "id": "claims/horizontal-sharding",
-      "breadcrumb": [10, 4, 7],
+      "id": "claims/backup-gap",
+      "breadcrumb": [14, 6, 7],
       "children": [],
-      "siblings": [5, 6, 8, 9]
+      "siblings": [8, 9, 10, 11]
     },
     {
       "index": 8,
-      "id": "claims/p99-reads-under-2ms",
-      "breadcrumb": [10, 4, 8],
+      "id": "claims/durable-writes",
+      "breadcrumb": [14, 6, 8],
       "children": [],
-      "siblings": [5, 6, 7, 9]
+      "siblings": [7, 9, 10, 11]
     },
     {
       "index": 9,
-      "id": "claims/single-region-only",
-      "breadcrumb": [10, 4, 9],
+      "id": "claims/horizontal-sharding",
+      "breadcrumb": [14, 6, 9],
       "children": [],
-      "siblings": [5, 6, 7, 8]
+      "siblings": [7, 8, 10, 11]
     },
     {
       "index": 10,
-      "id": "index",
-      "breadcrumb": [10],
-      "children": [4, 11],
-      "siblings": []
+      "id": "claims/p99-reads-under-2ms",
+      "breadcrumb": [14, 6, 10],
+      "children": [],
+      "siblings": [7, 8, 9, 11]
     },
     {
       "index": 11,
+      "id": "claims/single-region-only",
+      "breadcrumb": [14, 6, 11],
+      "children": [],
+      "siblings": [7, 8, 9, 10]
+    },
+    {
+      "index": 12,
+      "id": "e-m-forster",
+      "breadcrumb": [14, 15, 12],
+      "children": [],
+      "siblings": [13, 19]
+    },
+    {
+      "index": 13,
+      "id": "h-g-wells",
+      "breadcrumb": [14, 15, 13],
+      "children": [],
+      "siblings": [12, 19]
+    },
+    {
+      "index": 14,
+      "id": "index",
+      "breadcrumb": [14],
+      "children": [6, 15, 16, 18],
+      "siblings": []
+    },
+    {
+      "index": 15,
+      "id": "library",
+      "breadcrumb": [14, 15],
+      "children": [12, 13, 19],
+      "siblings": [6, 16, 18]
+    },
+    {
+      "index": 16,
+      "id": "published",
+      "breadcrumb": [14, 16],
+      "children": [0, 5, 17, 20],
+      "siblings": [6, 15, 18]
+    },
+    {
+      "index": 17,
+      "id": "reading-queue",
+      "breadcrumb": [14, 16, 17],
+      "children": [],
+      "siblings": [0, 5, 20]
+    },
+    {
+      "index": 18,
       "id": "sources",
-      "breadcrumb": [10, 11],
-      "children": [0, 1, 2, 3],
-      "siblings": [4]
+      "breadcrumb": [14, 18],
+      "children": [1, 2, 3, 4],
+      "siblings": [6, 15, 16]
+    },
+    {
+      "index": 19,
+      "id": "the-eternal-moment-and-other-stories",
+      "breadcrumb": [14, 15, 19],
+      "children": [],
+      "siblings": [12, 13]
+    },
+    {
+      "index": 20,
+      "id": "verdict-acmedb",
+      "breadcrumb": [14, 16, 20],
+      "children": [],
+      "siblings": [0, 5, 17]
     }
   ],
   "relations": [
