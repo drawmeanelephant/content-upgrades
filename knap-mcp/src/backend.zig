@@ -9,6 +9,7 @@
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
 const engine = @import("engine.zig");
+const store = @import("store.zig");
 
 pub const Kind = enum { mock, spark, wonder, baseten };
 
@@ -304,13 +305,30 @@ fn chatCompletion(
     try std.json.Stringify.value(user_msg, .{}, &payload.writer);
     try payload.writer.print("}}],\"temperature\":0}}", .{});
 
-    const auth = try std.fmt.allocPrint(ctx.arena, "Authorization: Bearer {s}", .{key});
+    // Body and auth header go through owner-only scratch files, not argv,
+    // so neither the prompt nor the key shows up in `ps`.
+    const body_path = try store.scratchFile(ctx, "json");
+    const auth_path = try store.scratchFile(ctx, "header");
+    defer for ([_][]const u8{ body_path, auth_path }) |p|
+        std.Io.Dir.deleteFile(.cwd(), ctx.io, p) catch {};
+    const Permissions = std.Io.File.Permissions;
+    const private: std.Io.Dir.CreateFileOptions = .{
+        .permissions = if (@hasDecl(Permissions, "fromMode")) Permissions.fromMode(0o600) else .default_file,
+    };
+    const auth = try std.fmt.allocPrint(ctx.arena, "Authorization: Bearer {s}\n", .{key});
+    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = auth_path, .data = auth, .flags = private }) catch
+        return ctx.fail("cannot stage backend auth header", .{});
+    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = body_path, .data = payload.written(), .flags = private }) catch
+        return ctx.fail("cannot stage backend request body", .{});
+    const auth_arg = try std.fmt.allocPrint(ctx.arena, "@{s}", .{auth_path});
+    const body_arg = try std.fmt.allocPrint(ctx.arena, "@{s}", .{body_path});
+
     const result = std.process.run(ctx.arena, ctx.io, .{
         .argv = &.{
-            "curl", "-sS", "-f", "-X", "POST", url,
-            "-H",       auth,
-            "-H",       "Content-Type: application/json",
-            "--data",   payload.written(),
+            "curl",          "-sS", "-f", "-X", "POST", url,
+            "-H",            auth_arg,
+            "-H",            "Content-Type: application/json",
+            "--data-binary", body_arg,
         },
         .stdout_limit = .limited(8 * 1024 * 1024),
         .stderr_limit = .limited(1024 * 1024),

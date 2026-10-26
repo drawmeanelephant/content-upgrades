@@ -25,6 +25,7 @@ pub const Step = struct {
 };
 
 pub const Outcome = struct {
+    target: engine.Target,
     converged: bool,
     iterations: usize,
     /// Final working copy of the template (the patched text, never the
@@ -60,6 +61,7 @@ pub fn run(
 
         switch (try engine.render(ctx, target, tpl_path, data_path)) {
             .ok => |doc| return .{
+                .target = target,
                 .converged = true,
                 .iterations = iter,
                 .template = current,
@@ -99,6 +101,7 @@ pub fn run(
     }
 
     return .{
+        .target = target,
         .converged = false,
         .iterations = steps.items.len,
         .template = current,

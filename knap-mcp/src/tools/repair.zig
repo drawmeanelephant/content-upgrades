@@ -39,7 +39,7 @@ pub fn writeOutcome(ctx: *Ctx, outcome: repair.Outcome, out: *Allocating) !void 
         if (outcome.converged) "true" else "false", outcome.iterations,
     });
     if (outcome.document) |doc| {
-        const doc_id = store.put(ctx, "md", doc) catch null;
+        const doc_id = store.put(ctx, engine.extension(outcome.target), doc) catch null;
         if (doc_id) |id| try out.writer.print(",\"doc_id\":\"{s}\"", .{id});
     }
     try out.writer.writeAll(",\"steps\":[");
