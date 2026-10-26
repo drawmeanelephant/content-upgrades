@@ -219,12 +219,14 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 - **Commands:**
   ```sh
   knap-mcp eval --corpus eval/seeds.2nap.json --backend mock 2>/dev/null | grep '^converged'
-  jq -c '{label, totals}' eval/conformance/results/k4o-main-bdfb838.json
+  jq -c '{label, totals}' eval/conformance/results/k4o-main-aeba163.json
   cat $(find src/ -name '*.zig') | wc -l
   ```
-- **Today's values (pinned k4o bdfb838, mock):** `seeds.2nap.json` converged 36/179,
-  exact 8/30, 6 no-op seeds. `seeds.json` (demo templates only, not on tape) converged
-  5/18, exact 0/5, 4 no-op seeds. Conformance: k4o main 181/188 (7 fail, 0 unsupported).
+- **Today's values (pinned k4o aeba163, dogbed 188ccac, mock):** `seeds.2nap.json`
+  converged 120/167, exact 58/115, 0 no-op seeds. `seeds.json` (demo templates only,
+  not on tape) converged 12/22, exact 4/12, 0 no-op seeds. Conformance: k4o main
+  187/188 (1 fail: the accepted `diagnostics/unknown-filter` buffered-output
+  difference, 0 unsupported).
   Per K3, never quote main → #70 → #71 as a progression. Under this k4o, three 2nap
   base templates don't render (no `codeblock` or `numbered` filter), and their 12
   seeds plus the no-op seeds each print a warning on stderr, so the tape sends stderr
