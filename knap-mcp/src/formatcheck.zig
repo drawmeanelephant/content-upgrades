@@ -235,44 +235,62 @@ fn countRule(warnings: []const Warning, rule: []const u8) usize {
     return n;
 }
 
+// check() never frees (production callers pass an arena), so each test
+// runs it in its own arena.
 test "clean doc produces no warnings" {
-    const w = try check(std.testing.allocator, "# Title\n\nSome prose with a [link](https://x.com) and a footnote[^n].\n\n[^n]: the note\n");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const w = try check(arena.allocator(), "# Title\n\nSome prose with a [link](https://x.com) and a footnote[^n].\n\n[^n]: the note\n");
     try std.testing.expectEqual(@as(usize, 0), w.len);
 }
 
 test "frontmatter block is skipped, not flagged as wall-of-text" {
     const doc = "---\nyear: 1999\ngenre:\n  - \"Action\"\n---\n\n# Title\n\nBody.\n";
-    const w = try check(std.testing.allocator, doc);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const w = try check(arena.allocator(), doc);
     try std.testing.expectEqual(@as(usize, 0), countRule(w, "wall-of-text"));
 }
 
 test "dangling footnote ref and unused def both warn" {
-    const w = try check(std.testing.allocator, "A ref[^a] here.\n\n[^b]: never used\n");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const w = try check(arena.allocator(), "A ref[^a] here.\n\n[^b]: never used\n");
     try std.testing.expectEqual(@as(usize, 1), countRule(w, "unresolved-footnote"));
     try std.testing.expectEqual(@as(usize, 1), countRule(w, "unused-footnote"));
 }
 
 test "skipped heading level warns" {
-    const w = try check(std.testing.allocator, "# A\n\n### C\n");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const w = try check(arena.allocator(), "# A\n\n### C\n");
     try std.testing.expectEqual(@as(usize, 1), countRule(w, "skipped-heading"));
 }
 
 test "empty callout warns" {
-    const w = try check(std.testing.allocator, "> [!warning]\n\nnext paragraph\n");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const w = try check(arena.allocator(), "> [!warning]\n\nnext paragraph\n");
     try std.testing.expectEqual(@as(usize, 1), countRule(w, "empty-callout"));
 }
 
 test "bare URLs counted, linked ones ignored" {
-    const w = try check(std.testing.allocator, "See https://x.com and [y](https://y.com) and [[https://z.com]].\n");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const w = try check(arena.allocator(), "See https://x.com and [y](https://y.com) and [[https://z.com]].\n");
     try std.testing.expectEqual(@as(usize, 1), countRule(w, "raw-url-count"));
 }
 
 test "unclosed fence warns" {
-    const w = try check(std.testing.allocator, "```zig\nconst x = 1;\n");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const w = try check(arena.allocator(), "```zig\nconst x = 1;\n");
     try std.testing.expectEqual(@as(usize, 1), countRule(w, "unclosed-fence"));
 }
 
 test "key/value wall of text warns" {
-    const w = try check(std.testing.allocator, "a: 1\nb: 2\nc: 3\nd: 4\n");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const w = try check(arena.allocator(), "a: 1\nb: 2\nc: 3\nd: 4\n");
     try std.testing.expectEqual(@as(usize, 1), countRule(w, "wall-of-text"));
 }
