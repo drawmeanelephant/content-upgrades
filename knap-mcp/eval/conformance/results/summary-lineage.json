@@ -1,0 +1,303 @@
+{
+  "report": "knap-conformance-summary",
+  "report_version": 1,
+  "headline": "k4o base 15/188 → #70 43/188 → #71 48/188",
+  "revisions": [
+    {
+      "label": "base",
+      "revision": "019fac3c27d552f65b3e09c7e6135c1e8ae1e452",
+      "totals": {
+        "cases": 188,
+        "pass": 15,
+        "fail": 12,
+        "unsupported": 161
+      }
+    },
+    {
+      "label": "#70",
+      "revision": "2436fee774221534fff876a5188550be7724c229",
+      "totals": {
+        "cases": 188,
+        "pass": 43,
+        "fail": 12,
+        "unsupported": 133
+      }
+    },
+    {
+      "label": "#71",
+      "revision": "f97c5dbbaec81ded2d90de66b0f4e62bb4c475b1",
+      "totals": {
+        "cases": 188,
+        "pass": 48,
+        "fail": 12,
+        "unsupported": 128
+      }
+    }
+  ],
+  "changes": [
+    {
+      "id": "filters/kebab/basic-usage",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/indent/basic-usage",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/indent/choose-a-width",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/callout/type-and-title",
+      "statuses": [
+        "unsupported",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/callout/collapsed-callout",
+      "statuses": [
+        "unsupported",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/embed/file",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/embed/alias",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/embed/array-data",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/footnote/array-footnotes",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/footnote/object-footnotes",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/fragment-link/basic-usage",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/fragment-link/custom-link-text",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/image/string-data",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/image/array-data",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/image/object-data",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/wikilink/string-with-alias",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/wikilink/array-data",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/wikilink/object-data",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml/scalar",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml/ambiguous-strings",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml/block-list",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml/flow-list",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml/frontmatter-from-an-object",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml/wikilink-list",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml-property/scalar",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml-property/ambiguous-string",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml-property/wikilink-list",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml-property/nested-object",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/yaml-property/empty-list",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "logic/for/list-tags",
+      "statuses": [
+        "unsupported",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "id": "logic/set/create-a-slug",
+      "statuses": [
+        "unsupported",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "clipper-logic/fallback",
+      "statuses": [
+        "unsupported",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "clipper-logic/chained-fallback",
+      "statuses": [
+        "unsupported",
+        "unsupported",
+        "pass"
+      ]
+    }
+  ]
+}
