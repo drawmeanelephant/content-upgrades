@@ -31,12 +31,11 @@
     }
   ],
   "aged": [
-    ["Forster, 1909", "us, now", "called it?"],
-    ["talking through glowing plates", "video calls", "dead on"],
-    ["lectures compiled out of other lectures", "content about content", "dead on"],
-    ["the Book of the Machine", "terms of service nobody reads", "close enough"],
-    ["the Mending Apparatus", "a status page that says all systems operational", "painfully"],
-    ["everyone living underground", "everyone living indoors", "give it time"]
+    {"then": "talking through glowing plates", "now": "video calls", "called_it": "dead on"},
+    {"then": "lectures compiled out of other lectures", "now": "content about content", "called_it": "dead on"},
+    {"then": "the Book of the Machine", "now": "terms of service nobody reads", "called_it": "close enough"},
+    {"then": "the Mending Apparatus", "now": "a status page that says all systems operational", "called_it": "painfully"},
+    {"then": "everyone living underground", "now": "everyone living indoors", "called_it": "give it time"}
   ],
   "thoughts": [
     "Vashti is not a villain. She is just very, very comfortable, which is scarier.",

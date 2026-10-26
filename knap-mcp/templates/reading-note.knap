@@ -48,7 +48,11 @@ Give-a-shit level: {{ gaf | bold }} · status: {{ state }}
 
 {{ "How it aged" | h2 }}
 
-{{ aged | table }}
+| {{ byline | split:" " | last }}, {{ year }} | us, now | called it? |
+| --- | --- | --- |
+{% for r in aged %}
+| {{ r.then }} | {{ r.now }} | {{ r.called_it }} |
+{% endfor %}
 {% endif %}{% if thoughts %}
 
 {{ "Marginalia" | h2 }}

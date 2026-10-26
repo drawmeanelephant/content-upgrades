@@ -38,9 +38,9 @@
       "template_id": "release-notes",
       "data": "@../data/release-notes.min.json",
       "mock": {"upgrade_matrix[+]": [
-        ["you are on", "**effort**", "downtime", "should you bother"],
-        ["you are on", "effort", "downtime", "should you bother"],
-        ["1.9.x", "rename one config key", "one restart", "yes, today"]
+        {"on": "1.9.x", "effort": "**effort**", "downtime": "one restart", "bother": "yes, today"},
+        {"on": "1.9.x", "effort": "rename one config key", "downtime": "one restart", "bother": "yes, today"},
+        {"on": "1.8.x", "effort": "config key plus driver bump", "downtime": "one restart", "bother": "yes, this week"}
       ]},
       "expect": {"reject": {"inert": 1}, "min_gain": 15}
     },

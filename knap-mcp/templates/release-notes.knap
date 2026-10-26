@@ -61,7 +61,11 @@
 
 {{ "Upgrade math" | h2 }}
 
-{{ upgrade_matrix | table }}
+| you are on | effort | downtime | should you bother |
+| --- | --- | --- | --- |
+{% for r in upgrade_matrix %}
+| {{ r.on }} | {{ r.effort }} | {{ r.downtime }} | {{ r.bother }} |
+{% endfor %}
 {% endif %}{% if known_issues %}
 
 {{ "Still broken" | h2 }}
