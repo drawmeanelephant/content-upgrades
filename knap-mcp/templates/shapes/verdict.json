@@ -1,13 +1,22 @@
 {
   "template_id": "verdict",
-  "description": "The taste-verdict page: subject in, sassy 'should you give a shit' verdict out, with blockers and a receipts table.",
+  "description": "The taste-verdict page: subject in, sassy 'should you give a shit' verdict out, with YAML frontmatter, blockers, a receipts table, a wikilinked sources section, and a footnotes block.",
   "fields": {
+    "frontmatter": {"type": "object", "role": "emitted as YAML frontmatter between --- fences", "optional": true},
     "title":      {"type": "string", "role": "page heading", "voice": true},
     "verdict":    {"type": "string", "role": "one-word verdict, rendered bold", "voice": true},
     "take":       {"type": "string", "role": "one-line hot take", "voice": true},
     "summary":    {"type": "string", "role": "the case, 2-4 sentences", "voice": true},
     "blockers":   {"type": "array<string>", "role": "dealbreakers, bulleted", "optional": true},
     "receipts":   {"type": "array<array<string>>", "role": "claim/evidence rows -> pipe table", "optional": true},
-    "bottom_line": {"type": "string", "role": "closing line", "voice": true}
+    "bottom_line": {"type": "string", "role": "closing line", "voice": true},
+    "sources":    {"type": "array<object>", "role": "cited sources, names rendered as [[wikilinks]]", "optional": true, "fields": {
+      "name":        {"type": "string", "role": "target name for [[wikilink]]"},
+      "url":         {"type": "string", "role": "deep link target (http/https only)"},
+      "rel":         {"type": "string", "role": "relationship tag, e.g. documentation|self-published|benchmark"},
+      "reliability": {"type": "string", "role": "high|medium|low"},
+      "gaf":         {"type": "string", "role": "high|medium|low"}
+    }},
+    "footnotes":  {"type": "array<string>", "role": "rendered as [^n] footnote definitions", "optional": true}
   }
 }

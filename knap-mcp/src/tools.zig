@@ -8,6 +8,7 @@ const engine = @import("engine.zig");
 const backend = @import("backend.zig");
 const repair = @import("repair.zig");
 const store = @import("store.zig");
+const formatcheck = @import("formatcheck.zig");
 
 const Allocating = std.Io.Writer.Allocating;
 const ObjectMap = std.json.ObjectMap;
@@ -63,6 +64,14 @@ pub const all = [_]Tool{
         \\{"type":"object","properties":{"template_id":{"type":"string"},"template_text":{"type":"string"}}}
         ,
         .run = lint,
+    },
+    .{
+        .name = "knap_format_check",
+        .description = "Advisory structure lint over a rendered doc (doc_id handle): headings, footnotes, callouts, raw URLs, fences. Warnings only, never blocks.",
+        .input_schema =
+        \\{"type":"object","properties":{"doc_id":{"type":"string"}},"required":["doc_id"]}
+        ,
+        .run = formatCheck,
     },
 };
 
@@ -253,6 +262,23 @@ pub fn writeOutcome(ctx: *Ctx, outcome: repair.Outcome, out: *Allocating) !void 
     try out.writer.writeAll("],");
     try writeDiags(out, outcome.diags);
     try out.writer.writeAll("}");
+}
+
+fn formatCheck(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) Error!void {
+    const doc_id = try requireStr(ctx, args, "doc_id");
+    const doc = (store.read(ctx, doc_id) catch null) orelse
+        return ctx.fail("no such doc '{s}'", .{doc_id});
+    const warnings = try formatcheck.check(ctx.arena, doc);
+    try out.writer.writeAll("{\"ok\":true,\"warnings\":[");
+    for (warnings, 0..) |w, i| {
+        if (i > 0) try out.writer.writeAll(",");
+        try out.writer.writeAll("{\"rule\":");
+        try std.json.Stringify.value(w.rule, .{}, &out.writer);
+        try out.writer.print(",\"line\":{d},\"detail\":", .{w.line});
+        try std.json.Stringify.value(w.detail, .{}, &out.writer);
+        try out.writer.writeAll("}");
+    }
+    try out.writer.writeAll("]}");
 }
 
 fn lint(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) Error!void {

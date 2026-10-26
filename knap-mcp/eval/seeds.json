@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "comment": "Seeded-breakage corpus for the repair-eval harness. Each seed mutates a shipped template through a pinned error class, then the repair loop runs bounded (max 4). The mock backend carries canned patches for the first four classes — it proves plumbing, not capability. orphan-endif is deliberate: non-convergence must show up in the table.",
+  "comment": "Seeded-breakage corpus for the repair-eval harness. Each seed mutates a shipped template through a pinned error class, then the repair loop runs bounded (max 4). The mock backend carries canned patches for the first four classes — it proves plumbing, not capability. orphan-endif and the referential-breakage seeds (bad wikilink arg, missing yaml_property arg) are deliberate: non-convergence must show up in the table.",
   "seeds": [
     {
       "id": "unclosed-if",
@@ -43,6 +43,24 @@
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
       "break": {"kind": "remove", "find": "{% if blockers %}", "occurrence": 0}
+    },
+    {
+      "id": "unclosed-for-sources",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "remove", "find": "{% endfor %}", "occurrence": 0}
+    },
+    {
+      "id": "wikilink-bad-arg",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "{{ s.name | wikilink }}", "replace": "{{ s.name | wikilink:\"a|b\" }}", "occurrence": 0}
+    },
+    {
+      "id": "yaml-property-missing-arg",
+      "template_id": "apparatus",
+      "data": "@data/apparatus.sample.json",
+      "break": {"kind": "replace", "find": "{{ s.name | wikilink | h3 }}", "replace": "{{ s.name | yaml_property }}", "occurrence": 0}
     }
   ]
 }
