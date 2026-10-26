@@ -6,7 +6,9 @@
 //! / unsupported, separately:
 //!
 //!   pass         stdout byte-exact (trailing whitespace included), error codes
-//!                equal and in order, warnings equal, clean stderr on exit 0.
+//!                equal and in order, warnings equal and in order (code and
+//!                filter, at a line/column that names that filter in the
+//!                template), and no other stderr on exit 0.
 //!   unsupported  a no-error case that needs a filter k4o does not register
 //!                (black-box probe of the binary), or that k4o rejects with a
 //!                diagnostic naming a construct it does not parse at that
@@ -77,6 +79,17 @@ const Diag = struct {
     text: []const u8 = "",
 };
 
+/// What a clean exit wrote to stderr: warning lines flattened to
+/// `CODE:filter` (the corpus form), the same with positions for the report,
+/// the first warning whose position does not name its filter, and the first
+/// line that is not a warning at all.
+const Warnings = struct {
+    codes: []const []const u8 = &.{},
+    shown: []const []const u8 = &.{},
+    misplaced: ?[]const u8 = null,
+    stray: ?[]const u8 = null,
+};
+
 const Verdict = struct {
     status: Status,
     class: []const u8,
@@ -91,6 +104,7 @@ const CaseReport = struct {
     reason: []const u8,
     exit: []const u8,
     diagnostic: ?[]const u8 = null,
+    warnings: ?[]const []const u8 = null,
     missing_filters: ?[]const []const u8 = null,
     expected_output: ?[]const u8 = null,
     actual_output: ?[]const u8 = null,
@@ -266,8 +280,9 @@ fn cmdRun(init: std.process.Init, a: Allocator, io: Io, w: *Io.Writer, argv: []c
 
         var case_missing: std.ArrayList([]const u8) = .empty;
         for (c.filters) |f| if (missing_set.contains(f)) try case_missing.append(a, f);
-        const v = try classify(a, c, r, case_missing.items);
-        const diag = parseDiag(r.stderr);
+        const warns = try parseWarnings(a, c.template, r);
+        const v = try classify(a, c, r, warns, case_missing.items);
+        const diag: Diag = if (cleanExit(r.term)) .{} else parseDiag(r.stderr);
 
         totals.add(v.status);
         const category = categoryOf(c.id);
@@ -295,6 +310,7 @@ fn cmdRun(init: std.process.Init, a: Allocator, io: Io, w: *Io.Writer, argv: []c
             .reason = v.reason,
             .exit = try termText(a, r.term),
             .diagnostic = if (diag.text.len > 0) diag.text else null,
+            .warnings = if (warns.shown.len > 0) warns.shown else null,
             .missing_filters = if (case_missing.items.len > 0) case_missing.items else null,
             .expected_output = if (non_pass) c.expected_output else null,
             .actual_output = if (non_pass) r.stdout else null,
@@ -337,7 +353,7 @@ fn cmdRun(init: std.process.Init, a: Allocator, io: Io, w: *Io.Writer, argv: []c
     return 0;
 }
 
-fn classify(a: Allocator, c: Case, r: Run, case_missing: []const []const u8) !Verdict {
+fn classify(a: Allocator, c: Case, r: Run, warns: Warnings, case_missing: []const []const u8) !Verdict {
     const diag = parseDiag(r.stderr);
     var actual_errors: []const []const u8 = &.{};
     switch (r.term) {
@@ -353,9 +369,9 @@ fn classify(a: Allocator, c: Case, r: Run, case_missing: []const []const u8) !Ve
     const clean_exit = actual_errors.len == 0;
     const output_ok = eql(r.stdout, c.expected_output);
     const errors_ok = eqlList(actual_errors, c.expected_errors);
-    // k4o has no warning channel: a clean exit carries no warnings.
-    const warnings_ok = c.expected_warnings.len == 0;
-    const stderr_ok = !clean_exit or r.stderr.len == 0;
+    // Warnings ride only on a clean exit; a fatal error drops them.
+    const warnings_ok = eqlList(warns.codes, c.expected_warnings) and warns.misplaced == null;
+    const stderr_ok = warns.stray == null;
     if (output_ok and errors_ok and warnings_ok and stderr_ok) return .{ .status = .pass, .class = "pass" };
 
     if (c.expected_errors.len == 0) {
@@ -371,8 +387,9 @@ fn classify(a: Allocator, c: Case, r: Run, case_missing: []const []const u8) !Ve
             return .{ .status = .fail, .class = "rejected valid template", .reason = diag.text };
         }
         if (!output_ok) return .{ .status = .fail, .class = "output mismatch", .reason = try mismatchText(a, c.expected_output, r.stdout) };
-        if (!stderr_ok) return .{ .status = .fail, .class = "stderr on success", .reason = firstLine(r.stderr) };
-        return .{ .status = .fail, .class = "missing warnings", .reason = try std.fmt.allocPrint(a, "output byte-exact; k4o reported no warnings, expected {s}", .{try std.mem.join(a, ", ", c.expected_warnings)}) };
+        if (warns.stray) |line| return .{ .status = .fail, .class = "stderr on success", .reason = line };
+        if (warns.misplaced) |line| return .{ .status = .fail, .class = "misplaced warning", .reason = try std.fmt.allocPrint(a, "position does not name the filter: {s}", .{line}) };
+        return .{ .status = .fail, .class = "warning mismatch", .reason = try std.fmt.allocPrint(a, "output byte-exact; expected warnings [{s}], k4o reported [{s}]", .{ try std.mem.join(a, ", ", c.expected_warnings), try std.mem.join(a, ", ", warns.codes) }) };
     }
     const want = try std.mem.join(a, ", ", c.expected_errors);
     if (clean_exit) return .{ .status = .fail, .class = "missing error", .reason = try std.fmt.allocPrint(a, "expected {s}, k4o exited 0", .{want}) };
@@ -500,15 +517,65 @@ fn parseDiag(stderr: []const u8) Diag {
     return d;
 }
 
+fn cleanExit(t: Term) bool {
+    return switch (t) {
+        .exited => |c| c == 0,
+        else => false,
+    };
+}
+
+/// Splits a clean exit's stderr into warnings and anything else. A fatal
+/// run is judged on its error alone, as before warnings existed.
+fn parseWarnings(a: Allocator, template: []const u8, r: Run) !Warnings {
+    if (!cleanExit(r.term)) return .{};
+    var codes: std.ArrayList([]const u8) = .empty;
+    var shown: std.ArrayList([]const u8) = .empty;
+    var out: Warnings = .{};
+    var lines = std.mem.splitScalar(u8, r.stderr, '\n');
+    while (lines.next()) |l| {
+        const t = std.mem.trim(u8, l, " \r\t");
+        if (t.len == 0) continue;
+        const wn = parseWarning(t) orelse {
+            if (out.stray == null) out.stray = t;
+            continue;
+        };
+        try codes.append(a, try std.fmt.allocPrint(a, "{s}:{s}", .{ wn.kind, wn.detail }));
+        try shown.append(a, try std.fmt.allocPrint(a, "{s}:{s}@{d}:{d}", .{ wn.kind, wn.detail, wn.line, wn.column }));
+        if (out.misplaced == null and !filterAt(template, wn.line, wn.column, wn.detail)) out.misplaced = t;
+    }
+    out.codes = codes.items;
+    out.shown = shown.items;
+    return out;
+}
+
+/// `k4o: warning <CODE> at line <L>, column <C>: <filter>: <detail>` as a
+/// Diag whose kind is the code and whose detail is the filter name.
+fn parseWarning(line: []const u8) ?Diag {
+    const prefix = "k4o: warning ";
+    if (!std.mem.startsWith(u8, line, prefix)) return null;
+    const d = parseDiag(line[prefix.len..]);
+    const filter = d.detail[0 .. std.mem.indexOf(u8, d.detail, ": ") orelse return null];
+    if (d.line == 0 or d.column == 0 or d.kind.len == 0 or filter.len == 0) return null;
+    if (std.mem.indexOfScalar(u8, d.kind, ' ') != null) return null;
+    return .{ .kind = d.kind, .line = d.line, .column = d.column, .detail = filter, .text = line };
+}
+
+/// The corpus records a warning's code and filter but no position; knap
+/// (and k4o, which matches it) points at the filter name, so the reported
+/// line/column must land on `| <filter>` in the template.
+fn filterAt(template: []const u8, line: u32, column: u32, filter: []const u8) bool {
+    const at = offsetOf(template, line, column) orelse return false;
+    if (!std.mem.startsWith(u8, template[at..], filter)) return false;
+    const end = at + filter.len;
+    if (end < template.len and (std.ascii.isAlphanumeric(template[end]) or template[end] == '_')) return false;
+    const before = std.mem.trimEnd(u8, template[0..at], " \t");
+    return before.len > 0 and before[before.len - 1] == '|';
+}
+
 fn quotedName(detail: []const u8) ?[]const u8 {
     const open = std.mem.indexOfScalar(u8, detail, '"') orelse return null;
     const close = std.mem.indexOfScalarPos(u8, detail, open + 1, '"') orelse return null;
     return detail[open + 1 .. close];
-}
-
-fn firstLine(s: []const u8) []const u8 {
-    const t = std.mem.trim(u8, s, " \r\n\t");
-    return t[0 .. std.mem.indexOfScalar(u8, t, '\n') orelse t.len];
 }
 
 fn categoryOf(id: []const u8) []const u8 {
@@ -895,6 +962,38 @@ test parseDiag {
     try std.testing.expectEqualStrings("no filter named \"date\"", d.detail);
     try std.testing.expectEqualStrings("date", quotedName(d.detail).?);
     try std.testing.expectEqualStrings("PARSE_ERROR", codeFor(parseDiag("k4o: syntax error at line 1, column 1: unclosed '{{' tag").kind));
+}
+
+test parseWarnings {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const tpl = "{{ value | replace:\"/[/\":\"x\" }}\n{{ published | date:\"YYYY-MM-DD\" }}";
+    const ok = try parseWarnings(a, tpl, .{ .term = .{ .exited = 0 }, .stderr =
+        \\k4o: warning INVALID_FILTER_INPUT at line 1, column 12: replace: Invalid regular expression: /[/: unterminated character class
+        \\k4o: warning INVALID_FILTER_INPUT at line 2, column 16: date: Invalid Date
+        \\
+    });
+    try std.testing.expectEqual(@as(usize, 2), ok.codes.len);
+    try std.testing.expectEqualStrings("INVALID_FILTER_INPUT:replace", ok.codes[0]);
+    try std.testing.expectEqualStrings("INVALID_FILTER_INPUT:date", ok.codes[1]);
+    try std.testing.expectEqualStrings("INVALID_FILTER_INPUT:date@2:16", ok.shown[1]);
+    try std.testing.expectEqual(null, ok.misplaced);
+    try std.testing.expectEqual(null, ok.stray);
+
+    // Right code and filter at the wrong column is caught.
+    const off = try parseWarnings(a, tpl, .{ .term = .{ .exited = 0 }, .stderr = "k4o: warning INVALID_FILTER_INPUT at line 1, column 4: replace: x\n" });
+    try std.testing.expect(off.misplaced != null);
+    // Anything that is not a warning line is stray stderr.
+    const noise = try parseWarnings(a, tpl, .{ .term = .{ .exited = 0 }, .stderr = "debug: hello\n" });
+    try std.testing.expectEqualStrings("debug: hello", noise.stray.?);
+    // A fatal run carries no warnings.
+    const fatal = try parseWarnings(a, tpl, .{ .term = .{ .exited = 1 }, .stderr = "k4o: unknown filter at line 1, column 12: no filter named \"x\"\n" });
+    try std.testing.expectEqual(@as(usize, 0), fatal.codes.len);
+    try std.testing.expectEqual(null, fatal.stray);
+
+    try std.testing.expect(filterAt("{{ a|round:1 }}", 1, 6, "round"));
+    try std.testing.expect(!filterAt("{{ a | rounder }}", 1, 8, "round"));
 }
 
 test unsupportedConstruct {

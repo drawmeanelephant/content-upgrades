@@ -1,10 +1,10 @@
 # k4o conformance summary
 
-**k4o main 181/188 → #70 43/188 → #71 48/188**
+**k4o main 187/188 → #70 43/188 → #71 48/188**
 
 | revision | label | pass | fail | unsupported | cases |
 | --- | --- | ---: | ---: | ---: | ---: |
-| `bdfb838` | main | 181 | 7 | 0 | 188 |
+| `aeba163` | main | 187 | 1 | 0 | 188 |
 | `2436fee` | #70 | 43 | 12 | 133 | 188 |
 | `f97c5db` | #71 | 48 | 12 | 128 | 188 |
 
@@ -14,11 +14,11 @@
 | --- | ---: | ---: | ---: | ---: |
 | filters | 163 | 163 | 37 | 39 |
 | logic | 3 | 3 | 2 | 3 |
-| clipper-logic | 13 | 12 | 3 | 5 |
-| diagnostics | 5 | 1 | 1 | 1 |
-| typed-values | 4 | 2 | 0 | 0 |
+| clipper-logic | 13 | 13 | 3 | 5 |
+| diagnostics | 5 | 4 | 1 | 1 |
+| typed-values | 4 | 4 | 0 | 0 |
 
-## Cases whose status changes across revisions (143)
+## Cases whose status changes across revisions (144)
 
 | case | main | #70 | #71 |
 | --- | --- | --- | --- |
@@ -150,6 +150,7 @@
 | `filters/strip-tags/keep-selected-tags` | pass | unsupported | unsupported |
 | `logic/set/create-a-slug` | pass | unsupported | pass |
 | `clipper-logic/if` | pass | fail | fail |
+| `clipper-logic/elseif` | pass | fail | fail |
 | `clipper-logic/assignment-with-filters` | pass | unsupported | unsupported |
 | `clipper-logic/fallback` | pass | unsupported | pass |
 | `clipper-logic/chained-fallback` | pass | unsupported | pass |
@@ -158,10 +159,10 @@
 | `clipper-logic/combined-logic` | pass | fail | fail |
 | `clipper-logic/empty-iterations-before-and-after-content` | pass | fail | fail |
 | `clipper-logic/loop-metadata` | pass | fail | fail |
-| `diagnostics/pass-through-warnings` | fail | unsupported | unsupported |
-| `diagnostics/calc-invalid-input` | fail | unsupported | unsupported |
-| `diagnostics/round-invalid-input` | fail | unsupported | unsupported |
+| `diagnostics/pass-through-warnings` | pass | unsupported | unsupported |
+| `diagnostics/calc-invalid-input` | pass | unsupported | unsupported |
+| `diagnostics/round-invalid-input` | pass | unsupported | unsupported |
 | `typed-values/round-into-yaml-property` | pass | unsupported | unsupported |
 | `typed-values/first-nested-collection` | pass | unsupported | unsupported |
-| `typed-values/last-nested-collection` | fail | unsupported | unsupported |
-| `typed-values/length-singleton-array` | fail | unsupported | unsupported |
+| `typed-values/last-nested-collection` | pass | unsupported | unsupported |
+| `typed-values/length-singleton-array` | pass | unsupported | unsupported |

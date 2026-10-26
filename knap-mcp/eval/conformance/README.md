@@ -9,18 +9,20 @@ nothing about repair.
 
 ## Results
 
-**k4o main 181/188 → #70 43/188 → #71 48/188**
+**k4o main 187/188 → #70 43/188 → #71 48/188**
 
-That line is not a progression. PRs #70 and #71 stack on `019fac3`
-(Oct 8), when k4o was a 15-filter Textile/CommonMark subset. Since then
-`main` has landed 58 more commits (PRs #45–#69) that turn k4o into a knap
-0.6.0 fidelity engine. On the lineage #70 and #71 actually extend:
+`main` is the k4o pin in `scripts/engines.sh` (`aeba163`, k4o PR #72:
+knap-faithful filter warnings). The line is not a progression. PRs #70 and
+#71 stack on `019fac3` (Oct 8), when k4o was a 15-filter Textile/CommonMark
+subset. Since then `main` has landed the commits (PRs #45–#72) that turn
+k4o into a knap 0.6.0 fidelity engine. On the lineage #70 and #71 actually
+extend:
 
 **k4o base 15/188 → #70 43/188 → #71 48/188**
 
 | label | revision | what it is | pass | fail | unsupported | corpus filters registered |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| main | `bdfb838` | `origin/main` (merge of PR #69) | **181** | 7 | 0 | 79 / 80 |
+| main | `aeba163` | k4o pin (merge of PR #72) | **187** | 1 | 0 | 79 / 80 |
 | base | `019fac3` | merge-base of `main` and #70/#71 | **15** | 12 | 161 | 13 / 80 |
 | #70 | `2436fee` | PR #70 head: referential filters | **43** | 12 | 133 | 22 / 80 |
 | #71 | `f97c5db` | PR #71 head: `{% set %}`, `??`, `callout` (on #70) | **48** | 12 | 128 | 23 / 80 |
@@ -34,9 +36,9 @@ Pass count by category:
 | --- | ---: | ---: | ---: | ---: | ---: |
 | filters | 163 | 163 | 10 | 37 | 39 |
 | logic | 3 | 3 | 1 | 2 | 3 |
-| clipper-logic | 13 | 12 | 3 | 3 | 5 |
-| diagnostics | 5 | 1 | 1 | 1 | 1 |
-| typed-values | 4 | 2 | 0 | 0 | 0 |
+| clipper-logic | 13 | 13 | 3 | 3 | 5 |
+| diagnostics | 5 | 4 | 1 | 1 | 1 |
+| typed-values | 4 | 4 | 0 | 0 | 0 |
 
 SPEC's demo (referential) filters: corpus cases that use each filter, and how
 many pass. A case that uses two of these filters counts under both.
@@ -60,19 +62,18 @@ referential case fails on its own filter.
 
 ### Top failure categories
 
-`main`: 7 fail, 0 unsupported.
+`main`: 1 fail, 0 unsupported.
 
-- **No warning channel (3).** `diagnostics/pass-through-warnings`,
-  `calc-invalid-input` and `round-invalid-input` render byte-exact output,
-  but k4o never reports `INVALID_FILTER_INPUT`.
-- **Typed values (2).** `typed-values/last-nested-collection` emits `3` for
-  `[3]`; `length-singleton-array` emits `5` (the length of `["notes"]` as
-  text) for `1`.
-- **Standalone-tag whitespace (1).** `clipper-logic/elseif` keeps a trailing
-  newline that knap strips.
 - **Partial output on error (1).** `diagnostics/unknown-filter` expects
   knap's output `value` alongside `UNKNOWN_FILTER`. k4o reports the right
-  error, but its buffered contract empties stdout on any error.
+  error, but its buffered contract empties stdout on any error. This is an
+  accepted difference, documented in k4o's `KNAP-FIDELITY.md`.
+
+The three warning cases (`diagnostics/pass-through-warnings`,
+`calc-invalid-input`, `round-invalid-input`) pass: k4o reports each
+`INVALID_FILTER_INPUT` warning at the filter's position. The previous pin
+(`bdfb838`, 181/188) had no warning channel and also failed
+`clipper-logic/elseif` and the two `typed-values` singleton cases.
 
 base, #70 and #71 fail the same 12 cases, so the 33 cases #70 and #71 gain
 all come from unsupported → pass:
@@ -107,8 +108,8 @@ output is Markdown). Case data keeps its source number text, so `42.567`
 reaches k4o unchanged.
 
 - **pass**: stdout is byte-exact (trailing whitespace included), the error
-  codes match in order, the case expects no warnings (k4o has no warning
-  channel), and stderr is empty on exit 0.
+  codes match in order, the warnings match in order, and stderr on exit 0
+  holds nothing but warning lines.
 - **unsupported** applies only to cases that expect no error, when either:
   1. the template uses a filter this binary does not register. The runner
      renders `{{ x | <name> }}` for each of the 80 filter names in the corpus
@@ -121,8 +122,20 @@ reaches k4o unchanged.
      `title ??` as a spaced name); or a syntax error at a `(` right after
      `:`.
 - **fail**: everything else. That covers wrong bytes, a valid template
-  rejected for any other reason, a missing or wrong error code, missing
-  warnings, a crash, or a timeout (10 s per case).
+  rejected for any other reason, a missing or wrong error code, missing,
+  extra or misplaced warnings, a crash, or a timeout (10 s per case).
+
+Warnings: on exit 0 k4o prints non-fatal filter warnings as
+`k4o: warning <CODE> at line <L>, column <C>: <filter>: <detail>`. Each one
+flattens to `CODE:filter`, the form the corpus uses, and the list must equal
+the case's `expected.warnings` exactly, so a missing or extra warning fails
+(`warning mismatch`). The corpus records no positions. knap reports a
+warning at the filter name, and so does k4o, so the runner also checks that
+`<L>, <C>` lands on `| <filter>` in the template (`misplaced warning` if it
+doesn't). Any other stderr line on exit 0 fails as `stderr on success`. Each
+report lists the warnings it saw as `CODE:filter@L:C`. A fatal error
+(exit 1) is judged on its error code alone, as before; k4o prints no
+warnings then.
 
 Error codes: k4o stops at its first error, so it reports at most one.
 `syntax error` maps to `PARSE_ERROR` and `unknown filter` maps to
@@ -172,7 +185,8 @@ binary that differs shows up immediately.
 ## Files
 
 - `runner.zig`: the runner (`run`, `summarize`) plus unit tests.
-- `run.sh`: runs every pinned revision and both summaries.
+- `run.sh`: runs every pinned revision and both summaries. `main` follows
+  `K4O_SHA` in `scripts/engines.sh`, so a pin bump needs only a rerun.
 - `results/k4o-<label>-<sha7>.json`: full per-case report for each revision.
   The `.md` files beside them are the same run as markdown.
 - `results/summary.{md,json}`: main → #70 → #71 (the numbers card line).
