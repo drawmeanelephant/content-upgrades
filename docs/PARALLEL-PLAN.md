@@ -2,6 +2,21 @@
 
 Snapshot: Oct 26 (kickoff day). Freeze Oct 30 EOD. Filter cut-line Oct 29 EOD.
 
+## Status (Oct 26 evening)
+
+- **Engine decision settled:** k4o main `bdfb838` (#15) + dogbed `a7f8c27`
+  (#21 — dogbed #33, tables reach html, bundles k4o main). k4o PRs #70/#71
+  closed as superseded, so lanes K1 and K2 are gone.
+- **Merged:** #5 plan, #6 next-phase plan, #7 T1, #8 S0, #9 E1, #10 K3,
+  #11 B1, #12 C3, #13 formatcheck test fix, #14 D1, #15 engine pins,
+  #21 dogbed pin.
+- **Running:** P1 (new lane: targets `markdown` | `oliver` | `html`, mock
+  patches for k4o main diagnostics, no-op seeds, both corpora in
+  `make eval`), C1, C2, B2, B3, D2, M2, T2, K4 (k4o main 181→187
+  conformance), V0, CI, DOC1. M1 waits on `MODEL_API_KEY`.
+- **Agents:** Devin, Claude Opus 5.5 at standard speed for lanes; SWE-2 for
+  lighter work.
+
 ## Where we are
 
 Landed on `main` (PRs #1–#4):
@@ -67,7 +82,7 @@ Nothing here waits on anything else. Only S0 touches the shared knap-mcp core.
 | ID | Track | Owns | Gate / output |
 |---|---|---|---|
 | S0 | **Seams refactor.** Split `tools.zig` into `src/tools/<name>.zig` + a one-line-per-tool registry; table-driven CLI in `main.zig`; `backend.complete(ctx, kind, task, system, user)` with a `Task` enum (`repair`, `voice`, `verify`, `judge`); `scripts/engines.sh` + Makefile pinning; repo `AGENTS.md` with these rules. No behavior change. | `src/tools*.zig`, `src/main.zig`, `src/backend.zig`, `src/ctx.zig`, `build.zig`, `Makefile`, `AGENTS.md` | Eval table byte-identical to today; tests green. **Critical path; merge first.** |
-| K1 | **Apply k4o parser tranche** from `k4o-stage/` on `feat/parser-blocks` stacked on #70; build, `verify.sh --update-readme`, PR. Confirm with the other thread first so it is not done twice. | `~/dev/k4o` | k4o PR, tests + verify green |
+| K1 | ~~**Apply k4o parser tranche**~~ — **removed: engine decision** (k4o main superseded #70/#71) | — | — |
 | K3 | **Conformance baseline.** Run the 188-case corpus through k4o at `main`, #70, and parser-blocks. Read-only on k4o. | `knap-mcp/eval/conformance/` | `X/188 → Y/188` table for the numbers card |
 | B1 | **Freeze boris artifact.** Build a small real site (`boris init` + content) with search-index/RAG pack; measure `boris check` command shape and latency (incl. unlinked-reference detection). | `boris-site/`, `docs/tracks/B1.md` | Checked-in artifact + measured latency |
 | D1 | **Density scorer core.** Pure `score(markdown) -> {total, signals}`: callouts, footnotes, tables, styled runs, heading/word ratio, lists, wikilinks/embeds, links vs raw URLs, frontmatter; `format_check` rules fold in as negatives. Deterministic, no model. | `src/density.zig` (+1 test-import line) | Unit tests; a flat AI doc scores low, apparatus doc scores high |
@@ -88,8 +103,9 @@ Nothing here waits on anything else. Only S0 touches the shared knap-mcp core.
 | B3 | `boris_ask` / `boris_check` over the frozen artifact | S0, B1 | `src/borisrag.zig`, `src/tools/boris_*.zig` |
 | M1 | Live backends: smoke Spark/Wonder/Baseten, fix reply parsing, record latency (and tokens only if metered) | S0, **API key** | `src/backend.zig` |
 | M2 | Verifier slot, heuristic first (density delta + format_check + residual diags), decision-model hook | S0 | `src/verifier.zig` |
-| K2 | dogbed: bump bundled k4o past #70 + parser-blocks, clean the stale `zig-0.17` branch; then bump the engine pin here | K1 merged | `~/dev/dogbed`, pin line in `scripts/engines.sh` |
-| T2 | Upgrade `verdict`/`apparatus` to use `callout`, `set`, `??` | K1 merged + pin bump | `templates/verdict.*`, `templates/apparatus.*` |
+| K2 | ~~dogbed: bump bundled k4o + engine pin~~ — **removed: engine decision** (dogbed #33 bundles k4o main; next pin is the captain's) | — | — |
+| T2 | Upgrade `verdict`/`apparatus` to use `callout`, `set`, `??` | pin bump (#15) | `templates/verdict.*`, `templates/apparatus.*` |
+| P1 | Engine retarget: targets `markdown` \| `oliver` \| `html`; mock patches for k4o main diagnostics; no-op seeds; both corpora in `make eval` | #15 | `src/engine.zig`, `src/backend.zig`, `src/eval.zig`, `eval/*` |
 
 ## Wave 2 — integration, Oct 29–30 (about 5 lanes)
 
@@ -128,11 +144,11 @@ Submit Nov 4 midday.
 | File | Wave 0 | Wave 1 |
 |---|---|---|
 | `src/tools.zig` registry, `src/main.zig` CLI table | S0 | captain (one-liners) |
-| `src/backend.zig` | S0 | M1 |
+| `src/backend.zig` | S0 | P1 (M1 after) |
 | `src/eval.zig`, `eval/seeds*.json` | E1 | E1 (follow-ups) |
 | `src/density.zig` | D1 | D2 |
 | `templates/verdict.*`, `templates/apparatus.*` | — | T2 |
-| `Makefile`, `scripts/engines.sh` | S0 | K2 (pin line only) |
+| `Makefile`, `scripts/engines.sh` | S0 | captain (pin lines) |
 | README / SPEC / GAMEPLAN | captain | captain |
 
 ## Child brief template
