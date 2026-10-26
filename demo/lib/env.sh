@@ -8,9 +8,12 @@
 
 DEMO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 
-# Pinned engines unless the caller (Makefile / scripts/engines.sh) already set them.
-export KNAP_K4O_PATH="${KNAP_K4O_PATH:-$HOME/.cache/knap-engines/k4o-f97c5db/k4o}"
-export KNAP_DOGBED_PATH="${KNAP_DOGBED_PATH:-$HOME/.cache/knap-engines/dogbed-0c94175/dogbed}"
+# Pinned engines from scripts/engines.sh unless the caller already set them.
+# `engines.sh path` only prints the pin's path; a missing pin is reported
+# below (build it with `make engines`).
+: "${KNAP_K4O_PATH:=$("$DEMO_ROOT/scripts/engines.sh" path k4o)}"
+: "${KNAP_DOGBED_PATH:=$("$DEMO_ROOT/scripts/engines.sh" path dogbed)}"
+export KNAP_K4O_PATH KNAP_DOGBED_PATH
 export KNAP_BACKEND=mock
 export PATH="$DEMO_ROOT/knap-mcp/zig-out/bin:$PATH"
 export TZ=UTC LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
@@ -21,8 +24,9 @@ unset JQ_COLORS
 # and keep rendered output out of the repo.
 DEMO_WORK=$(mktemp -d "${TMPDIR:-/tmp}/knap-demo.XXXXXX")
 export DEMO_WORK
-for d in data templates eval src; do ln -s "$DEMO_ROOT/knap-mcp/$d" "$DEMO_WORK/$d"; done
+for d in data templates eval src prompts; do ln -s "$DEMO_ROOT/knap-mcp/$d" "$DEMO_WORK/$d"; done
 ln -s "$DEMO_ROOT/demo/fixtures" "$DEMO_WORK/fixtures"
+ln -s "$DEMO_ROOT/boris-site" "$DEMO_WORK/boris-site"
 export KNAP_MCP_HOME="$DEMO_WORK/.knap-mcp"
 # rm -r removes the symlinks themselves, never their targets.
 trap 'rm -rf "$DEMO_WORK"' EXIT
@@ -38,6 +42,30 @@ demo_seed_unclosed_if() {
   mkdir -p seeded
   awk 'BEGIN{done=0} !done && /^\{% endif %\}$/ {done=1; next} {print}' \
     "templates/$id.knap" > "seeded/$id.knap"
+}
+
+# seeded/verdict.hallucinated.json: the sample data plus one source the
+# frozen boris site has no page for (the line boris-site/selftest.sh injects).
+demo_seed_hallucinated_source() {
+  mkdir -p seeded
+  jq '.sources |= .[:1] + [{
+        name: "AcmeDB SOC 2 audit report", url: "https://example.com/acmedb/soc2",
+        rel: "audit", reliability: "high", gaf: "high"}] + .[1:]' \
+    data/verdict.sample.json > seeded/verdict.hallucinated.json
+}
+
+# seeded/verdict.<tone>.json: the sample data with C3's canned mock replies
+# (prompts/voice/mock/<tone>.jsonl) applied, i.e. what knap_voice's mock
+# backend should return. Stands in for `knap-mcp voice` until C1 lands.
+demo_seed_voice() {
+  local tone
+  mkdir -p seeded
+  for tone in "$@"; do
+    jq --slurpfile m "prompts/voice/mock/$tone.jsonl" '
+      reduce ($m[] | select(.template == "verdict")) as $r (.;
+        if .[$r.field] == $r.input then .[$r.field] = $r.output else . end)' \
+      data/verdict.sample.json > "seeded/verdict.$tone.json"
+  done
 }
 
 # Full-screen slate for beats whose feature has not landed yet, so the

@@ -20,6 +20,10 @@ Show
 Sleep 5s
 
 # TODO(D1): show the flat doc's density score (expected: low).
-#   Type "knap-mcp density fixtures/generic-ai-doc.md | jq '{total}'"
+#   docs/next-phase-plan.md has `knap-mcp density <doc_id>`, which scores
+#   stored docs only, so this fixture can't be scored from the CLI. Either
+#   D1 accepts a file path, or the cold open switches to the plan's
+#   "generic" artifact (a template rendered with only required fields):
+#   Type "knap-mcp density $(knap-mcp render verdict -d seeded/verdict.required.json --target gfm | jq -r .doc_id) | jq -c '{score}'"
 #   Enter
 #   Sleep 2s

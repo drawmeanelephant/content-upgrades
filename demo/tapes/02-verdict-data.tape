@@ -1,7 +1,7 @@
 # Beat 2: ask for a verdict. Templates are fixed and server-side; the
 # model only ever sees tool names and field shapes, and drafts values.
 # target: 20s
-# status: partial (tools/shape/data/validate ready; boris_ask needs B1+B3; live drafting needs M1)
+# status: partial (tools/shape/data/validate ready; boris_ask needs B3; live drafting needs M1)
 # depends: knap-mcp (main), data/verdict.sample.json
 Output demo/out/tapes/02-verdict-data.mp4
 Require glow
@@ -33,8 +33,11 @@ Type "knap-mcp validate verdict -d data/verdict.sample.json | jq -c"
 Enter
 Sleep 3s
 
-# TODO(B1+B3): retrieval from the frozen boris artifact comes first.
-#   Type "knap-mcp boris-ask 'AcmeDB backups' | jq '.snippets[:3]'"
+# TODO(B3): retrieval from the frozen boris artifact comes first. B1's
+#   reference query works today (about 4s on screen; the beat is already
+#   at its 20s target, so adding it is a timing call). Swap in the
+#   knap-mcp command once B3 ships boris_ask.
+#   Type "boris-site/ask.sh -k 3 'AcmeDB backups' | jq -r '[.score, .title] | @tsv'"
 #   Enter
 #   Sleep 3s
 # TODO(M1 or MCP client): a real model drafts data.json from the snippets.

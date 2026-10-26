@@ -32,4 +32,4 @@ Sleep 13s
 #   and 2 bare URLs; fix the template before putting format-check on screen:
 #   Type "knap-mcp format-check $(knap-mcp render verdict -d data/verdict.sample.json | jq -r .doc_id) | jq -c '.warnings[]'"
 # TODO(D1): density score for this doc next to beat 1's (expected: high).
-#   Type "knap-mcp density verdict.md | jq '{total}'"
+#   Type "knap-mcp density $(knap-mcp render verdict -d data/verdict.sample.json --target gfm | jq -r .doc_id) | jq -c '{score, kinds_used}'"

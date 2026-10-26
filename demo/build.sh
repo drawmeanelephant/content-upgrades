@@ -21,8 +21,11 @@ WIDTH=1920
 HEIGHT=1080
 FPS=30
 
-export KNAP_K4O_PATH="${KNAP_K4O_PATH:-$HOME/.cache/knap-engines/k4o-f97c5db/k4o}"
-export KNAP_DOGBED_PATH="${KNAP_DOGBED_PATH:-$HOME/.cache/knap-engines/dogbed-0c94175/dogbed}"
+# Pins come from scripts/engines.sh (the Makefile does the same). `path`
+# never builds; check_beats reports a missing pin.
+: "${KNAP_K4O_PATH:=$("$ROOT/scripts/engines.sh" path k4o)}"
+: "${KNAP_DOGBED_PATH:=$("$ROOT/scripts/engines.sh" path dogbed)}"
+export KNAP_K4O_PATH KNAP_DOGBED_PATH
 
 log() { printf '==> %s\n' "$*"; }
 die() { printf 'demo/build.sh: %s\n' "$*" >&2; exit 1; }
@@ -50,8 +53,9 @@ check_beats() {
   need jq "brew install jq"
   need glow "brew install glow"
   need zig "Zig 0.17.0 from ziglang.org"
-  [ -x "$KNAP_K4O_PATH" ] || die "k4o engine not found at $KNAP_K4O_PATH"
-  [ -x "$KNAP_DOGBED_PATH" ] || die "dogbed engine not found at $KNAP_DOGBED_PATH"
+  [ -x "$KNAP_K4O_PATH" ] || die "k4o engine not found at $KNAP_K4O_PATH (build the pins: make engines)"
+  [ -x "$KNAP_DOGBED_PATH" ] || die "dogbed engine not found at $KNAP_DOGBED_PATH (build the pins: make engines)"
+  command -v boris >/dev/null 2>&1 || log "boris not on PATH: beat 5 (05-boris-catch) will fail its Require"
   log "building knap-mcp"
   (cd "$ROOT/knap-mcp" && zig build)
   log "engines: k4o=$KNAP_K4O_PATH dogbed=$KNAP_DOGBED_PATH"

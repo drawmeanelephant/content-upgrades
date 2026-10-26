@@ -16,13 +16,13 @@ Sleep 300ms
 Show
 Sleep 15s
 
-# Intended commands (names are proposals; match what D1/D2 ship):
-#   Type "knap-mcp density fixtures/generic-ai-doc.md | jq '{total}'"
-#   Enter
-#   Sleep 2s
-#   Type "knap-mcp ratchet apparatus -d data/apparatus.sample.json --backend mock | jq -c '.iterations[] | {i, score, kept}'"
+# Intended commands, using the CLI and output shapes proposed in
+# docs/next-phase-plan.md (match whatever D1/D2 ship). The start is the
+# plan's "generic" doc, a template with only required fields filled; the
+# ratchet only fills empty slots, so the full sample data has little to gain.
+#   Type "knap-mcp ratchet verdict -d seeded/verdict.required.json --backend mock | tee ratchet.json | jq -c '.steps[] | {iteration, slot, gain, accepted, reason}'"
 #   Enter
 #   Sleep 5s
-#   Type "knap-mcp density ratcheted.md | jq '{total}'"
+#   Type "jq -c '{score, slot_fill, stop}' ratchet.json"
 #   Enter
-#   Sleep 2s
+#   Sleep 3s

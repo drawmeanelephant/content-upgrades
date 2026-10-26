@@ -22,22 +22,23 @@ Status key:
 
 | # | Beat | Target | Last render | Tape | Depends on | Status |
 |---|---|---|---|---|---|---|
-| 1 | Cold open: the generic AI doc | 5s | 4.8s | `01-cold-open.tape` | fixture only; density score: D1 | ready |
-| 2 | Ask for a verdict: model drafts data only | 20s | 20.8s | `02-verdict-data.tape` | main; `boris_ask`: B1+B3; live drafting: M1 + MCP client | partial |
+| 1 | Cold open: the generic AI doc | 5s | 4.9s | `01-cold-open.tape` | fixture only; density score: D1 | ready |
+| 2 | Ask for a verdict: model drafts data only | 20s | 20.8s | `02-verdict-data.tape` | main; `boris_ask`: B3 (B1's `ask.sh` works now); live drafting: M1 + MCP client | partial |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.0s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
 | 4 | The doc | 30s | 29.2s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: K2; art: Muse Image (human) | partial |
 | 4b | *(optional)* Density ratchet | 15s | 14.6s | `04b-density-ratchet.tape` | D1 + D2 | placeholder |
-| 5 | The boris catch | 15s | 14.6s | `05-boris-catch.tape` | B1 + B2 | placeholder |
-| 6 | Same template, mild vs feral | 20s | 19.5s | `06-voice.tape` | C1 + C2 + C3 | placeholder |
+| 5 | The boris catch | 15s | 14.4s | `05-boris-catch.tape` | B1 (`stage-check.sh`, now); `knap_publish_check`: B2 | partial |
+| 6 | Same template, mild vs feral | 20s | 18.4s | `06-voice.tape` | C3 (mock replies, now); `knap_voice`: C1; structure hash: C2 | partial |
 | 7 | One source -> md + apparatus + textile | 15s | 19.0s | `07-one-source.tape` | main; html: K2; one shared data file: T2/I5 | partial |
-| 8 | Numbers card, measured only | 10s | 11.3s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
+| 8 | Numbers card, measured only | 10s | 11.4s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
 
 **Runtime.** SPEC calls the demo "~2 min", but its per-beat targets add up to 2:20
-(2:35 with beat 4b). The current rough cut of all 9 tapes runs 2:37; beat 7 is the
-one tape well over its target (19.0s vs 15s). If the submission cap turns out to be
-2:00, the cheapest cuts are beat 4 (30s to 20s), beat 2 (20s to 15s), and beat 6
-(20s to 15s), which brings it to 2:05. Typing can also be sped up in Kdenlive. The video length limit is still
-unconfirmed (see `docs/tracks/V0.md`).
+(2:35 with beat 4b). The current rough cut of all 9 tapes runs 2:36 (2:21 without
+4b); beat 7 is the one tape well over its target (19.0s vs 15s). If the submission
+cap turns out to be 2:00, drop 4b and cut beat 4 (30s to 20s), beat 2 (20s to 15s),
+and beat 6 (20s to 15s): that brings the rendered beats to about 2:03, and trimming
+beat 7 to its target gets under 2:00. Typing can also be sped up in Kdenlive. The
+video length limit is still unconfirmed (see `docs/tracks/V0.md`).
 
 **Engine pin risk.** K3 found that k4o `main` (181/188) dropped the gfm and textile
 outputs. If the pin moves from the #71 lineage to `main`, beat 4 (gfm) and beat 7
@@ -58,7 +59,10 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 - **Depends on:** `demo/fixtures/generic-ai-doc.md`, a hand-written stand-in for flat model output.
 - **Open:** once M1 lands, replace the fixture with a real flat output from a model,
   freeze it (I5), and label it as model output. The density score overlay
-  (`knap-mcp density`, expected low) is blocked on D1.
+  (expected low) is blocked on D1. The next-phase plan's `knap-mcp density <doc_id>`
+  scores stored docs only, so this fixture can't be scored from the CLI. Either D1
+  takes a file path, or the cold open switches to the plan's "generic" artifact (a
+  template rendered with only its required fields).
 
 ### 2. Ask for a verdict (20s): partial
 
@@ -72,7 +76,11 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   jq '{verdict, take, blockers}' data/verdict.sample.json
   knap-mcp validate verdict -d data/verdict.sample.json | jq -c
   ```
-- **Blocked:** "from real data (frozen boris artifact)" needs `boris_ask` (B1 + B3).
+- **Blocked:** "from real data (frozen boris artifact)" needs `boris_ask` (B3). B1's
+  reference query works today and is commented in the tape:
+  `boris-site/ask.sh -k 3 'AcmeDB backups' | jq -r '[.score, .title] | @tsv'` (top hits:
+  "AcmeDB docs — backups", the "no managed backups" claim). It adds about 4s to a beat
+  that is already at its target, so whether to show it before B3 lands is a timing call.
   "The model drafts" needs a real backend (M1) and a client. There is no CLI draft
   command; drafting happens in the MCP client (Muse Code if the probe works), which
   calls `knap_templates` and `knap_validate`. Record that session with OBS, or keep
@@ -129,26 +137,52 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 
 - **Why it exists:** the README pitch is the density ratchet, and SPEC's 8 beats
   predate it. Whether it gets a slot is the captain's call.
-- **Intended:** `knap-mcp density` on the beat 1 doc (low), then `knap-mcp ratchet`
-  showing the score climb per iteration with reverts on drops, then the final score
-  (high). The command names are proposals; match whatever D1/D2 ship.
+- **Intended:** `knap-mcp ratchet verdict -d <required fields only> --backend mock`,
+  showing each step's slot, gain, and accepted/rejected reason, then the score's start,
+  final, and ceiling. The CLI and output shapes come from `docs/next-phase-plan.md`
+  and are proposals; match whatever D1/D2 ship.
 
-### 5. The boris catch (15s): placeholder
+### 5. The boris catch (15s): partial
 
-- **Intended:** render verdict from `data/verdict.hallucinated.json`, then run
-  `knap-mcp publish-check <doc_id>`. An unresolved `[[wikilink]]` target comes back as
-  a graph diagnostic with a non-zero exit, and the fixed data passes.
-- **Blocked on:** B1 (frozen boris site) and B2 (`knap_publish_check`, hallucinated
-  demo data). GAMEPLAN marks this beat cuttable if boris latency or the command shape
-  is a problem.
+- **On screen:** a verdict with one invented source renders with `ok: true`. Staged
+  into a copy of the frozen boris site, it fails:
+  `v1.md:44:3: error: EREFERENCEMISSING: wiki-link target "acmedb-soc-2-audit-report" not found in the page graph`,
+  then `[[AcmeDB SOC 2 audit report]] -> acmedb-soc-2-audit-report` and a FAIL line
+  (exit 1). Re-rendered from the real sample data, the same check passes with "2
+  wiki-link(s) resolve against the frozen site (13 pages)".
+- **Commands:**
+  ```sh
+  knap-mcp render verdict -d seeded/verdict.hallucinated.json --out v1.md | jq -c '{ok, bytes}'
+  boris-site/stage-check.sh v1.md
+  knap-mcp render verdict -d data/verdict.sample.json --out v2.md >/dev/null && boris-site/stage-check.sh v2.md
+  ```
+  `seeded/verdict.hallucinated.json` is derived at take time by
+  `demo_seed_hallucinated_source` in `demo/lib/env.sh`: the sample data plus the same
+  invented source that `boris-site/selftest.sh` injects. Each check takes under half
+  a second (about 0.05s warm).
+- **Missing:** `knap_publish_check` (B2). Until it lands, B1's `stage-check.sh`, the
+  reference behavior for that tool, runs on screen. Swap in the knap-mcp command
+  when B2 ships. Note that SPEC's `boris check --fail-on-unlinked` flag does not exist;
+  the next-phase plan has B2 run `boris validate` for references. Needs `boris` on
+  `PATH` (the tape `Require`s it).
 
-### 6. Same template, mild vs feral (20s): placeholder
+### 6. Same template, mild vs feral (20s): partial
 
-- **Intended:** `knap-mcp voice ... --tone mild` and `--tone feral`, render both,
-  structure hashes equal on screen, then `diff` shows the strings differ.
-- **Blocked on:** C1 (`knap_voice`), C2 (structure hash), C3 (tone presets).
-  GAMEPLAN's fallback (hand-authored mild/feral data) still proves the invariant
-  once C2's hash exists.
+- **On screen:** the verdict rendered in two tones, `wc -l` showing 52 lines each, and
+  `diff` showing exactly four changed lines: the heading, verdict + take, the summary,
+  and the bottom line. Everything else (table, sources, footnotes) is identical.
+- **Commands:**
+  ```sh
+  for t in mild feral; do knap-mcp render verdict -d seeded/verdict.$t.json --out $t.md | jq -c '{ok, bytes}'; done
+  wc -l mild.md feral.md
+  diff mild.md feral.md
+  ```
+  `seeded/verdict.{mild,feral}.json` are derived at take time by `demo_seed_voice` in
+  `demo/lib/env.sh`, which applies C3's canned replies (`prompts/voice/mock/<tone>.jsonl`)
+  to the sample data. This is GAMEPLAN's fallback (hand-authored tone data), and it is
+  what `knap_voice`'s mock backend should return.
+- **Missing:** `knap-mcp voice` (C1) to produce the tone data on screen, and C2's
+  structure hash, which is the falsifiable proof. Equal line counts are only a hint.
 
 ### 7. One source -> several views (15s): partial
 
