@@ -13,6 +13,7 @@ test:
 
 eval: all engines
 	cd knap-mcp && zig-out/bin/knap-mcp eval --corpus eval/seeds.json
+	cd knap-mcp && zig-out/bin/knap-mcp eval --corpus eval/seeds.2nap.json
 
 engines:
 	@scripts/engines.sh
