@@ -67,6 +67,7 @@ const commands = [_]Command{
     .{ .name = "format-check", .usage = "format-check <doc_id>", .summary = "advisory structure lint (warnings only)", .run = .{ .tool = .{ .tool = "knap_format_check", .key = "doc_id", .exactly_one = "doc_id" } } },
     .{ .name = "voice", .usage = "voice <id> --tone <t>", .summary = "rewrite voice: true values in a tone", .run = .{ .tool = .{ .tool = "knap_voice", .key = "template_id" } } },
     .{ .name = "structhash", .usage = "structhash <doc_id|file>...", .summary = "layout skeleton hash, text dropped", .run = .{ .custom = @import("tools/structure_hash.zig").cli } },
+    .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
     .{ .name = "backends", .usage = "backends", .summary = "backend availability", .run = .{ .custom = cmdBackends } },
     .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
@@ -77,7 +78,7 @@ const commands = [_]Command{
 
 /// `--<name> <v>` / `--<name>=<v>` options passed to tools as same-named
 /// string arguments.
-const tool_flags = [_][]const u8{ "target", "backend", "tone" };
+const tool_flags = [_][]const u8{ "target", "backend", "tone", "evidence", "verifier" };
 
 const usage_head =
     \\knap-mcp — AI can't do layout. So we don't let it.
@@ -96,6 +97,8 @@ const usage_tail =
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
     \\  --explain, --strict     structhash: print tokens; keep link targets
+    \\  --evidence <text>       evidence quote for verify-citation
+    \\  --verifier <v>          heuristic (default) | none | decision
     \\
     \\Environment:
     \\  KNAP_K4O_PATH / KNAP_DOGBED_PATH   engine binaries (default: PATH)
@@ -426,6 +429,8 @@ test {
     _ = @import("tools/structure_hash.zig");
     _ = @import("tools/templates.zig");
     _ = @import("tools/validate.zig");
+    _ = @import("tools/verify_citation.zig");
     _ = @import("tools/voice.zig");
+    _ = @import("verifier.zig");
     _ = @import("voice.zig");
 }
