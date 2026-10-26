@@ -30,6 +30,7 @@ pub const all = [_]Tool{
     @import("tools/repair.zig").tool,
     @import("tools/lint.zig").tool,
     @import("tools/format_check.zig").tool,
+    @import("tools/voice.zig").tool,
 };
 
 pub const templatePath = common.templatePath;
