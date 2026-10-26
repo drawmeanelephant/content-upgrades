@@ -2,11 +2,11 @@
   "report": "knap-conformance",
   "report_version": 1,
   "label": "main",
-  "revision": "bdfb838a115e86483d9ef1f14d6768a9b9ea0754",
+  "revision": "aeba16352a7b6c7fd8d54db53cb506bdf5ead994",
   "engine": {
-    "path": "~/.cache/knap-engines/k4o-bdfb838/k4o",
+    "path": "~/.cache/knap-engines/k4o-aeba163/k4o",
     "version": "k4o 0.1.0",
-    "sha256": "ea9b18150686489e5f7a8ee321c0e69030e1ba40351b3047b8e80e064c35726b",
+    "sha256": "c526387b435027eefbf8fb7e5d36f89bdc1c710e689aced37fa27da36a26e450",
     "command": "k4o render <case.knap> --data <data.json> --format markdown"
   },
   "corpus": {
@@ -18,8 +18,8 @@
   },
   "totals": {
     "cases": 188,
-    "pass": 181,
-    "fail": 7,
+    "pass": 187,
+    "fail": 1,
     "unsupported": 0
   },
   "categories": [
@@ -45,8 +45,8 @@
       "name": "clipper-logic",
       "totals": {
         "cases": 13,
-        "pass": 12,
-        "fail": 1,
+        "pass": 13,
+        "fail": 0,
         "unsupported": 0
       }
     },
@@ -54,8 +54,8 @@
       "name": "diagnostics",
       "totals": {
         "cases": 5,
-        "pass": 1,
-        "fail": 4,
+        "pass": 4,
+        "fail": 1,
         "unsupported": 0
       }
     },
@@ -63,8 +63,8 @@
       "name": "typed-values",
       "totals": {
         "cases": 4,
-        "pass": 2,
-        "fail": 2,
+        "pass": 4,
+        "fail": 0,
         "unsupported": 0
       }
     }
@@ -158,14 +158,6 @@
   "unsupported_by_filter": [],
   "unsupported_by_construct": [],
   "fail_by_class": [
-    {
-      "name": "missing warnings",
-      "cases": 3
-    },
-    {
-      "name": "output mismatch",
-      "cases": 3
-    },
     {
       "name": "error-case output mismatch",
       "cases": 1
@@ -1511,12 +1503,10 @@
     {
       "id": "clipper-logic/elseif",
       "category": "clipper-logic",
-      "status": "fail",
-      "class": "output mismatch",
-      "reason": "first difference at byte 13: expected \"Draft article\", got \"Draft article\\n\"",
-      "exit": "0",
-      "expected_output": "Draft article",
-      "actual_output": "Draft article\n"
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
     },
     {
       "id": "clipper-logic/assignment-with-filters",
@@ -1632,32 +1622,36 @@
     {
       "id": "diagnostics/pass-through-warnings",
       "category": "diagnostics",
-      "status": "fail",
-      "class": "missing warnings",
-      "reason": "output byte-exact; k4o reported no warnings, expected INVALID_FILTER_INPUT:replace, INVALID_FILTER_INPUT:date",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
       "exit": "0",
-      "expected_output": "a[b\nnot-a-date",
-      "actual_output": "a[b\nnot-a-date"
+      "warnings": [
+        "INVALID_FILTER_INPUT:replace@1:12",
+        "INVALID_FILTER_INPUT:date@2:16"
+      ]
     },
     {
       "id": "diagnostics/calc-invalid-input",
       "category": "diagnostics",
-      "status": "fail",
-      "class": "missing warnings",
-      "reason": "output byte-exact; k4o reported no warnings, expected INVALID_FILTER_INPUT:calc",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
       "exit": "0",
-      "expected_output": "42abc",
-      "actual_output": "42abc"
+      "warnings": [
+        "INVALID_FILTER_INPUT:calc@1:12"
+      ]
     },
     {
       "id": "diagnostics/round-invalid-input",
       "category": "diagnostics",
-      "status": "fail",
-      "class": "missing warnings",
-      "reason": "output byte-exact; k4o reported no warnings, expected INVALID_FILTER_INPUT:round",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
       "exit": "0",
-      "expected_output": "42abc",
-      "actual_output": "42abc"
+      "warnings": [
+        "INVALID_FILTER_INPUT:round@1:12"
+      ]
     },
     {
       "id": "typed-values/round-into-yaml-property",
@@ -1678,22 +1672,18 @@
     {
       "id": "typed-values/last-nested-collection",
       "category": "typed-values",
-      "status": "fail",
-      "class": "output mismatch",
-      "reason": "first difference at byte 0: expected \"[3]\", got \"3\"",
-      "exit": "0",
-      "expected_output": "[3]",
-      "actual_output": "3"
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
     },
     {
       "id": "typed-values/length-singleton-array",
       "category": "typed-values",
-      "status": "fail",
-      "class": "output mismatch",
-      "reason": "first difference at byte 0: expected \"1\", got \"5\"",
-      "exit": "0",
-      "expected_output": "1",
-      "actual_output": "5"
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
     }
   ]
 }
