@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "comment": "Seeded-breakage corpus derived from 2nap@38b2ffc (41 output triples in fixtures/, 3 in examples/, 16 error cases). Each triple is mutated through every applicable pinned error class; 9 template-error cases are added as pre-broken seeds (break none, explicit class). Fixture templates and data are inline; examples live in eval/templates/2nap/ and are referenced by template_path. A triple is used only if the pinned k4o reproduces 2nap's expected textile byte-for-byte. See docs/tracks/E1.md for the rules and skip reasons.",
+  "comment": "Seeded-breakage corpus derived from 2nap@38b2ffc (41 output triples in fixtures/, 3 in examples/, 16 error cases). Each triple is mutated through every applicable pinned error class; 8 template-error cases are added as pre-broken seeds (break none, explicit class). Fixture templates and data are inline; examples live in eval/templates/2nap/ and are referenced by template_path. A triple is used only if its template renders clean under the pinned k4o main (which has no textile, so 2nap's byte-exact textile gate is gone), and a seed only if it fails there. See docs/tracks/E1.md and docs/tracks/P1.md for the rules, skip and drop reasons.",
   "classes": [
     "unclosed-if",
     "unclosed-for",
@@ -22,10 +22,28 @@
   "provenance": {
     "repo": "2nap",
     "rev": "38b2ffc",
-    "triples_used": 44,
-    "triples_skipped": [],
-    "error_cases_used": 9,
+    "triples_used": 41,
+    "triples_skipped": [
+      {
+        "source": "fixtures/filter-codeblock-basic",
+        "reason": "does not render under pinned k4o main: k4o: unknown filter at line 1, column 14: no filter named \"codeblock\""
+      },
+      {
+        "source": "fixtures/filter-numbered-basic",
+        "reason": "does not render under pinned k4o main: k4o: unknown filter at line 1, column 12: no filter named \"numbered\""
+      },
+      {
+        "source": "fixtures/filter-numbered-nested",
+        "reason": "does not render under pinned k4o main: k4o: unknown filter at line 1, column 12: no filter named \"numbered\""
+      }
+    ],
+    "mutations_dropped": [],
+    "error_cases_used": 8,
     "error_cases_skipped": [
+      {
+        "source": "fixtures/errors/err-bad-args-link-missing",
+        "reason": "renders under k4o main: link's text argument is optional ({{ url | link }} gives [link](url))"
+      },
       {
         "source": "fixtures/errors/err-deep-list",
         "reason": "data-shape render error (template is correct; fix belongs in data). Pinned k4o also renders 4-level lists, so it no longer errors"
@@ -74,11 +92,6 @@
     {"id": "filter-code-basic/unclosed-output", "class": "unclosed-output", "source": "2nap:fixtures/filter-code-basic", "template": "Run {{ cmd | code }} to build.\n", "data": {"cmd": "zig build"}, "break": {"kind": "remove", "find": " }}"}},
     {"id": "filter-code-basic/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-code-basic", "template": "Run {{ cmd | code }} to build.\n", "data": {"cmd": "zig build"}, "break": {"kind": "replace", "find": "| code", "replace": "| monospace"}},
     {"id": "filter-code-basic/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-code-basic", "template": "Run {{ cmd | code }} to build.\n", "data": {"cmd": "zig build"}, "break": {"kind": "replace", "find": "| code }}", "replace": "| }}"}},
-    {"id": "filter-code-basic/bad-filter-arg", "class": "bad-filter-arg", "source": "2nap:fixtures/filter-code-basic", "template": "Run {{ cmd | code }} to build.\n", "data": {"cmd": "zig build"}, "break": {"kind": "replace", "find": "| code }}", "replace": "| code:\"x\" }}"}},
-    {"id": "filter-codeblock-basic/unclosed-output", "class": "unclosed-output", "source": "2nap:fixtures/filter-codeblock-basic", "template": "{{ snippet | codeblock }}\n", "data": {"snippet": "# Output \"I love Ruby\"\nsay = \"I love Ruby\"\nputs say"}, "break": {"kind": "remove", "find": " }}"}},
-    {"id": "filter-codeblock-basic/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-codeblock-basic", "template": "{{ snippet | codeblock }}\n", "data": {"snippet": "# Output \"I love Ruby\"\nsay = \"I love Ruby\"\nputs say"}, "break": {"kind": "replace", "find": "| codeblock", "replace": "| fence"}},
-    {"id": "filter-codeblock-basic/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-codeblock-basic", "template": "{{ snippet | codeblock }}\n", "data": {"snippet": "# Output \"I love Ruby\"\nsay = \"I love Ruby\"\nputs say"}, "break": {"kind": "replace", "find": "| codeblock }}", "replace": "| }}"}},
-    {"id": "filter-codeblock-basic/bad-filter-arg", "class": "bad-filter-arg", "source": "2nap:fixtures/filter-codeblock-basic", "template": "{{ snippet | codeblock }}\n", "data": {"snippet": "# Output \"I love Ruby\"\nsay = \"I love Ruby\"\nputs say"}, "break": {"kind": "replace", "find": "| codeblock }}", "replace": "| codeblock:\"x\" }}"}},
     {"id": "filter-h1-basic/unclosed-output", "class": "unclosed-output", "source": "2nap:fixtures/filter-h1-basic", "template": "{{ title | h1 }}\n", "data": {"title": "The Machine Stops"}, "break": {"kind": "remove", "find": " }}"}},
     {"id": "filter-h1-basic/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-h1-basic", "template": "{{ title | h1 }}\n", "data": {"title": "The Machine Stops"}, "break": {"kind": "replace", "find": "| h1", "replace": "| head1"}},
     {"id": "filter-h1-basic/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-h1-basic", "template": "{{ title | h1 }}\n", "data": {"title": "The Machine Stops"}, "break": {"kind": "replace", "find": "| h1 }}", "replace": "| }}"}},
@@ -110,8 +123,6 @@
     {"id": "filter-link-basic/unclosed-output", "class": "unclosed-output", "source": "2nap:fixtures/filter-link-basic", "template": "See {{ name | link:\"https://example.com/\" }} for more.\n", "data": {"name": "Example"}, "break": {"kind": "remove", "find": " }}"}},
     {"id": "filter-link-basic/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-link-basic", "template": "See {{ name | link:\"https://example.com/\" }} for more.\n", "data": {"name": "Example"}, "break": {"kind": "replace", "find": "| link", "replace": "| url"}},
     {"id": "filter-link-basic/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-link-basic", "template": "See {{ name | link:\"https://example.com/\" }} for more.\n", "data": {"name": "Example"}, "break": {"kind": "replace", "find": "| link:\"https://example.com/\" }}", "replace": "| }}"}},
-    {"id": "filter-link-basic/missing-filter-arg", "class": "missing-filter-arg", "source": "2nap:fixtures/filter-link-basic", "template": "See {{ name | link:\"https://example.com/\" }} for more.\n", "data": {"name": "Example"}, "break": {"kind": "replace", "find": "| link:\"https://example.com/\"", "replace": "| link"}},
-    {"id": "filter-link-basic/empty-filter-arg", "class": "empty-filter-arg", "source": "2nap:fixtures/filter-link-basic", "template": "See {{ name | link:\"https://example.com/\" }} for more.\n", "data": {"name": "Example"}, "break": {"kind": "replace", "find": "| link:\"https://example.com/\"", "replace": "| link:"}},
     {"id": "filter-list-basic/unclosed-output", "class": "unclosed-output", "source": "2nap:fixtures/filter-list-basic", "template": "{{ items | list }}\n", "data": {"items": ["alpha", "beta", "gamma"]}, "break": {"kind": "remove", "find": " }}"}},
     {"id": "filter-list-basic/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-list-basic", "template": "{{ items | list }}\n", "data": {"items": ["alpha", "beta", "gamma"]}, "break": {"kind": "replace", "find": "| list", "replace": "| bullets"}},
     {"id": "filter-list-basic/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-list-basic", "template": "{{ items | list }}\n", "data": {"items": ["alpha", "beta", "gamma"]}, "break": {"kind": "replace", "find": "| list }}", "replace": "| }}"}},
@@ -120,18 +131,9 @@
     {"id": "filter-list-nested/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-list-nested", "template": "{{ items | list }}\n", "data": {"items": ["one", ["two", "three"]]}, "break": {"kind": "replace", "find": "| list", "replace": "| bullets"}},
     {"id": "filter-list-nested/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-list-nested", "template": "{{ items | list }}\n", "data": {"items": ["one", ["two", "three"]]}, "break": {"kind": "replace", "find": "| list }}", "replace": "| }}"}},
     {"id": "filter-list-nested/bad-filter-arg", "class": "bad-filter-arg", "source": "2nap:fixtures/filter-list-nested", "template": "{{ items | list }}\n", "data": {"items": ["one", ["two", "three"]]}, "break": {"kind": "replace", "find": "| list }}", "replace": "| list:\"x\" }}"}},
-    {"id": "filter-numbered-basic/unclosed-output", "class": "unclosed-output", "source": "2nap:fixtures/filter-numbered-basic", "template": "{{ steps | numbered }}\n", "data": {"steps": ["first", "second"]}, "break": {"kind": "remove", "find": " }}"}},
-    {"id": "filter-numbered-basic/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-numbered-basic", "template": "{{ steps | numbered }}\n", "data": {"steps": ["first", "second"]}, "break": {"kind": "replace", "find": "| numbered", "replace": "| ordered"}},
-    {"id": "filter-numbered-basic/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-numbered-basic", "template": "{{ steps | numbered }}\n", "data": {"steps": ["first", "second"]}, "break": {"kind": "replace", "find": "| numbered }}", "replace": "| }}"}},
-    {"id": "filter-numbered-basic/bad-filter-arg", "class": "bad-filter-arg", "source": "2nap:fixtures/filter-numbered-basic", "template": "{{ steps | numbered }}\n", "data": {"steps": ["first", "second"]}, "break": {"kind": "replace", "find": "| numbered }}", "replace": "| numbered:\"x\" }}"}},
-    {"id": "filter-numbered-nested/unclosed-output", "class": "unclosed-output", "source": "2nap:fixtures/filter-numbered-nested", "template": "{{ steps | numbered }}\n", "data": {"steps": ["one", ["two"]]}, "break": {"kind": "remove", "find": " }}"}},
-    {"id": "filter-numbered-nested/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-numbered-nested", "template": "{{ steps | numbered }}\n", "data": {"steps": ["one", ["two"]]}, "break": {"kind": "replace", "find": "| numbered", "replace": "| ordered"}},
-    {"id": "filter-numbered-nested/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-numbered-nested", "template": "{{ steps | numbered }}\n", "data": {"steps": ["one", ["two"]]}, "break": {"kind": "replace", "find": "| numbered }}", "replace": "| }}"}},
-    {"id": "filter-numbered-nested/bad-filter-arg", "class": "bad-filter-arg", "source": "2nap:fixtures/filter-numbered-nested", "template": "{{ steps | numbered }}\n", "data": {"steps": ["one", ["two"]]}, "break": {"kind": "replace", "find": "| numbered }}", "replace": "| numbered:\"x\" }}"}},
     {"id": "filter-table-basic/unclosed-output", "class": "unclosed-output", "source": "2nap:fixtures/filter-table-basic", "template": "{{ rows | table }}\n", "data": {"rows": [["name", "age"], ["Walter", "5"], ["Florence", "6"]]}, "break": {"kind": "remove", "find": " }}"}},
     {"id": "filter-table-basic/unknown-filter", "class": "unknown-filter", "source": "2nap:fixtures/filter-table-basic", "template": "{{ rows | table }}\n", "data": {"rows": [["name", "age"], ["Walter", "5"], ["Florence", "6"]]}, "break": {"kind": "replace", "find": "| table", "replace": "| grid"}},
     {"id": "filter-table-basic/dangling-pipe", "class": "dangling-pipe", "source": "2nap:fixtures/filter-table-basic", "template": "{{ rows | table }}\n", "data": {"rows": [["name", "age"], ["Walter", "5"], ["Florence", "6"]]}, "break": {"kind": "replace", "find": "| table }}", "replace": "| }}"}},
-    {"id": "filter-table-basic/bad-filter-arg", "class": "bad-filter-arg", "source": "2nap:fixtures/filter-table-basic", "template": "{{ rows | table }}\n", "data": {"rows": [["name", "age"], ["Walter", "5"], ["Florence", "6"]]}, "break": {"kind": "replace", "find": "| table }}", "replace": "| table:\"x\" }}"}},
     {"id": "logic-and-or-parens/unclosed-if", "class": "unclosed-if", "source": "2nap:fixtures/logic-and-or-parens", "template": "{% if (premium or featured) and published %}Featured reading{% endif %}\n", "data": {"premium": false, "featured": true, "published": true}, "break": {"kind": "remove", "find": "{% endif %}"}},
     {"id": "logic-and-or-parens/orphan-endif", "class": "orphan-endif", "source": "2nap:fixtures/logic-and-or-parens", "template": "{% if (premium or featured) and published %}Featured reading{% endif %}\n", "data": {"premium": false, "featured": true, "published": true}, "break": {"kind": "remove", "find": "{% if (premium or featured) and published %}"}},
     {"id": "logic-and-or-parens/missing-value", "class": "missing-value", "source": "2nap:fixtures/logic-and-or-parens", "template": "{% if (premium or featured) and published %}Featured reading{% endif %}\n", "data": {"premium": false, "featured": true, "published": true}, "break": {"kind": "replace", "find": "{% if (premium or featured) and published %}", "replace": "{% if %}"}},
@@ -234,9 +236,7 @@
     {"id": "ex-table/unclosed-output", "class": "unclosed-output", "source": "2nap:examples/table", "template_path": "templates/2nap/table.knap", "data": "@templates/2nap/table.json", "break": {"kind": "remove", "find": " }}"}},
     {"id": "ex-table/unknown-filter", "class": "unknown-filter", "source": "2nap:examples/table", "template_path": "templates/2nap/table.knap", "data": "@templates/2nap/table.json", "break": {"kind": "replace", "find": "| table", "replace": "| grid"}},
     {"id": "ex-table/dangling-pipe", "class": "dangling-pipe", "source": "2nap:examples/table", "template_path": "templates/2nap/table.knap", "data": "@templates/2nap/table.json", "break": {"kind": "replace", "find": "| table }}", "replace": "| }}"}},
-    {"id": "ex-table/bad-filter-arg", "class": "bad-filter-arg", "source": "2nap:examples/table", "template_path": "templates/2nap/table.knap", "data": "@templates/2nap/table.json", "break": {"kind": "replace", "find": "| table }}", "replace": "| table:\"x\" }}"}},
     {"id": "err-bad-args-extra", "class": "bad-filter-arg", "source": "2nap:fixtures/errors/err-bad-args-extra", "template": "{{ t | bold:\"x\" }}\n", "data": {"t": "watch out"}, "break": {"kind": "none"}},
-    {"id": "err-bad-args-link-missing", "class": "missing-filter-arg", "source": "2nap:fixtures/errors/err-bad-args-link-missing", "template": "{{ t | link }}\n", "data": {"t": "Example"}, "break": {"kind": "none"}},
     {"id": "err-if-missing-value", "class": "missing-value", "source": "2nap:fixtures/errors/err-if-missing-value", "template": "{% if %}x{% endif %}\n", "data": {}, "break": {"kind": "none"}},
     {"id": "err-stray-endif", "class": "orphan-endif", "source": "2nap:fixtures/errors/err-stray-endif", "template": "text {% endif %}\n", "data": {}, "break": {"kind": "none"}},
     {"id": "err-unclosed-comment", "class": "unclosed-comment", "source": "2nap:fixtures/errors/err-unclosed-comment", "template": "A\n{# note\n", "data": {}, "break": {"kind": "none"}},

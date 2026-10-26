@@ -21,7 +21,7 @@ The research is already paid for; publish it.
 
 One `data.json` → **document views**, not just format targets:
 `verdict.html` + `apparatus.html` (the second-page citations) + `verdict.md`
-+ textile. Same source, separate artifacts — the apparatus is a first-class
++ `verdict.oliver`. Same source, separate artifacts — the apparatus is a first-class
 page, not an afterthought.
 
 Data sketch:
@@ -50,8 +50,9 @@ Boris is a **downstream-consumer** relationship only: the MCP calls existing
 boris CLI surfaces (`check` — graph-health policy incl. unlinked-reference
 detection; `search-index`/`source-rag` artifacts). Nothing upstream changes;
 boris's own rules make this the sanctioned usage pattern. Command shape and
-latency verified against the real binary Oct 26–27 before the demo locks —
-"sub-100ms" is claimed only for layers 1–2 until measured.
+latency measured against the real binary (boris 0.8.2, Oct 26): `boris check`
+on a staged doc is about 3–5 ms and the end-to-end staged check about 40–50
+ms, so layer 3 joins the sub-100ms claim.
 
 ## Validation stack (layers 1–3 native-fast; layer 4 is a model call)
 
@@ -123,17 +124,20 @@ not a message pump. Rules:
   Slim catalog by default; shape fetched per-template on request.
 - `knap_validate(template_id, data)` — dry render. Returns ordered
   diagnostics (kind, line, col, detail) or `ok`. Cheap: no Spark call.
-- `knap_render(template_id, data, target)` — `markdown` (k4o) | `html`
-  (dogbed) | `textile` (k4o). Buffered bytes or nothing; returns `doc_id`.
+- `knap_render(template_id, data, target)` — `markdown` (k4o) | `oliver`
+  (k4o) | `html` (dogbed). Buffered bytes or nothing; returns `doc_id`.
 - `knap_repair(template_id, data)` — server-side bounded loop over *shipped*
   templates only (template_id, never caller-supplied text): render → extract
   error region → Spark patch → re-render. Max 4 iterations; on non-convergence
   returns best-effort + remaining diagnostics. Client sees one call; server
   sees N small ones. Convergence stats included in response.
-- `knap_publish_check(doc_id, site)` — stage a rendered doc into the frozen
-  boris site and run `boris check` (graph-health policy; `--fail-on-unlinked`
-  for wikilink targets). Returns graph diagnostics: unresolvable references
-  caught *pre-publish*. This is the layer-3 surface and a demo beat.
+- `knap_publish_check(doc_id, site)` — stage a copy of a rendered doc into
+  the frozen boris site (boris frontmatter is a closed key set, so the staged
+  copy keeps `title` only) and validate it with `boris validate --report`
+  JSON. Unresolved wiki-links are hard `EREFERENCEMISSING` errors (exit 1);
+  no flag is needed. Embeds are checked as links — boris 0.8.2 can't embed a
+  page. Returns graph diagnostics: unresolvable references caught
+  *pre-publish*. This is the layer-3 surface and a demo beat.
 - `knap_lint(template_text)` — k4o education-grade lint, passthrough.
 - `knap_voice(template_id, data, tone)` — field-by-field voice rewrite via
   Spark. `tone`: `mild | spicy | feral`. Returns patched data JSON + per-field
@@ -147,12 +151,14 @@ not a message pump. Rules:
 
 ## Engine contract
 
-- Engines: **k4o** (markdown/gfm/textile) + **dogbed** (html). 2nap retired to
-  eval-corpus origin only.
-- Grammar target: **the demo-needed referential subset, hard-scoped.** The
-  citation apparatus requires ~9 filters k4o lacks today. That work is IN
-  scope and scheduled (GAMEPLAN Oct 27–28, alongside the tools walk) — it is
-  also the most hackathon-legitimate new code in the submission.
+- Engines: **k4o** main — knap-faithful, byte-compatible with knap 0.6.0;
+  emits markdown or oliver — plus **dogbed** (html; pinned to the #33 head,
+  which bundles k4o main). Textile and gfm are dropped (k4o keeps that
+  legacy surface in its v0.1.0 release). 2nap retired to eval-corpus origin
+  only.
+- Grammar target: **the demo-needed referential subset, hard-scoped.** k4o
+  main already ships all of it (plus `{% set %}` and `??`); the list stays
+  as the scope contract for the demo templates.
   - Required (demo templates): `footnote`, `fragment_link`, `wikilink`,
     `callout`, `embed`, `image`, `yaml`, `yaml_property` + `{% set %}`, `??`
   - Stretch (only if above lands early): `map`, `where`, `sort`, `join`,
@@ -168,7 +174,8 @@ not a message pump. Rules:
   - Oracle scaffolding exists: the 188-case portable corpus already exercises
     the referential filters (footnote ×2, wikilink ×5, callout ×2, embed ×3,
     image ×3, fragment_link ×2, yaml ×11, yaml_property ×6) plus k4o's
-    `tools/differential` live-diff. Note: the corpus is ~98% happy-path
+    `tools/differential` live-diff. Measured: k4o main passes 181/188
+    (`knap-mcp/eval/conformance/`). Note: the corpus is ~98% happy-path
     (2 error, 3 warning cases) — cite the *seeded-breakage* corpus for
     repair-path claims, not the 188.
   - **Cut-line pre-commitment**: if the referential subset isn't passing its
@@ -215,7 +222,7 @@ vhs tapes → ffmpeg → Kdenlive → mp4. Muse Image title cards.
    — references caught pre-publish, made visible.
 6. (20s) Same template × mild vs feral — byte-identical layout (structure-
    hash equality on screen), different voice. The falsifiable proof.
-7. (15s) One source → verdict.md + apparatus.html + textile. Zero JavaScript.
+7. (15s) One source → verdict.md + apparatus.html + verdict.oliver. Zero JavaScript.
 8. (10s) Numbers card — *measured only*: fixtures passed (and k4o X/188 →
    Y/188 delta), repair convergence, server LOC, calls × mean slice size.
    No token-cost numbers unless real metering exists.

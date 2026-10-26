@@ -25,6 +25,7 @@ pub const Step = struct {
 };
 
 pub const Outcome = struct {
+    target: engine.Target,
     converged: bool,
     iterations: usize,
     /// Final working copy of the template (the patched text, never the
@@ -60,6 +61,7 @@ pub fn run(
 
         switch (try engine.render(ctx, target, tpl_path, data_path)) {
             .ok => |doc| return .{
+                .target = target,
                 .converged = true,
                 .iterations = iter,
                 .template = current,
@@ -74,12 +76,14 @@ pub fn run(
                     std.debug.print("repair iter {d}: {s}@{d} {s}\n", .{ iter, first.kind, first.line, first.detail });
                 // Unclosed-block fixes land at the end of the construct —
                 // the region reaches to EOF so the patch can close it.
-                const bounds = if (std.mem.indexOf(u8, first.detail, "unclosed") != null)
+                const unclosed = std.mem.indexOf(u8, first.detail, "unclosed") != null;
+                const context: usize = if (unclosed) 0 else region_context_lines;
+                const bounds = if (unclosed)
                     [2]usize{ regionBounds(current, first.line, 0)[0], current.len }
                 else
-                    regionBounds(current, first.line, region_context_lines);
+                    regionBounds(current, first.line, context);
                 const region = current[bounds[0]..bounds[1]];
-                const patch = try backend.repairPatch(ctx, kind, region, first);
+                const patch = try backend.repairPatch(ctx, kind, region, firstLine(first.line, context), first);
                 const applied = patch != null and !std.mem.eql(u8, patch.?, region);
                 try steps.append(ctx.arena, .{
                     .iteration = iter,
@@ -97,6 +101,7 @@ pub fn run(
     }
 
     return .{
+        .target = target,
         .converged = false,
         .iterations = steps.items.len,
         .template = current,
@@ -104,6 +109,12 @@ pub fn run(
         .diags = diags,
         .steps = steps.items,
     };
+}
+
+/// The 1-based line `regionBounds(_, line, context)` starts on.
+fn firstLine(line: u32, context: usize) u32 {
+    const ctx32: u32 = @intCast(context);
+    return if (line > ctx32) line - ctx32 else 1;
 }
 
 /// Byte range covering `context` lines above and below `line` (1-based),

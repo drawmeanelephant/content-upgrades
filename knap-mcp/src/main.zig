@@ -65,6 +65,9 @@ const commands = [_]Command{
     .{ .name = "repair", .usage = "repair <id> [options]", .summary = "bounded repair loop (max 4)", .run = .{ .tool = .{ .tool = "knap_repair", .key = "template_id" } } },
     .{ .name = "lint", .usage = "lint <file.knap>", .summary = "k4o lint passthrough", .run = .{ .tool = .{ .tool = "knap_lint", .key = "template_text", .exactly_one = "template file", .read_file = true } } },
     .{ .name = "format-check", .usage = "format-check <doc_id>", .summary = "advisory structure lint (warnings only)", .run = .{ .tool = .{ .tool = "knap_format_check", .key = "doc_id", .exactly_one = "doc_id" } } },
+    .{ .name = "voice", .usage = "voice <id> --tone <t>", .summary = "rewrite voice: true values in a tone", .run = .{ .tool = .{ .tool = "knap_voice", .key = "template_id" } } },
+    .{ .name = "structhash", .usage = "structhash <doc_id|file>...", .summary = "layout skeleton hash, text dropped", .run = .{ .custom = @import("tools/structure_hash.zig").cli } },
+    .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "boris-ask", .usage = "boris-ask <query> [--limit n]", .summary = "ranked snippets from the boris artifact", .run = .{ .tool = .{ .tool = "boris_ask", .key = "query", .exactly_one = "query" } } },
     .{ .name = "boris-check", .usage = "boris-check <claim>", .summary = "yes/no/unknown from boris claim pages", .run = .{ .tool = .{ .tool = "boris_check", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
@@ -77,7 +80,7 @@ const commands = [_]Command{
 
 /// `--<name> <v>` / `--<name>=<v>` options passed to tools as same-named
 /// string arguments.
-const tool_flags = [_][]const u8{ "target", "backend", "limit" };
+const tool_flags = [_][]const u8{ "target", "backend", "tone", "evidence", "verifier", "limit" };
 
 const usage_head =
     \\knap-mcp — AI can't do layout. So we don't let it.
@@ -90,10 +93,14 @@ const usage_tail =
     \\
     \\Options:
     \\  -d, --data <file|->     JSON data file; - reads stdin (default {})
-    \\  --target <t>            markdown (default) | gfm | textile | html
+    \\  --target <t>            markdown (default) | oliver | html
     \\  --backend <b>           mock (default) | spark | wonder | baseten
+    \\  --tone <t>              voice tone: mild | spicy | feral
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
+    \\  --explain, --strict     structhash: print tokens; keep link targets
+    \\  --evidence <text>       evidence quote for verify-citation
+    \\  --verifier <v>          heuristic (default) | none | decision
     \\  --limit <n>             boris-ask hits (default 5)
     \\
     \\Environment:
@@ -243,7 +250,7 @@ fn optValue(ctx: *Ctx, args: [][]const u8, i: *usize, comptime opt: []const u8) 
 fn readData(ctx: *Ctx, path: []const u8) !std.json.Value {
     const bytes = if (std.mem.eql(u8, path, "-")) blk: {
         var buf: [8192]u8 = undefined;
-        var r = std.Io.File.stdin().reader(ctx.io, &buf);
+        var r = std.Io.File.stdin().readerStreaming(ctx.io, &buf);
         var aw: std.Io.Writer.Allocating = .init(ctx.arena);
         _ = r.interface.streamRemaining(&aw.writer) catch
             return ctx.fail("cannot read stdin", .{});
@@ -293,18 +300,18 @@ fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
         return 1;
     };
 
+    const parsed = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, out.written(), .{}) catch null;
+    const result: ?std.json.ObjectMap = if (parsed) |v| (if (v == .object) v.object else null) else null;
+
     // render --out <file>: the JSON result carries the doc_id; the file
     // form is for vhs/CLI demos — copy the artifact bytes back out.
     if (o.out) |path| {
-        const parsed = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, out.written(), .{}) catch null;
-        if (parsed) |v| {
-            if (v == .object) {
-                if (v.object.get("doc_id")) |id_v| {
-                    if (id_v == .string) {
-                        if (store.read(ctx, id_v.string) catch null) |bytes| {
-                            std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = bytes }) catch
-                                return fail(ctx, "cannot write --out file");
-                        }
+        if (result) |r| {
+            if (r.get("doc_id")) |id_v| {
+                if (id_v == .string) {
+                    if (store.read(ctx, id_v.string) catch null) |bytes| {
+                        std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = bytes }) catch
+                            return fail(ctx, "cannot write --out file");
                     }
                 }
             }
@@ -312,11 +319,14 @@ fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
     }
 
     var obuf: [8192]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &obuf);
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &obuf);
     w.interface.writeAll(out.written()) catch return 1;
     w.interface.writeAll("\n") catch return 1;
     w.flush() catch return 1;
-    return 0;
+    // `{"ok":false,...}` (a render or validate with diagnostics) is an
+    // error: the JSON still goes to stdout, the exit code says so.
+    const ok = if (result) |r| r.get("ok") else null;
+    return if (ok != null and ok.? == .bool and !ok.?.bool) 1 else 0;
 }
 
 fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
@@ -326,7 +336,7 @@ fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     else
         ctx.backend_kind;
     var buf: [8192]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &buf);
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &buf);
     const code = eval_mod.run(ctx, o.corpus, kind, &w.interface) catch {
         w.flush() catch {};
         return fail(ctx, if (ctx.err_msg.len > 0) ctx.err_msg else "eval failed");
@@ -338,7 +348,7 @@ fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
 fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     _ = args;
     var buf: [4096]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &buf);
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &buf);
     const has_key = ctx.environ.get("MODEL_API_KEY") != null;
     try w.interface.writeAll("backend    status\n");
     try w.interface.writeAll("mock       always available (canned patches)\n");
@@ -392,7 +402,7 @@ fn usage(ctx: *Ctx, msg: []const u8) u8 {
 
 fn printStdout(ctx: *Ctx, text: []const u8) !void {
     var buf: [4096]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &buf);
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &buf);
     try w.interface.writeAll(text);
     try w.flush();
 }
@@ -414,6 +424,7 @@ test {
     _ = @import("mcp.zig");
     _ = @import("repair.zig");
     _ = @import("store.zig");
+    _ = @import("structhash.zig");
     _ = @import("tools.zig");
     _ = @import("tools/boris_ask.zig");
     _ = @import("tools/boris_check.zig");
@@ -422,6 +433,11 @@ test {
     _ = @import("tools/lint.zig");
     _ = @import("tools/render.zig");
     _ = @import("tools/repair.zig");
+    _ = @import("tools/structure_hash.zig");
     _ = @import("tools/templates.zig");
     _ = @import("tools/validate.zig");
+    _ = @import("tools/verify_citation.zig");
+    _ = @import("tools/voice.zig");
+    _ = @import("verifier.zig");
+    _ = @import("voice.zig");
 }
