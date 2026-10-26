@@ -1,0 +1,119 @@
+{
+  "format": "boris-completion-index",
+  "schema_version": 1,
+  "compiler_id": "boris/0.8.2+semantic-relations",
+  "frozen": true,
+  "entities": [
+    {
+      "id": "acmedb-docs-architecture",
+      "title": "AcmeDB docs — architecture",
+      "parent": "sources",
+      "role": "satellite",
+      "status": null,
+      "tags": ["source", "documentation", "reliability-high", "gaf-medium"],
+      "relations": []
+    },
+    {
+      "id": "acmedb-docs-backups",
+      "title": "AcmeDB docs — backups",
+      "parent": "sources",
+      "role": "satellite",
+      "status": null,
+      "tags": ["source", "documentation", "reliability-high", "gaf-high"],
+      "relations": []
+    },
+    {
+      "id": "acmedb-issue-412-cross-region-replication",
+      "title": "AcmeDB issue #412 — cross-region replication",
+      "parent": "sources",
+      "role": "satellite",
+      "status": null,
+      "tags": ["source", "issue-tracker", "reliability-medium", "gaf-high"],
+      "relations": []
+    },
+    {
+      "id": "acmedb-launch-post",
+      "title": "AcmeDB launch post",
+      "parent": "sources",
+      "role": "satellite",
+      "status": null,
+      "tags": ["source", "self-published", "reliability-medium", "gaf-low"],
+      "relations": []
+    },
+    {
+      "id": "claims",
+      "title": "Claims",
+      "parent": "index",
+      "role": "satellite",
+      "status": null,
+      "tags": ["claims"],
+      "relations": []
+    },
+    {
+      "id": "claims/backup-gap",
+      "title": "AcmeDB has no managed backups",
+      "parent": "claims",
+      "role": "satellite",
+      "status": null,
+      "tags": ["claim", "supported"],
+      "relations": [{"kind": "cites", "target": "acmedb-docs-backups"}]
+    },
+    {
+      "id": "claims/durable-writes",
+      "title": "AcmeDB acknowledges only durable writes",
+      "parent": "claims",
+      "role": "satellite",
+      "status": null,
+      "tags": ["claim", "supported"],
+      "relations": [{"kind": "cites", "target": "acmedb-docs-architecture"}]
+    },
+    {
+      "id": "claims/horizontal-sharding",
+      "title": "AcmeDB shards the keyspace across nodes",
+      "parent": "claims",
+      "role": "satellite",
+      "status": null,
+      "tags": ["claim", "refuted"],
+      "relations": [{"kind": "cites", "target": "acmedb-docs-architecture"}]
+    },
+    {
+      "id": "claims/p99-reads-under-2ms",
+      "title": "AcmeDB serves p99 reads under 2ms",
+      "parent": "claims",
+      "role": "satellite",
+      "status": null,
+      "tags": ["claim", "unverified"],
+      "relations": [{"kind": "cites", "target": "acmedb-launch-post"}]
+    },
+    {
+      "id": "claims/single-region-only",
+      "title": "AcmeDB is single-region only",
+      "parent": "claims",
+      "role": "satellite",
+      "status": null,
+      "tags": ["claim", "supported"],
+      "relations": [{"kind": "cites", "target": "acmedb-docs-backups"}, {"kind": "cites", "target": "acmedb-issue-412-cross-region-replication"}]
+    },
+    {
+      "id": "index",
+      "title": "AcmeDB research desk",
+      "parent": null,
+      "role": "trunk",
+      "status": null,
+      "tags": ["home"],
+      "relations": []
+    },
+    {
+      "id": "sources",
+      "title": "Sources",
+      "parent": "index",
+      "role": "satellite",
+      "status": null,
+      "tags": ["sources"],
+      "relations": []
+    }
+  ],
+  "relation_kinds": ["cites", "depends_on", "implements", "relates_to", "supersedes"],
+  "parent_targets": ["claims", "index", "sources"],
+  "layout_slots": ["backlinks", "breadcrumb", "children", "content", "footer", "metadata", "nav", "relations", "title", "toc"]
+}

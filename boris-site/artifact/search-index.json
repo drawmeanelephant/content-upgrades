@@ -1,0 +1,131 @@
+{
+  "format": "boris-rendered-search-index",
+  "schema_version": 1,
+  "documents": [
+    {
+      "path": "acmedb-docs-architecture.html",
+      "title": "AcmeDB docs — architecture",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB docs — architecture", "fragment": "acmedb-docs-architecture", "text": "URL: https://example.com/acmedb/docs#architecture Kind: documentation Reliability: high Give-a-shit: medium Accessed: 2026-10-24, demo-freeze day", "code": ""},
+        {"level": 2, "heading": "What it says", "fragment": "what-it-says", "text": "Every write is appended to the write-ahead log and fsynced before it is acknowledged. A single manifest file records the live set of sorted tables. AcmeDB does not shard. One node owns the whole keyspace.", "code": ""},
+        {"level": 2, "heading": "Why it matters", "fragment": "why-it-matters", "text": "The durability story is simple enough to audit: WAL, fsync, manifest. The same page rules out horizontal scale; there is no partitioning layer to tune.", "code": ""},
+        {"level": 2, "heading": "Used for", "fragment": "used-for", "text": "AcmeDB acknowledges only durable writes AcmeDB shards the keyspace across nodes", "code": ""}
+      ]
+    },
+    {
+      "path": "acmedb-docs-backups.html",
+      "title": "AcmeDB docs — backups",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB docs — backups", "fragment": "acmedb-docs-backups", "text": "URL: https://example.com/acmedb/docs#backups Kind: documentation Reliability: high Give-a-shit: high Accessed: 2026-10-24, demo-freeze day", "code": ""},
+        {"level": 2, "heading": "What it says", "fragment": "what-it-says", "text": "Point-in-time snapshots are coming soon. Cross-region replication is on the roadmap. The page documents one operation: a manual dump to a local file. There is no scheduled backup, no managed snapshot, and no restore-to-timestamp.", "code": ""},
+        {"level": 2, "heading": "Why it matters", "fragment": "why-it-matters", "text": "This is the vendor's own reference documentation, so a gap here is a gap in the product. Anyone running AcmeDB today owns their own backups.", "code": ""},
+        {"level": 2, "heading": "Used for", "fragment": "used-for", "text": "AcmeDB has no managed backups AcmeDB is single-region only", "code": ""}
+      ]
+    },
+    {
+      "path": "acmedb-issue-412-cross-region-replication.html",
+      "title": "AcmeDB issue #412 — cross-region replication",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB issue #412 — cross-region replication", "fragment": "acmedb-issue-412-cross-region-replication", "text": "URL: https://example.com/acmedb/issues/412 Kind: issue tracker Reliability: medium Give-a-shit: high Accessed: 2026-10-24, demo-freeze day", "code": ""},
+        {"level": 2, "heading": "What it says", "fragment": "what-it-says", "text": "Multi-region is not planned for this year. Run one region and ship your dumps somewhere else. The issue has 140 upvotes and one maintainer reply. It is still open.", "code": ""},
+        {"level": 2, "heading": "Why it matters", "fragment": "why-it-matters", "text": "It turns the docs' \"on the roadmap\" into a date: not this year.", "code": ""},
+        {"level": 2, "heading": "Used for", "fragment": "used-for", "text": "AcmeDB is single-region only", "code": ""}
+      ]
+    },
+    {
+      "path": "acmedb-launch-post.html",
+      "title": "AcmeDB launch post",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB launch post", "fragment": "acmedb-launch-post", "text": "URL: https://example.com/acmedb/launch Kind: self-published Reliability: medium Give-a-shit: low Accessed: 2026-10-24, demo-freeze day", "code": ""},
+        {"level": 2, "heading": "What it says", "fragment": "what-it-says", "text": "p99 read latency under 2ms on a laptop. AcmeDB is a durable key-value store. No consensus, no sharding, no surprises. The post links no benchmark harness, names no dataset size, and reports no write latency.", "code": ""},
+        {"level": 2, "heading": "Why it matters", "fragment": "why-it-matters", "text": "It is marketing. The latency number is the vendor's best case on one machine, and nobody has reproduced it.", "code": ""},
+        {"level": 2, "heading": "Used for", "fragment": "used-for", "text": "AcmeDB serves p99 reads under 2ms", "code": ""}
+      ]
+    },
+    {
+      "path": "claims.html",
+      "title": "Claims",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "Claims", "fragment": "claims", "text": "Each claim page carries one verdict tag: , , or . Its relations name the sources that decide it. Claim Verdict AcmeDB has no managed backups supported AcmeDB is single-region only supported AcmeDB acknowledges only durable writes supported AcmeDB serves p99 reads under 2ms unverified AcmeDB shards the keyspace across nodes refuted Back to the research desk.", "code": "supported refuted unverified cites"}
+      ]
+    },
+    {
+      "path": "claims/backup-gap.html",
+      "title": "AcmeDB has no managed backups",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB has no managed backups", "fragment": "acmedb-has-no-managed-backups", "text": "", "code": ""},
+        {"level": 2, "heading": "Claim", "fragment": "claim", "text": "AcmeDB has no managed backup and no point-in-time restore today.", "code": ""},
+        {"level": 2, "heading": "Verdict", "fragment": "verdict", "text": "Supported. The vendor's backups page lists snapshots as coming soon and documents only a manual dump.", "code": ""},
+        {"level": 2, "heading": "Evidence", "fragment": "evidence", "text": "AcmeDB docs — backups: \"Point-in-time snapshots are coming soon.\"", "code": ""}
+      ]
+    },
+    {
+      "path": "claims/durable-writes.html",
+      "title": "AcmeDB acknowledges only durable writes",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB acknowledges only durable writes", "fragment": "acmedb-acknowledges-only-durable-writes", "text": "", "code": ""},
+        {"level": 2, "heading": "Claim", "fragment": "claim", "text": "An acknowledged write survives a crash: AcmeDB fsyncs each write to its write-ahead log before acknowledging it.", "code": ""},
+        {"level": 2, "heading": "Verdict", "fragment": "verdict", "text": "Supported. The architecture page states it directly.", "code": ""},
+        {"level": 2, "heading": "Evidence", "fragment": "evidence", "text": "AcmeDB docs — architecture: \"Every write is appended to the write-ahead log and fsynced before it is acknowledged.\"", "code": ""}
+      ]
+    },
+    {
+      "path": "claims/horizontal-sharding.html",
+      "title": "AcmeDB shards the keyspace across nodes",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB shards the keyspace across nodes", "fragment": "acmedb-shards-the-keyspace-across-nodes", "text": "", "code": ""},
+        {"level": 2, "heading": "Claim", "fragment": "claim", "text": "AcmeDB partitions its keyspace across several nodes for horizontal scale.", "code": ""},
+        {"level": 2, "heading": "Verdict", "fragment": "verdict", "text": "Refuted. The architecture page says one node owns the whole keyspace.", "code": ""},
+        {"level": 2, "heading": "Evidence", "fragment": "evidence", "text": "AcmeDB docs — architecture: \"AcmeDB does not shard. One node owns the whole keyspace.\"", "code": ""}
+      ]
+    },
+    {
+      "path": "claims/p99-reads-under-2ms.html",
+      "title": "AcmeDB serves p99 reads under 2ms",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB serves p99 reads under 2ms", "fragment": "acmedb-serves-p99-reads-under-2ms", "text": "", "code": ""},
+        {"level": 2, "heading": "Claim", "fragment": "claim", "text": "AcmeDB serves p99 point reads in under 2 milliseconds.", "code": ""},
+        {"level": 2, "heading": "Verdict", "fragment": "verdict", "text": "Unverified. The only evidence is the vendor's own benchmark, run on a laptop, with no published harness. Treat 2ms as the ceiling, not the floor.", "code": ""},
+        {"level": 2, "heading": "Evidence", "fragment": "evidence", "text": "AcmeDB launch post: \"p99 read latency under 2ms on a laptop.\"", "code": ""}
+      ]
+    },
+    {
+      "path": "claims/single-region-only.html",
+      "title": "AcmeDB is single-region only",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB is single-region only", "fragment": "acmedb-is-single-region-only", "text": "", "code": ""},
+        {"level": 2, "heading": "Claim", "fragment": "claim", "text": "AcmeDB runs in a single region. There is no cross-region replication.", "code": ""},
+        {"level": 2, "heading": "Verdict", "fragment": "verdict", "text": "Supported. The docs put replication on the roadmap, and the maintainers say it is not planned this year.", "code": ""},
+        {"level": 2, "heading": "Evidence", "fragment": "evidence", "text": "AcmeDB docs — backups: \"Cross-region replication is on the roadmap.\" AcmeDB issue #412 — cross-region replication: \"Multi-region is not planned for this year.\"", "code": ""}
+      ]
+    },
+    {
+      "path": "index.html",
+      "title": "AcmeDB research desk",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "AcmeDB research desk", "fragment": "acmedb-research-desk", "text": "This is the research pack behind the knap verdicts on AcmeDB. Every source a verdict cites has a page here, and every claim is pinned to the source it came from. The site is a frozen artifact. knap-mcp reads its search index and graph, and stages rendered verdicts into a throwaway copy to check that every wiki-link resolves before anything is published. Nothing is indexed live. Sources: what we read, with reliability and give-a-shit ratings. Claims: what we concluded, each with a verdict and its evidence.", "code": ""},
+        {"level": 2, "heading": "How references resolve", "fragment": "how-references-resolve", "text": "A knap template writes a source name as a wiki-link, for example . Boris entity ids cannot contain spaces, so the staging step rewrites the target to its slug ( ) and keeps the name as the label. Each source page declares that slug as its . A name that has no page fails the check with .", "code": "[[AcmeDB launch post]] acmedb-launch-post id EREFERENCEMISSING"}
+      ]
+    },
+    {
+      "path": "sources.html",
+      "title": "Sources",
+      "sections": [
+        {"level": 0, "heading": "", "fragment": "", "text": "", "code": ""},
+        {"level": 1, "heading": "Sources", "fragment": "sources", "text": "Every source an AcmeDB verdict cites. A source page's id is the slug of its name, so a knap on the name resolves here. Source Kind Reliability Give-a-shit AcmeDB docs — backups documentation high high AcmeDB docs — architecture documentation high medium AcmeDB launch post self-published medium low AcmeDB issue #412 — cross-region replication issue tracker medium high", "code": "wikilink"},
+        {"level": 2, "heading": "Reliability scale", "fragment": "reliability-scale", "text": "high: the vendor's own reference documentation, versioned with the product. medium: vendor marketing or a maintainer comment; true at the time, never re-checked. low: hearsay, screenshots, or unsourced benchmarks. Back to the research desk.", "code": ""}
+      ]
+    }
+  ]
+}

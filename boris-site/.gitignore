@@ -1,0 +1,9 @@
+# Built HTML and scratch output. Only content/, themes/, and the frozen
+# artifact/ are committed; build.sh regenerates artifact/ from content/.
+dist/
+*.boris-stage/
+.boris-cache/
+.boris/
+/rag/
+/context/
+.build-tmp/
