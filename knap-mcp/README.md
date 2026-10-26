@@ -78,11 +78,13 @@ NO rows are the honest non-convergence signal, not a bug.
 
 ## Layout
 
-- `src/main.zig` — arg dispatch + CLI surface
+- `src/main.zig` — CLI command table (one row per subcommand) + test-import list
 - `src/mcp.zig` — stdio JSON-RPC loop
-- `src/tools.zig` — tool registry + handlers (shared MCP/CLI)
+- `src/tools.zig` — tool registry (one line per tool), dispatch, `tools/list`
+- `src/tools/<name>.zig` — one handler per tool, shared by MCP and CLI
+- `src/tools/common.zig` — shared handler helpers (args, data staging, diagnostics)
 - `src/engine.zig` — subprocess dispatch + diagnostic parsing
-- `src/backend.zig` — backend interface, mock + remote
+- `src/backend.zig` — backend interface: mock patches + `complete()` for live models
 - `src/repair.zig` — bounded loop
 - `src/formatcheck.zig` — advisory structure lint (8 pinned rules)
 - `src/eval.zig` — seeded-breakage harness
@@ -90,3 +92,4 @@ NO rows are the honest non-convergence signal, not a bug.
 - `src/ctx.zig` — shared context (paths, env, allocators)
 - `templates/` — shipped templates + `shapes/*.json` descriptors
 - `eval/seeds.json` — seeded-breakage corpus
+- `../scripts/engines.sh` — pinned k4o/dogbed builds (`make engines`)
