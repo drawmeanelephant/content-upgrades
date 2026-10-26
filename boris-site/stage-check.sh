@@ -19,6 +19,8 @@
 #   - [[Target]] becomes [[slug(Target)|Target]]. Boris ids cannot contain
 #     spaces; slug = lowercase ASCII, keep [a-z0-9/], every other run -> "-".
 #     Targets already in slug form, like [[claims/backup-gap]], are untouched.
+#   - ![[Target]] loses its "!": boris 0.8.2 cannot embed a page (it renders
+#     an image of Target.html, EASSET), so an embed is checked as a link.
 # Diagnostics are mapped back to the original doc's line and column
 # (boris reports 1-based file lines and 1-based byte columns).
 set -eu
@@ -78,11 +80,13 @@ function slug(s) {
   gsub(/[-\/]+$/, "", s)
   return s
 }
-function rewrite(line,    out, consumed, m, inner, pipe, target, label, hash, frag, id, rep) {
+function rewrite(line,    out, consumed, m, inner, pipe, target, label, hash, frag, id, rep, bang) {
   out = ""
   consumed = 0
   while (match(line, /\[\[[^]]+\]\]/)) {
     m = substr(line, RSTART, RLENGTH)
+    # boris 0.8.2 cannot embed a page: ![[T]] is checked as the link [[T]]
+    bang = RSTART > 1 && substr(line, RSTART - 1, 1) == "!"
     inner = substr(m, 3, length(m) - 4)
     pipe = index(inner, "|")
     if (pipe) { target = substr(inner, 1, pipe - 1); label = substr(inner, pipe + 1) }
@@ -92,8 +96,8 @@ function rewrite(line,    out, consumed, m, inner, pipe, target, label, hash, fr
     else frag = ""
     id = slug(target)
     rep = (id == "" || id == target) ? m : "[[" id frag "|" label "]]"
-    out = out substr(line, 1, RSTART - 1)
-    printf "%d\t%d\t%d\t%d\t%s\t%s\n", staged + 1, length(out) + 1, NR, consumed + RSTART, id, m > links
+    out = out substr(line, 1, RSTART - 1 - bang)
+    printf "%d\t%d\t%d\t%d\t%s\t%s\n", staged + 1, length(out) + 1, NR, consumed + RSTART, id, (bang ? "!" : "") m > links
     out = out rep
     consumed += RSTART + RLENGTH - 1
     line = substr(line, RSTART + RLENGTH)
@@ -167,7 +171,7 @@ FILENAME == links { k = $1 "," $2; oline[k] = $3; ocol[k] = $4; id[k] = $5; link
   k = a[n - 1] "," a[n]
   if (n >= 3 && index(loc, rel ":") == 1 && (k in oline)) {
     printf "%s:%d:%d: error: %s: %s\n", doc, oline[k], ocol[k], code, msg
-    if (link[k] != "[[" id[k] "]]") printf "  %s -> %s\n", link[k], id[k]
+    if (link[k] != "[[" id[k] "]]") printf "  %s -> %s%s\n", link[k], id[k], (link[k] ~ /^!/ ? " (embed, checked as a link)" : "")
   } else if (n >= 3 && index(loc, rel ":") == 1 && code !~ /^EFRONTMATTER/) {
     printf "%s:%d:%d: error: %s: %s\n", doc, a[n - 1] + delta, a[n], code, msg
   } else if (index(loc, rel ":") == 1) {
