@@ -66,6 +66,7 @@ const commands = [_]Command{
     .{ .name = "lint", .usage = "lint <file.knap>", .summary = "k4o lint passthrough", .run = .{ .tool = .{ .tool = "knap_lint", .key = "template_text", .exactly_one = "template file", .read_file = true } } },
     .{ .name = "format-check", .usage = "format-check <doc_id>", .summary = "advisory structure lint (warnings only)", .run = .{ .tool = .{ .tool = "knap_format_check", .key = "doc_id", .exactly_one = "doc_id" } } },
     .{ .name = "voice", .usage = "voice <id> --tone <t>", .summary = "rewrite voice: true values in a tone", .run = .{ .tool = .{ .tool = "knap_voice", .key = "template_id" } } },
+    .{ .name = "structhash", .usage = "structhash <doc_id|file>...", .summary = "layout skeleton hash, text dropped", .run = .{ .custom = @import("tools/structure_hash.zig").cli } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
     .{ .name = "backends", .usage = "backends", .summary = "backend availability", .run = .{ .custom = cmdBackends } },
     .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
@@ -94,6 +95,7 @@ const usage_tail =
     \\  --tone <t>              voice tone: mild | spicy | feral
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
+    \\  --explain, --strict     structhash: print tokens; keep link targets
     \\
     \\Environment:
     \\  KNAP_K4O_PATH / KNAP_DOGBED_PATH   engine binaries (default: PATH)
@@ -411,12 +413,14 @@ test {
     _ = @import("mcp.zig");
     _ = @import("repair.zig");
     _ = @import("store.zig");
+    _ = @import("structhash.zig");
     _ = @import("tools.zig");
     _ = @import("tools/common.zig");
     _ = @import("tools/format_check.zig");
     _ = @import("tools/lint.zig");
     _ = @import("tools/render.zig");
     _ = @import("tools/repair.zig");
+    _ = @import("tools/structure_hash.zig");
     _ = @import("tools/templates.zig");
     _ = @import("tools/validate.zig");
     _ = @import("tools/voice.zig");
