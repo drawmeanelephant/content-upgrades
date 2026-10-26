@@ -6,6 +6,7 @@ const Ctx = @import("../ctx.zig").Ctx;
 const backend = @import("../backend.zig");
 const ratchet = @import("../ratchet.zig");
 const store = @import("../store.zig");
+const verifier = @import("../verifier.zig");
 const tools = @import("../tools.zig");
 const common = @import("common.zig");
 
@@ -16,7 +17,7 @@ pub const tool: tools.Tool = .{
     .name = "knap_ratchet",
     .description = "Values-only density ratchet: the server probes which empty data slot raises the density score most, asks the backend for ONE value for that slot, and keeps it only if schema, markup and evidence checks pass and the markdown score rises. Never changes a non-empty value or the template. Returns data_id and doc_id handles.",
     .input_schema =
-    \\{"type":"object","properties":{"template_id":{"type":"string"},"data":{"type":"object"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten"]},"max_iterations":{"type":"integer","minimum":0,"maximum":20},"epsilon":{"type":"number"},"tone":{"type":"string"},"evidence":{"type":"string","enum":["data"]}},"required":["template_id","data"]}
+    \\{"type":"object","properties":{"template_id":{"type":"string"},"data":{"type":"object"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten"]},"max_iterations":{"type":"integer","minimum":0,"maximum":20},"epsilon":{"type":"number"},"tone":{"type":"string"},"evidence":{"type":"string","enum":["data"]},"verifier":{"type":"string","enum":["heuristic","none","decision"]}},"required":["template_id","data"]}
     ,
     .run = run,
 };
@@ -37,6 +38,8 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     };
 
     var opts: ratchet.Options = .{ .tone = common.getStr(args, "tone") };
+    if (common.getStr(args, "verifier")) |v| opts.verifier = verifier.parseKind(v) orelse
+        return ctx.fail("verifier must be heuristic|none|decision", .{});
     if (a.get("max_iterations")) |v| opts.max_iterations = switch (v) {
         .integer => |i| if (i >= 0 and i <= 20) @intCast(i) else return ctx.fail("max_iterations must be 0-20", .{}),
         else => return ctx.fail("max_iterations must be an integer", .{}),

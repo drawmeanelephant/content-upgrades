@@ -21,6 +21,7 @@ const backend = @import("backend.zig");
 const density = @import("density.zig");
 const formatcheck = @import("formatcheck.zig");
 const store = @import("store.zig");
+const verifier = @import("verifier.zig");
 
 const Value = std.json.Value;
 const ObjectMap = std.json.ObjectMap;
@@ -459,36 +460,28 @@ pub fn dataEvidence(arena: std.mem.Allocator, data: ObjectMap) ![]const []const 
     return out.items;
 }
 
-/// Heuristic verifier (layer 4): every evidence-flagged string in the value
-/// must be a whitespace-normalized verbatim substring of one evidence item.
-/// Private until lane M2's `verifier.checkCitation` lands on main.
-pub fn checkEvidence(arena: std.mem.Allocator, s: Slot, value: Value, evidence: []const []const u8) !?[]const u8 {
+/// The evidence-flagged strings in a value: the value itself for an
+/// evidence scalar or item, else the item fields marked `evidence`.
+fn evidenceClaims(arena: std.mem.Allocator, s: Slot, value: Value) ![]const []const u8 {
     var claims: std.ArrayList([]const u8) = .empty;
     if (s.field.evidence and value == .string) try claims.append(arena, value.string);
     if (value == .object) for (s.field.sub) |f| {
         if (!f.evidence) continue;
         if (value.object.get(f.name)) |v| if (v == .string) try claims.append(arena, v.string);
     };
-    for (claims.items) |claim| {
-        if (evidence.len == 0) return "no-evidence";
-        const want = try normalize(arena, claim);
-        for (evidence) |e| {
-            if (std.mem.indexOf(u8, try normalize(arena, e), want) != null) break;
-        } else return "not-verbatim";
-    }
-    return null;
+    return claims.items;
 }
 
-fn normalize(arena: std.mem.Allocator, s: []const u8) ![]const u8 {
-    var aw: std.Io.Writer.Allocating = .init(arena);
-    var it = std.mem.tokenizeAny(u8, s, " \t\r\n");
-    var first = true;
-    while (it.next()) |w| {
-        if (!first) try aw.writer.writeByte(' ');
-        try aw.writer.writeAll(w);
-        first = false;
+/// Verifier gate (layer 4, lane M2's `verifier.checkCitation`): every
+/// evidence-flagged string must come back `entails`; with the heuristic
+/// that means a verbatim quote of one evidence item. Returns the rejection
+/// detail (`<label>: <reason>`), or null.
+pub fn checkEvidence(ctx: *Ctx, kind: verifier.Kind, s: Slot, value: Value, evidence: []const []const u8) !?[]const u8 {
+    for (try evidenceClaims(ctx.arena, s, value)) |claim| {
+        const c = try verifier.checkCitation(ctx, kind, claim, evidence);
+        if (c.label != .entails) return try std.fmt.allocPrint(ctx.arena, "{s}: {s}", .{ @tagName(c.label), c.reason });
     }
-    return aw.written();
+    return null;
 }
 
 /// Every format_check rule fires no more often than it already did.
@@ -562,6 +555,8 @@ pub const Options = struct {
     max_iterations: usize = default_max_iterations,
     epsilon: f64 = epsilon,
     tone: ?[]const u8 = null,
+    /// Gate for `evidence` slots; `none` skips it.
+    verifier: verifier.Kind = .heuristic,
     /// Mock backend table: slot path -> array of canned values, used in
     /// order. A slot with no (or no more) values declines.
     mock: ObjectMap = .empty,
@@ -778,7 +773,7 @@ pub fn run(
                         step.detail = tok;
                         break :judge;
                     }
-                    if (s.gated()) if (try checkEvidence(a, s, v, r.evidence)) |why| {
+                    if (s.gated() and opts.verifier != .none) if (try checkEvidence(ctx, opts.verifier, s, v, r.evidence)) |why| {
                         step.reason = .verifier;
                         step.detail = why;
                         break :judge;
@@ -1312,16 +1307,21 @@ test "isInert rejects markup anywhere in a value" {
     for (good) |g| try testing.expect(inertString(g) == null);
 }
 
-test "verifier: whitespace-normalized verbatim substrings only" {
+test "verifier gate: claims come from evidence-flagged strings; only verbatim entails" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const sh = try parseShape(a, test_shape);
+    const item = try testData(a,
+        \\{"text":"The Machine is much, but it is not everything.","kind":"tip"}
+    );
+    const claims = try evidenceClaims(a, slotNamed(sh, "quotes[+]"), .{ .object = item });
+    try testing.expectEqual(@as(usize, 1), claims.len);
+    try testing.expectEqual(@as(usize, 1), (try evidenceClaims(a, slotNamed(sh, "pull"), .{ .string = "x" })).len);
+    try testing.expectEqual(@as(usize, 0), (try evidenceClaims(a, slotNamed(sh, "author"), .{ .string = "x" })).len);
     const ev = [_][]const u8{"The Machine is much,  but it is\nnot everything. Men made it."};
-    const pull = slotNamed(sh, "pull");
-    try testing.expectEqual(@as(?[]const u8, null), try checkEvidence(a, pull, .{ .string = "The Machine is much, but it is not everything." }, &ev));
-    try testing.expectEqualStrings("not-verbatim", (try checkEvidence(a, pull, .{ .string = "The Machine is a lot, but not everything." }, &ev)).?);
-    try testing.expectEqualStrings("no-evidence", (try checkEvidence(a, pull, .{ .string = "x" }, &.{})).?);
+    try testing.expectEqual(verifier.Label.entails, (try verifier.heuristic(a, claims[0], &ev)).label);
+    try testing.expect((try verifier.heuristic(a, "The Machine is a lot, but not everything.", &ev)).label != .entails);
 }
 
 test "parseReply strips fences and treats null as declining" {

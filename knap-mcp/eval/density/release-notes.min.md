@@ -34,4 +34,4 @@ This is the release that moves AcmeDB from cute toy to fine for prod, behind a c
 
 ## Receipts
 
-[https://example.com/acmedb/releases/2.0.0](Full%20changelog)
+[Full changelog](https://example.com/acmedb/releases/2.0.0)

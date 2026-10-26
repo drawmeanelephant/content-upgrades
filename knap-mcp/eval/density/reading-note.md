@@ -19,7 +19,7 @@ related:
 ---
 # The Machine Stops
 
-by [[E. M. Forster]], 1909 · [https://www.gutenberg.org/cache/epub/72890/pg72890-images.html](read%20it%20free)
+by [[E. M. Forster]], 1909 · [read it free](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html)
 
 ![The Machine Stops](https://example.com/covers/the-machine-stops.jpg)
 **read it tonight** — a 1909 short story that called video calls, content about content, and the outage nobody knows how to fix
