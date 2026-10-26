@@ -1,4 +1,4 @@
-.PHONY: all test eval voice-eval engines clean
+.PHONY: all test eval voice-eval demo engines clean
 
 # Pinned engine binaries; the pins live in scripts/engines.sh. Override for
 # one run with `make eval KNAP_K4O_PATH=...`.
@@ -17,6 +17,11 @@ eval: all engines
 
 voice-eval: all engines
 	knap-mcp/eval/voice/run.sh
+
+# Every storyboard beat as one scripted run on the mock backend; transcript
+# and artifacts land in demo/out/demo/ (see demo/run.sh).
+demo: all engines
+	demo/run.sh
 
 engines:
 	@scripts/engines.sh
