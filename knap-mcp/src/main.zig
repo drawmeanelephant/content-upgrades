@@ -404,11 +404,7 @@ test {
     _ = @import("ctx.zig");
     _ = @import("engine.zig");
     _ = @import("eval.zig");
-    // formatcheck.zig: its tests pass but leak under std.testing.allocator
-    // (check() expects an arena). Enable this line once they use one. Until
-    // then, no test may call a tool handler: knap_format_check's handler
-    // pulls those tests in too.
-    // _ = @import("formatcheck.zig");
+    _ = @import("formatcheck.zig");
     _ = @import("mcp.zig");
     _ = @import("repair.zig");
     _ = @import("store.zig");
