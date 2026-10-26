@@ -1,0 +1,3 @@
+{{ "Sections" | h2 }}
+
+{{ sections | list }}

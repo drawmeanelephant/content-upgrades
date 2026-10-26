@@ -1,66 +1,182 @@
 {
   "version": 1,
-  "comment": "Seeded-breakage corpus for the repair-eval harness. Each seed mutates a shipped template through a pinned error class, then the repair loop runs bounded (max 4). The mock backend carries canned patches for the first four classes — it proves plumbing, not capability. orphan-endif and the referential-breakage seeds (bad wikilink arg, missing yaml_property arg) are deliberate: non-convergence must show up in the table.",
+  "comment": "Seeded-breakage corpus on the demo templates (verdict, apparatus) plus one corpus-only template (eval/templates/verdict-callout.knap) that exercises the k4o #71 parser tranche: {% set %}, ??, callout tuples. Each seed mutates its template through a pinned error class, then the repair loop runs bounded (max 4). Controls must render clean untouched; every other seed must fail before repair or the harness reports it as a no-op seed. The mock backend carries canned patches for unclosed if/for, unclosed output tags, unknown filters and dangling pipes. It proves plumbing, not capability, so the other classes are expected NO under mock (see docs/tracks/E1.md).",
+  "classes": ["unclosed-if", "unclosed-for", "unclosed-output", "unknown-filter", "dangling-pipe", "orphan-endif", "orphan-endfor", "mismatched-close", "unclosed-block-tag", "unknown-tag", "missing-value", "bad-filter-arg", "missing-filter-arg", "empty-filter-arg", "unclosed-tuple", "unclosed-comment"],
   "seeds": [
     {
       "id": "unclosed-if",
+      "class": "unclosed-if",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
       "break": {"kind": "remove", "find": "{% endif %}", "occurrence": 0}
     },
     {
       "id": "unclosed-for",
+      "class": "unclosed-for",
       "template_id": "apparatus",
       "data": "@data/apparatus.sample.json",
       "break": {"kind": "remove", "find": "{% endfor %}", "occurrence": 0}
     },
     {
       "id": "unclosed-var",
+      "class": "unclosed-output",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
       "break": {"kind": "remove", "find": " }}", "occurrence": 0}
     },
     {
       "id": "unknown-filter",
+      "class": "unknown-filter",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
       "break": {"kind": "replace", "find": "| h2", "replace": "| head2", "occurrence": 0}
     },
     {
       "id": "dangling-filter",
+      "class": "dangling-pipe",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
       "break": {"kind": "replace", "find": "{{ title | h1 }}", "replace": "{{ title |", "occurrence": 0}
     },
     {
       "id": "clean-control",
+      "class": "control",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
       "break": {"kind": "none"}
     },
     {
       "id": "orphan-endif",
+      "class": "orphan-endif",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
       "break": {"kind": "remove", "find": "{% if blockers %}", "occurrence": 0}
     },
     {
       "id": "unclosed-for-sources",
+      "class": "unclosed-for",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
       "break": {"kind": "remove", "find": "{% endfor %}", "occurrence": 0}
     },
     {
       "id": "wikilink-bad-arg",
+      "class": "empty-filter-arg",
       "template_id": "verdict",
       "data": "@data/verdict.sample.json",
-      "break": {"kind": "replace", "find": "{{ s.name | wikilink }}", "replace": "{{ s.name | wikilink:\"a|b\" }}", "occurrence": 0}
+      "break": {"kind": "replace", "find": "{{ s.name | wikilink }}", "replace": "{{ s.name | wikilink: }}", "occurrence": 0}
     },
     {
       "id": "yaml-property-missing-arg",
+      "class": "missing-filter-arg",
       "template_id": "apparatus",
       "data": "@data/apparatus.sample.json",
       "break": {"kind": "replace", "find": "{{ s.name | wikilink | h3 }}", "replace": "{{ s.name | yaml_property }}", "occurrence": 0}
+    },
+    {
+      "id": "apparatus-control",
+      "class": "control",
+      "template_id": "apparatus",
+      "data": "@data/apparatus.sample.json",
+      "break": {"kind": "none"}
+    },
+    {
+      "id": "wikilink-typo",
+      "class": "unknown-filter",
+      "template_id": "apparatus",
+      "data": "@data/apparatus.sample.json",
+      "break": {"kind": "replace", "find": "| wikilink", "replace": "| wiki_link", "occurrence": 0}
+    },
+    {
+      "id": "bare-dangling-pipe",
+      "class": "dangling-pipe",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "{{ s.name | wikilink }}", "replace": "{{ s.name | }}", "occurrence": 0}
+    },
+    {
+      "id": "orphan-endfor",
+      "class": "orphan-endfor",
+      "template_id": "apparatus",
+      "data": "@data/apparatus.sample.json",
+      "break": {"kind": "remove", "find": "{% for s in sources %}", "occurrence": 0}
+    },
+    {
+      "id": "mismatched-endif",
+      "class": "mismatched-close",
+      "template_id": "apparatus",
+      "data": "@data/apparatus.sample.json",
+      "break": {"kind": "replace", "find": "{% endif %}", "replace": "{% endfor %}", "occurrence": 0}
+    },
+    {
+      "id": "unclosed-endif-tag",
+      "class": "unclosed-block-tag",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "{% endif %}", "replace": "{% endif", "occurrence": 1}
+    },
+    {
+      "id": "endif-as-end",
+      "class": "unknown-tag",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "{% endif %}", "replace": "{% end %}", "occurrence": 2}
+    },
+    {
+      "id": "if-missing-condition",
+      "class": "missing-value",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "{% if receipts %}", "replace": "{% if %}", "occurrence": 0}
+    },
+    {
+      "id": "footnote-extra-arg",
+      "class": "bad-filter-arg",
+      "template_id": "verdict",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "{{ footnotes | footnote }}", "replace": "{{ footnotes | footnote:\"1\" }}", "occurrence": 0}
+    },
+    {
+      "id": "callout-control",
+      "class": "control",
+      "template_path": "templates/verdict-callout.knap",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "none"}
+    },
+    {
+      "id": "set-missing-value",
+      "class": "missing-value",
+      "template_path": "templates/verdict-callout.knap",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "{% set label = verdict ?? \"undecided\" %}", "replace": "{% set label = %}", "occurrence": 0}
+    },
+    {
+      "id": "fallback-missing-value",
+      "class": "missing-value",
+      "template_path": "templates/verdict-callout.knap",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "verdict ?? \"undecided\"", "replace": "verdict ??", "occurrence": 0}
+    },
+    {
+      "id": "callout-missing-arg",
+      "class": "missing-filter-arg",
+      "template_path": "templates/verdict-callout.knap",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "| callout:(\"note\", \"The take\")", "replace": "| callout", "occurrence": 0}
+    },
+    {
+      "id": "callout-unclosed-tuple",
+      "class": "unclosed-tuple",
+      "template_path": "templates/verdict-callout.knap",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "\"The take\")", "replace": "\"The take\"", "occurrence": 0}
+    },
+    {
+      "id": "callout-variable-in-tuple",
+      "class": "bad-filter-arg",
+      "template_path": "templates/verdict-callout.knap",
+      "data": "@data/verdict.sample.json",
+      "break": {"kind": "replace", "find": "\"The take\")", "replace": "label)", "occurrence": 0}
     }
   ]
 }
