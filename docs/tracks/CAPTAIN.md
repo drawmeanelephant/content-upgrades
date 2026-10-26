@@ -17,6 +17,14 @@ feral output, which loves a trailing `!`. Open follow-up: the voice guard
 (src/voice.zig) could reject a value ending in `!` for fields a shape marks
 as abutting a footnote marker, or the shape could forbid it per field.
 
+## 2026-10-26: conformance is 187/188
+
+K5 (#33) taught the runner k4o's warning lines. Sole failure:
+`diagnostics/unknown-filter` (accepted: knap prints partial output on
+fatal error, k4o buffers; k4o KNAP-FIDELITY.md). SPEC updated; the stale
+"181/188" in demo/storyboard.md (line ~220) is deferred until I1 lands,
+since I1 owns demo/ this wave.
+
 ## dogbed findings to route to a dogbed lane
 
 - Verdict html drops the footnote definitions (found by C2).
