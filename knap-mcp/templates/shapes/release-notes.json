@@ -27,7 +27,12 @@
       "claim": {"type": "string", "role": "the vendor's own words, copied verbatim from the page at `changelog_url`, one line. Rendered in a 'Their words, not ours' quote callout with a #:~:text= deep link, so it must match the changelog text exactly", "optional": true, "evidence": true},
       "note":  {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref", "optional": true, "ref": "notes"}
     }},
-    "upgrade_matrix":   {"type": "array<array<string>>", "role": "pipe table; first row is the header, exactly [\"you are on\", \"effort\", \"downtime\", \"should you bother\"], then one row per starting version. Every row has 4 cells; no | or newlines in cells", "optional": true, "apparatus": "table", "max_items": 4, "cells": 4, "words": 2},
+    "upgrade_matrix":   {"type": "array<object>", "role": "rows of the 'Upgrade math' pipe table, one per starting version; the header (you are on | effort | downtime | should you bother) is fixed in the template. `on` is the starting version, `effort` the work, `downtime` the outage, `bother` the recommendation. No | or newlines in values", "optional": true, "apparatus": "table", "max_items": 4, "words": 2, "fields": {
+      "on":       {"type": "string"},
+      "effort":   {"type": "string"},
+      "downtime": {"type": "string"},
+      "bother":   {"type": "string"}
+    }},
     "known_issues":     {"type": "array<string>", "role": "what is still broken, one bullet each", "optional": true, "voice": true, "apparatus": "list", "max_items": 3, "words": 12},
     "migration_guide":  {"type": "string", "role": "name of an existing site page, embedded as ![[name]]", "optional": true, "apparatus": "embed", "words": 4},
     "bottom_line":      {"type": "string", "role": "closing verdict, 1-2 sentences", "voice": true},
