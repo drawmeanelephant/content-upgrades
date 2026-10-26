@@ -1,0 +1,38 @@
+{
+  "template_id": "release-notes",
+  "description": "A software release, judged: should you give a shit about this upgrade? YAML frontmatter built key by key, a TL;DR callout, breaking changes behind a danger callout, highlights with vendor claims quoted and deep-linked into the changelog, an upgrade-math table, known issues, an embedded migration guide, wikilinked receipts and footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. Plain strings, no markdown: the template does all formatting.",
+  "fields": {
+    "product":          {"type": "string", "role": "product name; frontmatter `product`, and the page heading when `title` is absent"},
+    "version":          {"type": "string", "role": "version string, rendered as inline code, e.g. 2.0.0"},
+    "title":            {"type": "string", "role": "page heading; falls back to `product` via ??. Its kebab-case form becomes frontmatter `slug`", "optional": true, "voice": true},
+    "codename":         {"type": "string", "role": "release codename, frontmatter only; falls back to a stock line via ??", "optional": true},
+    "date":             {"type": "string", "role": "release date, YYYY-MM-DD; frontmatter `released` and the meta line"},
+    "verdict":          {"type": "string", "role": "two-to-four word upgrade verdict, rendered bold, e.g. upgrade now|wait for .1|skip it", "voice": true},
+    "gaf":              {"type": "string", "role": "give-a-shit level: high|medium|low"},
+    "take":             {"type": "string", "role": "one-line hot take after the verdict", "voice": true},
+    "tags":             {"type": "array<string>", "role": "frontmatter tags, lowercase kebab-case", "optional": true},
+    "related":          {"type": "array<string>", "role": "names of existing site pages; rendered as [[wikilinks]] in frontmatter `related` and in the 'Filed under' link cloud. Name only pages that exist; an invented name is a dangling wikilink", "optional": true},
+    "screenshot":       {"type": "string", "role": "image URL (http/https), rendered as ![alt](url)", "optional": true},
+    "screenshot_alt":   {"type": "string", "role": "alt text for `screenshot`; falls back to `product`", "optional": true, "voice": true},
+    "tldr":             {"type": "string", "role": "2-4 sentence summary, single paragraph, body of the 'TL;DR' tip callout", "voice": true},
+    "breaking_warning": {"type": "string", "role": "body of the 'Read this before you upgrade' danger callout; falls back to a stock warning via ??. Only shown when `breaking` is non-empty", "optional": true, "voice": true},
+    "breaking":         {"type": "array<object>", "role": "breaking changes, one h3 each", "optional": true, "fields": {
+      "change": {"type": "string", "role": "what broke, one line, h3 heading", "voice": true},
+      "fix":    {"type": "string", "role": "what to do about it, 1-3 sentences", "voice": true},
+      "note":   {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref. Must match a `notes` key exactly", "optional": true}
+    }},
+    "highlights":       {"type": "array<object>", "role": "what actually changed, one h3 each", "fields": {
+      "name":  {"type": "string", "role": "feature name, one line, h3 heading"},
+      "what":  {"type": "string", "role": "what it does and why you care, 1-3 sentences", "voice": true},
+      "claim": {"type": "string", "role": "the vendor's own words, copied verbatim from the page at `changelog_url`, one line. Rendered in a 'Their words, not ours' quote callout with a #:~:text= deep link, so it must match the changelog text exactly", "optional": true},
+      "note":  {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref", "optional": true}
+    }},
+    "upgrade_matrix":   {"type": "array<array<string>>", "role": "pipe table; first row is the header, exactly [\"you are on\", \"effort\", \"downtime\", \"should you bother\"], then one row per starting version. Every row has 4 cells; no | or newlines in cells", "optional": true},
+    "known_issues":     {"type": "array<string>", "role": "what is still broken, one bullet each", "optional": true, "voice": true},
+    "migration_guide":  {"type": "string", "role": "name of an existing site page, embedded as ![[name]]", "optional": true},
+    "bottom_line":      {"type": "string", "role": "closing verdict, 1-2 sentences", "voice": true},
+    "changelog_url":    {"type": "string", "role": "release notes or changelog URL (http/https, no #fragment); the 'Full changelog' link and the deep-link target for every highlight `claim`"},
+    "docs_url":         {"type": "string", "role": "upgrade docs URL (http/https)", "optional": true},
+    "notes":            {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key must be referenced by some `note`, and every `note` must be a key here; format_check flags strays", "optional": true}
+  }
+}

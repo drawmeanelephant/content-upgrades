@@ -1,0 +1,78 @@
+{# reading-note.knap: a book, essay or story, judged. Should you give a shit
+   about reading it? Every quote deep-links into the source text through
+   fragment_link (a #:~:text= URL), so each receipt is checkable. Optional
+   fields fall back with ?? or vanish with their block. Callout kinds,
+   callout titles and section headings are template-owned: the model writes
+   values only. Shape descriptor: shapes/reading-note.json.
+   Spacing: optional blocks open with a blank line and close flush against
+   the next block, and loop separators sit behind "not loop.last", so
+   markdown (which trims one trailing newline per loop body) and textile
+   come out with identical single blank lines. #}{% set byline = author ?? "Anonymous" %}
+{% set state = status ?? "read" %}
+{% set slug = title | kebab %}
+---
+{{ title | yaml_property:"title" }}
+{{ byline | yaml_property:"author" }}
+{% if year %}{{ year | yaml_property:"year" }}
+{% endif %}{{ state | yaml_property:"status" }}
+{{ verdict | yaml_property:"verdict" }}
+{{ gaf | yaml_property:"gaf" }}
+{{ slug | yaml_property:"slug" }}
+{{ source_url | yaml_property:"source" }}
+{% if tags %}{{ tags | yaml_property:"tags" }}
+{% endif %}{% if connections %}{{ connections | wikilink | yaml_property:"related" }}
+{% endif %}---
+{{ title | h1 }}
+
+by {% if author %}{{ author | wikilink }}{% else %}{{ byline }}{% endif %}{% if year %}, {{ year }}{% endif %} · {{ "read it free" | link:source_url }}
+{% if cover %}
+
+{{ cover | image:title }}
+{% endif %}
+{{ verdict | bold }} — {{ take }}
+
+Give-a-shit level: {{ gaf | bold }} · status: {{ state }}
+
+{{ summary | callout:("abstract", "The pitch") }}
+
+{{ "Receipts" | h2 }}
+
+{% for q in quotes %}
+{{ q.text | fragment_link:source_url | callout:("quote", "Receipt") }}
+
+{{ q.why }}{% if q.note %}[^{{ q.note | kebab }}]{% endif %}{% if not loop.last %}
+
+
+{% endif %}{% endfor %}
+{% if aged %}
+
+{{ "How it aged" | h2 }}
+
+{{ aged | table }}
+{% endif %}{% if thoughts %}
+
+{{ "Marginalia" | h2 }}
+
+{{ thoughts | list }}
+{% endif %}{% if spoilers %}
+
+{{ spoilers | callout:("warning", "Spoilers (open only if you have read it)", true) }}
+{% endif %}
+{{ "Verdict" | h2 }}
+
+{{ bottom_line }}{% if connections %}
+
+
+{{ "Connections" | h2 }}
+
+{% for c in connections %}{% if not loop.first %} · {% endif %}{{ c | wikilink }}{% endfor %}{% endif %}{% if up_next %}
+
+
+{{ "Up next" | h2 }}
+
+{{ up_next | embed }}{% endif %}{% if notes %}
+
+
+{{ "Footnotes" | h2 }}
+
+{{ notes | footnote }}{% endif %}
