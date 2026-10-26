@@ -1,15 +1,15 @@
 {
   "report": "knap-conformance-summary",
   "report_version": 1,
-  "headline": "k4o main 181/188 → #70 43/188 → #71 48/188",
+  "headline": "k4o main 187/188 → #70 43/188 → #71 48/188",
   "revisions": [
     {
       "label": "main",
-      "revision": "bdfb838a115e86483d9ef1f14d6768a9b9ea0754",
+      "revision": "aeba16352a7b6c7fd8d54db53cb506bdf5ead994",
       "totals": {
         "cases": 188,
-        "pass": 181,
-        "fail": 7,
+        "pass": 187,
+        "fail": 1,
         "unsupported": 0
       }
     },
@@ -1060,6 +1060,14 @@
       ]
     },
     {
+      "id": "clipper-logic/elseif",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
       "id": "clipper-logic/assignment-with-filters",
       "statuses": [
         "pass",
@@ -1126,7 +1134,7 @@
     {
       "id": "diagnostics/pass-through-warnings",
       "statuses": [
-        "fail",
+        "pass",
         "unsupported",
         "unsupported"
       ]
@@ -1134,7 +1142,7 @@
     {
       "id": "diagnostics/calc-invalid-input",
       "statuses": [
-        "fail",
+        "pass",
         "unsupported",
         "unsupported"
       ]
@@ -1142,7 +1150,7 @@
     {
       "id": "diagnostics/round-invalid-input",
       "statuses": [
-        "fail",
+        "pass",
         "unsupported",
         "unsupported"
       ]
@@ -1166,7 +1174,7 @@
     {
       "id": "typed-values/last-nested-collection",
       "statuses": [
-        "fail",
+        "pass",
         "unsupported",
         "unsupported"
       ]
@@ -1174,7 +1182,7 @@
     {
       "id": "typed-values/length-singleton-array",
       "statuses": [
-        "fail",
+        "pass",
         "unsupported",
         "unsupported"
       ]

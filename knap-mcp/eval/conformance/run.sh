@@ -24,7 +24,10 @@ run() { # <label> <sha> <slug>
     --label "$1" --revision "$2" --json "$out/k4o-$3.json" > "$out/k4o-$3.md"
 }
 
-run main bdfb838a115e86483d9ef1f14d6768a9b9ea0754 main-bdfb838
+# main is the k4o pin in scripts/engines.sh (`make engines` builds it).
+main_sha=$(sed -n 's/^K4O_SHA=//p' "$mcp/../scripts/engines.sh")
+main_slug=main-$(printf %s "$main_sha" | cut -c1-7)
+run main "$main_sha" "$main_slug"
 run base 019fac3c27d552f65b3e09c7e6135c1e8ae1e452 base-019fac3
 run '#70' 2436fee774221534fff876a5188550be7724c229 pr70-2436fee
 run '#71' f97c5dbbaec81ded2d90de66b0f4e62bb4c475b1 pr71-f97c5db
@@ -32,7 +35,7 @@ run '#71' f97c5dbbaec81ded2d90de66b0f4e62bb4c475b1 pr71-f97c5db
 # The headline order the numbers card asks for, then the same-lineage view:
 # #70 and #71 stack on 019fac3, not on current main.
 zig run eval/conformance/runner.zig -- summarize --json "$out/summary.json" \
-  "$out/k4o-main-bdfb838.json" "$out/k4o-pr70-2436fee.json" "$out/k4o-pr71-f97c5db.json" > "$out/summary.md"
+  "$out/k4o-$main_slug.json" "$out/k4o-pr70-2436fee.json" "$out/k4o-pr71-f97c5db.json" > "$out/summary.md"
 zig run eval/conformance/runner.zig -- summarize --json "$out/summary-lineage.json" \
   "$out/k4o-base-019fac3.json" "$out/k4o-pr70-2436fee.json" "$out/k4o-pr71-f97c5db.json" > "$out/summary-lineage.md"
 cat "$out/summary.md"
