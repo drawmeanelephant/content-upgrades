@@ -16,6 +16,14 @@ for f in system.md mild.md spicy.md feral.md; do
 	fi
 done
 
+# src/voice.zig's tests compare its assembly with these goldens.
+for t in mild spicy feral; do
+	if ! sh "$here/assemble.sh" system "$t" | cmp -s - "$here/testdata/system.$t.txt"; then
+		echo "FAIL testdata/system.$t.txt: stale; regenerate: sh assemble.sh system $t > testdata/system.$t.txt"
+		exit 1
+	fi
+done
+
 exec awk -v mode=check -f "$here/voice.awk" \
 	"$data"/*.sample.json \
 	"$here/examples/mild.jsonl" "$here/examples/spicy.jsonl" "$here/examples/feral.jsonl" \
