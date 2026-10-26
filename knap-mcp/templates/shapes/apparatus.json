@@ -1,0 +1,15 @@
+{
+  "template_id": "apparatus",
+  "description": "The second-page citations apparatus: every source deep-linked with reliability, give-a-shit rating, and the quotes it backs.",
+  "fields": {
+    "title":    {"type": "string", "role": "page heading"},
+    "subtitle": {"type": "string", "role": "deck line, rendered italic", "voice": true},
+    "sources":  {"type": "array<object>", "role": "citation list", "fields": {
+      "name":        {"type": "string"},
+      "url":         {"type": "string", "role": "deep link target (http/https only)"},
+      "reliability": {"type": "string", "role": "high|medium|low"},
+      "gaf":         {"type": "string", "role": "high|medium|low"},
+      "quotes":      {"type": "array<string>", "optional": true, "role": "verbatim pulls"}
+    }}
+  }
+}

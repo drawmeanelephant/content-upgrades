@@ -1,0 +1,16 @@
+{
+  "title": "Verdict: AcmeDB",
+  "verdict": "give a shit",
+  "take": "the boring database that actually ships",
+  "summary": "AcmeDB does one thing — durable key-value storage — and does it without a operator PhD. No consensus wizardry, no sharding astrology; just a WAL, a manifest, and docs that answer the question you actually asked.",
+  "blockers": [
+    "no managed backup story yet",
+    "single-region only"
+  ],
+  "receipts": [
+    ["claim", "evidence"],
+    ["p99 reads under 2ms", "vendor benchmark, unreplicated claim"],
+    ["backup gap confirmed", "docs page lists snapshots as 'coming soon'"]
+  ],
+  "bottom_line": "Ship it behind a cache. Do not put your crown jewels in it."
+}

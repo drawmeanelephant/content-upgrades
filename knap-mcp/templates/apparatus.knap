@@ -1,0 +1,15 @@
+{{ title | h1 }}
+
+{{ subtitle | italic }}
+
+{% for s in sources %}
+{{ s.name | h3 }}
+
+{{ s.url }}
+
+Reliability: {{ s.reliability | bold }} — Give-a-shit: {{ s.gaf }}
+
+{% if s.quotes %}
+{{ s.quotes | list }}
+{% endif %}
+{% endfor %}
