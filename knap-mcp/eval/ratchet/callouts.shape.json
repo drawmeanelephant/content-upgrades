@@ -1,0 +1,49 @@
+{
+  "template_id": "callouts",
+  "description": "Ratchet eval fixture: a page with enumerated callout kinds (next-phase plan section 2.3 item 2) and an evidence-gated pull quote. The model picks a kind from the enum and writes the body, or copies a quote verbatim from the sources; callout types, titles and the blockquote belong to the template.",
+  "fields": {
+    "title": {
+      "type": "string",
+      "role": "page heading"
+    },
+    "intro": {
+      "type": "string",
+      "role": "one paragraph of prose",
+      "voice": true
+    },
+    "pull_quote": {
+      "type": "string",
+      "role": "verbatim line from a source, rendered as a blockquote",
+      "optional": true,
+      "apparatus": "quote",
+      "evidence": true,
+      "max_words": 30,
+      "words": 12
+    },
+    "callouts": {
+      "type": "array<object>",
+      "role": "boxed aside flagging a risk or a tip",
+      "optional": true,
+      "apparatus": "callout",
+      "max_items": 3,
+      "words": 20,
+      "fields": {
+        "kind": {
+          "type": "string",
+          "role": "which template-owned callout to use",
+          "enum": [
+            "warning",
+            "tip",
+            "note"
+          ]
+        },
+        "body": {
+          "type": "string",
+          "role": "the aside, one or two sentences",
+          "voice": true,
+          "max_words": 40
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "about": "Ratchet eval corpus: knap-mcp ratchet-eval --corpus eval/ratchet.json --backend <b>. Each case runs the ratchet from its data; `mock` replaces single slot paths of ratchet-mock.json for that case; `expect` keys must all hold or the run exits 1. Paths resolve against this file's directory, then the cwd.",
+  "mock": "ratchet-mock.json",
+  "cases": [
+    {
+      "id": "release-notes-min",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.min.json",
+      "expect": {"min_gain": 15}
+    },
+    {
+      "id": "reading-note-min",
+      "template_id": "reading-note",
+      "data": "@../data/reading-note.min.json",
+      "expect": {"min_gain": 15}
+    },
+    {
+      "id": "release-notes-sample",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.sample.json",
+      "expect": {"min_gain": 0}
+    },
+    {
+      "id": "reading-note-sample",
+      "template_id": "reading-note",
+      "data": "@../data/reading-note.sample.json",
+      "expect": {"min_gain": 0}
+    },
+    {
+      "id": "fixture-callouts",
+      "template_path": "ratchet/callouts.knap",
+      "shape_path": "ratchet/callouts.shape.json",
+      "data": "@ratchet/fixture.json",
+      "expect": {"min_accepted": 2}
+    },
+    {
+      "id": "adv-inert-markup",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.min.json",
+      "mock": {"upgrade_matrix[+]": [
+        ["you are on", "**effort**", "downtime", "should you bother"],
+        ["you are on", "effort", "downtime", "should you bother"],
+        ["1.9.x", "rename one config key", "one restart", "yes, today"]
+      ]},
+      "expect": {"reject": {"inert": 1}, "min_gain": 15}
+    },
+    {
+      "id": "adv-verifier-paraphrase",
+      "template_path": "ratchet/callouts.knap",
+      "shape_path": "ratchet/callouts.shape.json",
+      "data": "@ratchet/fixture.json",
+      "mock": {"pull_quote": ["Snapshots are online and you can restore to any point in the last week."]},
+      "expect": {"reject": {"verifier": 1}}
+    },
+    {
+      "id": "adv-enum-outside-shape",
+      "template_path": "ratchet/callouts.knap",
+      "shape_path": "ratchet/callouts.shape.json",
+      "data": "@ratchet/fixture.json",
+      "mock": {"callouts[+]": [
+        {"kind": "danger", "body": "Back up before you upgrade; the migration is one way."},
+        {"kind": "warning", "body": "Back up before you upgrade; the migration is one way."}
+      ]},
+      "expect": {"reject": {"schema": 1}, "min_accepted": 1}
+    },
+    {
+      "id": "adv-no-gain-wall",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.min.json",
+      "mock": {"known_issues[+]": [
+        "Snapshots of databases over two terabytes take hours rather than minutes, and while a snapshot is running the background compactor pauses, which means that write amplification climbs steadily for the whole duration of the job, so on a busy primary you should expect disk usage to grow by roughly the size of one full day of writes before it settles back down after the snapshot completes; the team says a fix is planned for a later point release but has not committed to a date, and in the meantime the documented workaround is to take snapshots from a replica instead of the primary, which only helps if you run a replica in the first place, and most small installs do not, because AcmeDB is still single-region and a second node in the same region mostly buys you a second copy of the same outage rather than any real protection against losing the region itself, which remains the larger risk."
+      ]},
+      "expect": {"reject": {"no-gain": 1}}
+    },
+    {
+      "id": "declines-stall",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.min.json",
+      "mock": {"upgrade_matrix[+]": [], "related[+]": []},
+      "expect": {"stop": "stalled", "reject": {"declined": 2}}
+    },
+    {
+      "id": "iteration-cap",
+      "template_id": "reading-note",
+      "data": "@../data/reading-note.min.json",
+      "max_iterations": 2,
+      "expect": {"stop": "max_iterations", "min_accepted": 2}
+    }
+  ]
+}
