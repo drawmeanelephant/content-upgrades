@@ -32,6 +32,7 @@ pub const all = [_]Tool{
     @import("tools/format_check.zig").tool,
     @import("tools/voice.zig").tool,
     @import("tools/structure_hash.zig").tool,
+    @import("tools/publish_check.zig").tool,
 };
 
 pub const templatePath = common.templatePath;

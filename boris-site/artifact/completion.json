@@ -5,6 +5,15 @@
   "frozen": true,
   "entities": [
     {
+      "id": "acmedb-2-0-migration-guide",
+      "title": "AcmeDB 2.0 migration guide",
+      "parent": "published",
+      "role": "satellite",
+      "status": null,
+      "tags": ["published", "guide"],
+      "relations": []
+    },
+    {
       "id": "acmedb-docs-architecture",
       "title": "AcmeDB docs — architecture",
       "parent": "sources",
@@ -38,6 +47,15 @@
       "role": "satellite",
       "status": null,
       "tags": ["source", "self-published", "reliability-medium", "gaf-low"],
+      "relations": []
+    },
+    {
+      "id": "apparatus-acmedb-verdict",
+      "title": "Apparatus: AcmeDB verdict",
+      "parent": "published",
+      "role": "satellite",
+      "status": null,
+      "tags": ["published", "apparatus"],
       "relations": []
     },
     {
@@ -95,12 +113,57 @@
       "relations": [{"kind": "cites", "target": "acmedb-docs-backups"}, {"kind": "cites", "target": "acmedb-issue-412-cross-region-replication"}]
     },
     {
+      "id": "e-m-forster",
+      "title": "E. M. Forster",
+      "parent": "library",
+      "role": "satellite",
+      "status": null,
+      "tags": ["library", "author"],
+      "relations": []
+    },
+    {
+      "id": "h-g-wells",
+      "title": "H. G. Wells",
+      "parent": "library",
+      "role": "satellite",
+      "status": null,
+      "tags": ["library", "author"],
+      "relations": []
+    },
+    {
       "id": "index",
       "title": "AcmeDB research desk",
       "parent": null,
       "role": "trunk",
       "status": null,
       "tags": ["home"],
+      "relations": []
+    },
+    {
+      "id": "library",
+      "title": "Library",
+      "parent": "index",
+      "role": "satellite",
+      "status": null,
+      "tags": ["library"],
+      "relations": []
+    },
+    {
+      "id": "published",
+      "title": "Published",
+      "parent": "index",
+      "role": "satellite",
+      "status": null,
+      "tags": ["published"],
+      "relations": []
+    },
+    {
+      "id": "reading-queue",
+      "title": "Reading queue",
+      "parent": "published",
+      "role": "satellite",
+      "status": null,
+      "tags": ["published", "reading"],
       "relations": []
     },
     {
@@ -111,9 +174,27 @@
       "status": null,
       "tags": ["sources"],
       "relations": []
+    },
+    {
+      "id": "the-eternal-moment-and-other-stories",
+      "title": "The Eternal Moment and Other Stories",
+      "parent": "library",
+      "role": "satellite",
+      "status": null,
+      "tags": ["library", "book"],
+      "relations": []
+    },
+    {
+      "id": "verdict-acmedb",
+      "title": "Verdict: AcmeDB",
+      "parent": "published",
+      "role": "satellite",
+      "status": null,
+      "tags": ["published", "verdict"],
+      "relations": []
     }
   ],
   "relation_kinds": ["cites", "depends_on", "implements", "relates_to", "supersedes"],
-  "parent_targets": ["claims", "index", "sources"],
+  "parent_targets": ["claims", "index", "library", "published", "sources"],
   "layout_slots": ["backlinks", "breadcrumb", "children", "content", "footer", "metadata", "nav", "relations", "title", "toc"]
 }
