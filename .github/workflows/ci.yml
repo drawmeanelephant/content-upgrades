@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-eval:
+    name: build + test + eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Pinned by commit SHA (tag v2.2.1-node24). Maintained fork of
+      # mlugg/setup-zig: upstream moved to Codeberg and the GitHub copy has been
+      # stale since v2.2.1 (Jan 2026). The only functional change is
+      # runs.using node20 -> node24, clearing the Actions Node 20 deprecation.
+      # To bump, replace the SHA with the new tag's commit and update the tag
+      # comment.
+      - name: Install Zig
+        uses: drawmeanelephant/zig-zouave@2d8510d62b517fa786279562cf8b1bdcf0c47b9f
+        with:
+          version: "0.17.0"
+
+      - name: zig version
+        run: zig version
+
+      # The cache key is a hash of the two pin lines in scripts/engines.sh, so
+      # a pin bump rebuilds the engines and nothing else invalidates the cache.
+      - name: Read engine pins
+        id: pins
+        run: |
+          grep -E '^(K4O|DOGBED)_SHA=' scripts/engines.sh | tee "$RUNNER_TEMP/engine-pins.txt"
+          echo "hash=$(shasum -a 256 "$RUNNER_TEMP/engine-pins.txt" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pinned engine builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/knap-engines
+          key: knap-engines-${{ runner.os }}-${{ steps.pins.outputs.hash }}
+
+      # scripts/engines.sh builds each pin from `git archive` of a source repo
+      # that contains the pinned commit, so a shallow fetch of just that SHA
+      # into $RUNNER_TEMP/src/<name> is enough.
+      - name: Build pinned engines
+        run: |
+          set -eu
+          export KNAP_ENGINES_SRC="$RUNNER_TEMP/src"
+          export KNAP_ENGINES_DIR="$HOME/.cache/knap-engines"
+          while IFS='=' read -r key sha; do
+            name=$(echo "$key" | sed 's/_SHA$//' | tr '[:upper:]' '[:lower:]')
+            repo="$KNAP_ENGINES_SRC/$name"
+            mkdir -p "$repo"
+            git -C "$repo" init -q
+            git -C "$repo" remote add origin "https://github.com/drawmeanelephant/$name"
+            git -C "$repo" fetch -q --depth 1 origin "$sha"
+          done < "$RUNNER_TEMP/engine-pins.txt"
+          make engines
+
+      - name: Test
+        run: make test
+
+      - name: Eval (mock convergence)
+        run: KNAP_MCP_HOME=$(mktemp -d) KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" make eval
+
+      - name: Voice contract check
+        run: sh knap-mcp/prompts/voice/check.sh
