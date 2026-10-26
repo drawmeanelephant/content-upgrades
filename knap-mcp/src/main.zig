@@ -12,6 +12,9 @@
 //!     knap-mcp backends                     backend availability
 //!     knap-mcp --help | --version
 //!
+//! Subcommands are rows in `commands`: a registry tool (argv becomes its
+//! arguments object) or a custom fn. Adding a subcommand is one row.
+//!
 //! Exit codes: 0 = success, 1 = any error. Diagnostics and usage go to
 //! stderr; documents and JSON results go to stdout.
 
@@ -28,21 +31,60 @@ const Ctx = ctx_mod.Ctx;
 
 const max_input = 16 * 1024 * 1024;
 
-const usage_text =
+const Command = struct {
+    name: []const u8,
+    /// Syntax shown in --help after "knap-mcp "; null hides the row.
+    usage: ?[]const u8 = null,
+    summary: []const u8 = "",
+    run: union(enum) {
+        tool: ToolCommand,
+        custom: *const fn (ctx: *Ctx, args: [][]const u8) anyerror!u8,
+    },
+};
+
+/// A subcommand that runs a registry tool through the same dispatcher MCP
+/// uses. The arguments object gets `data` (default {}), every `tool_flags`
+/// option that was given, and the first positional under `key`.
+const ToolCommand = struct {
+    tool: []const u8,
+    /// Arguments key the first positional fills; null takes none.
+    key: ?[]const u8 = null,
+    /// Set when the command takes exactly one positional: names it in the
+    /// usage error ("<cmd> needs exactly one <what>"), and tool failures
+    /// also print the usage line. Otherwise a non-null `key` needs at
+    /// least one positional.
+    exactly_one: ?[]const u8 = null,
+    /// The positional is a file path; its contents fill `key`.
+    read_file: bool = false,
+};
+
+const commands = [_]Command{
+    .{ .name = "templates", .usage = "templates", .summary = "list shipped templates + shapes", .run = .{ .tool = .{ .tool = "knap_templates" } } },
+    .{ .name = "validate", .usage = "validate <id> [-d <file|->]", .summary = "dry render, diagnostics or ok", .run = .{ .tool = .{ .tool = "knap_validate", .key = "template_id" } } },
+    .{ .name = "render", .usage = "render <id> [options]", .summary = "render via k4o/dogbed, print doc", .run = .{ .tool = .{ .tool = "knap_render", .key = "template_id" } } },
+    .{ .name = "repair", .usage = "repair <id> [options]", .summary = "bounded repair loop (max 4)", .run = .{ .tool = .{ .tool = "knap_repair", .key = "template_id" } } },
+    .{ .name = "lint", .usage = "lint <file.knap>", .summary = "k4o lint passthrough", .run = .{ .tool = .{ .tool = "knap_lint", .key = "template_text", .exactly_one = "template file", .read_file = true } } },
+    .{ .name = "format-check", .usage = "format-check <doc_id>", .summary = "advisory structure lint (warnings only)", .run = .{ .tool = .{ .tool = "knap_format_check", .key = "doc_id", .exactly_one = "doc_id" } } },
+    .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
+    .{ .name = "backends", .usage = "backends", .summary = "backend availability", .run = .{ .custom = cmdBackends } },
+    .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
+    .{ .name = "-h", .run = .{ .custom = cmdHelp } },
+    .{ .name = "--version", .run = .{ .custom = cmdVersion } },
+    .{ .name = "-v", .run = .{ .custom = cmdVersion } },
+};
+
+/// `--<name> <v>` / `--<name>=<v>` options passed to tools as same-named
+/// string arguments.
+const tool_flags = [_][]const u8{ "target", "backend" };
+
+const usage_head =
     \\knap-mcp — AI can't do layout. So we don't let it.
     \\
     \\Usage:
-    \\  knap-mcp                              MCP stdio JSON-RPC server
-    \\  knap-mcp serve                        same thing, spelled out
-    \\  knap-mcp templates                    list shipped templates + shapes
-    \\  knap-mcp validate <id> [-d <file|->]  dry render, diagnostics or ok
-    \\  knap-mcp render <id> [options]        render via k4o/dogbed, print doc
-    \\  knap-mcp repair <id> [options]        bounded repair loop (max 4)
-    \\  knap-mcp lint <file.knap>             k4o lint passthrough
-    \\  knap-mcp format-check <doc_id>        advisory structure lint (warnings only)
-    \\  knap-mcp eval [--corpus f] [--backend k]  seeded-breakage convergence
-    \\  knap-mcp backends                     backend availability
-    \\  knap-mcp --help | --version
+    \\
+;
+
+const usage_tail =
     \\
     \\Options:
     \\  -d, --data <file|->     JSON data file; - reads stdin (default {})
@@ -61,7 +103,25 @@ const usage_text =
     \\
 ;
 
+const usage_text = blk: {
+    var s: []const u8 = usage_head ++
+        usageLine("", "MCP stdio JSON-RPC server") ++
+        usageLine("serve", "same thing, spelled out");
+    for (commands) |c| {
+        if (c.usage) |u| s = s ++ usageLine(u, c.summary);
+    }
+    break :blk s ++ usage_tail;
+};
+
+fn usageLine(comptime syntax: []const u8, comptime summary: []const u8) []const u8 {
+    const width = 27;
+    if (summary.len == 0) return "  knap-mcp " ++ syntax ++ "\n";
+    const pad: [width -| syntax.len]u8 = @splat(' ');
+    return "  knap-mcp " ++ syntax ++ pad ++ "  " ++ summary ++ "\n";
+}
+
 pub fn main(init: std.process.Init) !u8 {
+    comptime checkTables();
     var args: std.ArrayList([]const u8) = .empty;
     const alloc = init.arena.allocator();
     var it = try init.minimal.args.iterateAllocator(alloc);
@@ -78,74 +138,81 @@ pub fn main(init: std.process.Init) !u8 {
     if (argv.len == 0 or std.mem.eql(u8, argv[0], "serve"))
         return mcp.serve(init, &ctx);
 
-    const cmd = argv[0];
-    const rest = argv[1..];
-    if (std.mem.eql(u8, cmd, "--help") or std.mem.eql(u8, cmd, "-h")) {
-        try printStdout(init, usage_text);
-        return 0;
+    for (&commands) |*c| {
+        if (!std.mem.eql(u8, c.name, argv[0])) continue;
+        return switch (c.run) {
+            .tool => |t| runTool(&ctx, c.name, t, argv[1..]),
+            .custom => |f| f(&ctx, argv[1..]),
+        };
     }
-    if (std.mem.eql(u8, cmd, "--version") or std.mem.eql(u8, cmd, "-v")) {
-        var buf: [64]u8 = undefined;
-        try printStdout(init, try std.fmt.bufPrint(&buf, "knap-mcp {s}\n", .{build_options.version}));
-        return 0;
-    }
-    if (std.mem.eql(u8, cmd, "templates")) return cliTool(&ctx, "knap_templates", rest);
-    if (std.mem.eql(u8, cmd, "validate")) return cliTool(&ctx, "knap_validate", rest);
-    if (std.mem.eql(u8, cmd, "render")) return cliTool(&ctx, "knap_render", rest);
-    if (std.mem.eql(u8, cmd, "repair")) return cliTool(&ctx, "knap_repair", rest);
-    if (std.mem.eql(u8, cmd, "lint")) return cmdLint(&ctx, rest);
-    if (std.mem.eql(u8, cmd, "format-check")) return cmdFormatCheck(&ctx, rest);
-    if (std.mem.eql(u8, cmd, "eval")) return cmdEval(&ctx, rest);
-    if (std.mem.eql(u8, cmd, "backends")) return cmdBackends(&ctx);
     return usage(&ctx, "unknown command");
+}
+
+/// Build-time guard for the shared one-line tables: tool and command names
+/// are unique, and every tool row names a registered tool.
+fn checkTables() void {
+    @setEvalBranchQuota(100_000);
+    for (tools.all, 0..) |a, i| {
+        for (tools.all[i + 1 ..]) |b| {
+            if (std.mem.eql(u8, a.name, b.name)) @compileError("duplicate tool '" ++ a.name ++ "'");
+        }
+    }
+    for (commands, 0..) |c, i| {
+        for (commands[i + 1 ..]) |other| {
+            if (std.mem.eql(u8, c.name, other.name)) @compileError("duplicate command '" ++ c.name ++ "'");
+        }
+        switch (c.run) {
+            .tool => |t| for (tools.all) |reg| {
+                if (std.mem.eql(u8, reg.name, t.tool)) break;
+            } else @compileError("command '" ++ c.name ++ "' names unregistered tool '" ++ t.tool ++ "'"),
+            .custom => {},
+        }
+    }
 }
 
 // --- CLI plumbing ------------------------------------------------------------
 
 const Opts = struct {
     data: ?std.json.Value = null,
-    target: ?[]const u8 = null,
-    backend: ?[]const u8 = null,
+    /// Values of `tool_flags`, by index.
+    flags: [tool_flags.len]?[]const u8 = @splat(null),
     corpus: []const u8 = "eval/seeds.json",
     out: ?[]const u8 = null,
     positional: std.ArrayList([]const u8) = .empty,
+
+    fn flag(o: *const Opts, name: []const u8) ?[]const u8 {
+        for (tool_flags, o.flags) |n, v| {
+            if (std.mem.eql(u8, n, name)) return v;
+        }
+        return null;
+    }
 };
 
 fn parseOpts(ctx: *Ctx, args: [][]const u8) !Opts {
     var o: Opts = .{};
     var i: usize = 0;
-    while (i < args.len) : (i += 1) {
+    next: while (i < args.len) : (i += 1) {
         const a = args[i];
         if (std.mem.eql(u8, a, "-d") or std.mem.eql(u8, a, "--data")) {
             i += 1;
             if (i >= args.len) return ctx.fail("missing value for --data", .{});
             o.data = try readData(ctx, args[i]);
-        } else if (std.mem.startsWith(u8, a, "--data=") or std.mem.startsWith(u8, a, "-d=")) {
+            continue;
+        }
+        if (std.mem.startsWith(u8, a, "--data=") or std.mem.startsWith(u8, a, "-d=")) {
             o.data = try readData(ctx, a[std.mem.indexOfScalar(u8, a, '=').? + 1 ..]);
-        } else if (std.mem.eql(u8, a, "--target")) {
-            i += 1;
-            if (i >= args.len) return ctx.fail("missing value for --target", .{});
-            o.target = args[i];
-        } else if (std.mem.startsWith(u8, a, "--target=")) {
-            o.target = a["--target=".len..];
-        } else if (std.mem.eql(u8, a, "--backend")) {
-            i += 1;
-            if (i >= args.len) return ctx.fail("missing value for --backend", .{});
-            o.backend = args[i];
-        } else if (std.mem.startsWith(u8, a, "--backend=")) {
-            o.backend = a["--backend=".len..];
-        } else if (std.mem.eql(u8, a, "--corpus")) {
-            i += 1;
-            if (i >= args.len) return ctx.fail("missing value for --corpus", .{});
-            o.corpus = args[i];
-        } else if (std.mem.startsWith(u8, a, "--corpus=")) {
-            o.corpus = a["--corpus=".len..];
-        } else if (std.mem.eql(u8, a, "--out")) {
-            i += 1;
-            if (i >= args.len) return ctx.fail("missing value for --out", .{});
-            o.out = args[i];
-        } else if (std.mem.startsWith(u8, a, "--out=")) {
-            o.out = a["--out=".len..];
+            continue;
+        }
+        inline for (tool_flags, 0..) |name, f| {
+            if (try optValue(ctx, args, &i, "--" ++ name)) |v| {
+                o.flags[f] = v;
+                continue :next;
+            }
+        }
+        if (try optValue(ctx, args, &i, "--corpus")) |v| {
+            o.corpus = v;
+        } else if (try optValue(ctx, args, &i, "--out")) |v| {
+            o.out = v;
         } else if (a.len > 1 and a[0] == '-') {
             return ctx.fail("unknown option '{s}'", .{a});
         } else {
@@ -153,6 +220,19 @@ fn parseOpts(ctx: *Ctx, args: [][]const u8) !Opts {
         }
     }
     return o;
+}
+
+/// Value of `--opt <v>` (consumes the next arg) or `--opt=<v>`; null when
+/// args[i] is a different option.
+fn optValue(ctx: *Ctx, args: [][]const u8, i: *usize, comptime opt: []const u8) !?[]const u8 {
+    const a = args[i.*];
+    if (std.mem.eql(u8, a, opt)) {
+        i.* += 1;
+        if (i.* >= args.len) return ctx.fail("missing value for " ++ opt, .{});
+        return args[i.*];
+    }
+    if (std.mem.startsWith(u8, a, opt ++ "=")) return a[opt.len + 1 ..];
+    return null;
 }
 
 /// `-` reads all of stdin; anything else is a file path of JSON.
@@ -177,20 +257,34 @@ fn readData(ctx: *Ctx, path: []const u8) !std.json.Value {
 
 /// Build the synthesized arguments object a tool handler expects and run
 /// it through the same dispatcher MCP uses — one code path, two surfaces.
-fn cliTool(ctx: *Ctx, comptime name: []const u8, args: [][]const u8) !u8 {
+fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
     const o = parseOpts(ctx, args) catch return usageErr(ctx);
-    if (o.positional.items.len == 0 and !std.mem.eql(u8, name, "knap_templates"))
-        return usageWith(ctx, "missing template_id");
+    const pos = o.positional.items;
+    if (t.exactly_one) |what| {
+        if (pos.len != 1)
+            return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "{s} needs exactly one {s}", .{ cmd, what }));
+    } else if (t.key) |key| {
+        if (pos.len == 0)
+            return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "missing {s}", .{key}));
+    }
 
     var a: std.json.ObjectMap = .empty;
-    if (o.positional.items.len > 0)
-        try a.put(ctx.arena, "template_id", .{ .string = o.positional.items[0] });
+    if (t.key) |key| {
+        const value = if (t.read_file)
+            std.Io.Dir.readFileAlloc(.cwd(), ctx.io, pos[0], ctx.arena, .limited(max_input)) catch
+                return fail(ctx, "cannot read file")
+        else
+            pos[0];
+        try a.put(ctx.arena, key, .{ .string = value });
+    }
     try a.put(ctx.arena, "data", o.data orelse .{ .object = .empty });
-    if (o.target) |t| try a.put(ctx.arena, "target", .{ .string = t });
-    if (o.backend) |b| try a.put(ctx.arena, "backend", .{ .string = b });
+    for (tool_flags, o.flags) |name, v| {
+        if (v) |s| try a.put(ctx.arena, name, .{ .string = s });
+    }
 
     var out: std.Io.Writer.Allocating = .init(ctx.arena);
-    tools.dispatch(ctx, name, a, &out) catch {
+    tools.dispatch(ctx, t.tool, a, &out) catch {
+        if (t.exactly_one != null) return usageErr(ctx);
         report("{s}", .{if (ctx.err_msg.len > 0) ctx.err_msg else "tool failed"});
         return 1;
     };
@@ -221,43 +315,9 @@ fn cliTool(ctx: *Ctx, comptime name: []const u8, args: [][]const u8) !u8 {
     return 0;
 }
 
-/// `lint <file.knap>` takes a path, not a template_id — passthrough.
-fn cmdLint(ctx: *Ctx, args: [][]const u8) !u8 {
+fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     const o = parseOpts(ctx, args) catch return usageErr(ctx);
-    if (o.positional.items.len != 1) return usageWith(ctx, "lint needs exactly one template file");
-    var a: std.json.ObjectMap = .empty;
-    const text = std.Io.Dir.readFileAlloc(.cwd(), ctx.io, o.positional.items[0], ctx.arena, .limited(max_input)) catch
-        return fail(ctx, "cannot read file");
-    try a.put(ctx.arena, "template_text", .{ .string = text });
-    var out: std.Io.Writer.Allocating = .init(ctx.arena);
-    tools.dispatch(ctx, "knap_lint", a, &out) catch return usageErr(ctx);
-    var obuf: [8192]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &obuf);
-    w.interface.writeAll(out.written()) catch return 1;
-    w.interface.writeAll("\n") catch return 1;
-    w.flush() catch return 1;
-    return 0;
-}
-
-/// `format-check <doc_id>` takes an artifact handle, not a template_id.
-fn cmdFormatCheck(ctx: *Ctx, args: [][]const u8) !u8 {
-    const o = parseOpts(ctx, args) catch return usageErr(ctx);
-    if (o.positional.items.len != 1) return usageWith(ctx, "format-check needs exactly one doc_id");
-    var a: std.json.ObjectMap = .empty;
-    try a.put(ctx.arena, "doc_id", .{ .string = o.positional.items[0] });
-    var out: std.Io.Writer.Allocating = .init(ctx.arena);
-    tools.dispatch(ctx, "knap_format_check", a, &out) catch return usageErr(ctx);
-    var obuf: [8192]u8 = undefined;
-    var w = std.Io.File.stdout().writer(ctx.io, &obuf);
-    w.interface.writeAll(out.written()) catch return 1;
-    w.interface.writeAll("\n") catch return 1;
-    w.flush() catch return 1;
-    return 0;
-}
-
-fn cmdEval(ctx: *Ctx, args: [][]const u8) !u8 {
-    const o = parseOpts(ctx, args) catch return usageErr(ctx);
-    const kind = if (o.backend) |b|
+    const kind = if (o.flag("backend")) |b|
         backend.parseKind(b) orelse return fail(ctx, "unknown backend")
     else
         ctx.backend_kind;
@@ -271,7 +331,8 @@ fn cmdEval(ctx: *Ctx, args: [][]const u8) !u8 {
     return code;
 }
 
-fn cmdBackends(ctx: *Ctx) !u8 {
+fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
+    _ = args;
     var buf: [4096]u8 = undefined;
     var w = std.Io.File.stdout().writer(ctx.io, &buf);
     const has_key = ctx.environ.get("MODEL_API_KEY") != null;
@@ -285,6 +346,19 @@ fn cmdBackends(ctx: *Ctx) !u8 {
     }
     try w.interface.print("default    {s} (KNAP_BACKEND)\n", .{@tagName(ctx.backend_kind)});
     try w.flush();
+    return 0;
+}
+
+fn cmdHelp(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
+    _ = args;
+    try printStdout(ctx, usage_text);
+    return 0;
+}
+
+fn cmdVersion(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
+    _ = args;
+    var buf: [64]u8 = undefined;
+    try printStdout(ctx, try std.fmt.bufPrint(&buf, "knap-mcp {s}\n", .{build_options.version}));
     return 0;
 }
 
@@ -312,13 +386,38 @@ fn usage(ctx: *Ctx, msg: []const u8) u8 {
     return 1;
 }
 
-fn printStdout(init: std.process.Init, text: []const u8) !void {
+fn printStdout(ctx: *Ctx, text: []const u8) !void {
     var buf: [4096]u8 = undefined;
-    var w = std.Io.File.stdout().writer(init.io, &buf);
+    var w = std.Io.File.stdout().writer(ctx.io, &buf);
     try w.interface.writeAll(text);
     try w.flush();
 }
 
 fn report(comptime fmt: []const u8, args: anytype) void {
     std.debug.print("knap-mcp: " ++ fmt ++ "\n", args);
+}
+
+// Test discovery: `zig build test` only runs tests in files listed here,
+// one line per file under src/.
+test {
+    _ = @import("backend.zig");
+    _ = @import("ctx.zig");
+    _ = @import("engine.zig");
+    _ = @import("eval.zig");
+    // formatcheck.zig: its tests pass but leak under std.testing.allocator
+    // (check() expects an arena). Enable this line once they use one. Until
+    // then, no test may call a tool handler: knap_format_check's handler
+    // pulls those tests in too.
+    // _ = @import("formatcheck.zig");
+    _ = @import("mcp.zig");
+    _ = @import("repair.zig");
+    _ = @import("store.zig");
+    _ = @import("tools.zig");
+    _ = @import("tools/common.zig");
+    _ = @import("tools/format_check.zig");
+    _ = @import("tools/lint.zig");
+    _ = @import("tools/render.zig");
+    _ = @import("tools/repair.zig");
+    _ = @import("tools/templates.zig");
+    _ = @import("tools/validate.zig");
 }
