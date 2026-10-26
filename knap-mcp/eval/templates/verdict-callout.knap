@@ -1,0 +1,10 @@
+{% set label = verdict ?? "undecided" %}
+{{ title | h1 }}
+
+{{ take | callout:("note", "The take") }}
+
+Verdict: {{ label | bold }}
+
+{% for s in sources %}
+- {{ s.name | wikilink }} — {{ s.url }}
+{% endfor %}
