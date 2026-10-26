@@ -1,0 +1,2694 @@
+{
+  "report": "knap-conformance",
+  "report_version": 1,
+  "label": "#71",
+  "revision": "f97c5dbbaec81ded2d90de66b0f4e62bb4c475b1",
+  "engine": {
+    "path": "~/.cache/knap-engines/k4o-f97c5db/k4o",
+    "version": "k4o 0.1.0",
+    "sha256": "1217032db130fcd149e3c657013ad0191eaef94003d2c8240d791c0b13b6743c",
+    "command": "k4o render <case.knap> --data <data.json> --format markdown"
+  },
+  "corpus": {
+    "path": "../corpus/render.json",
+    "sha256": "a7c011908343cf34c3c1a07d282349b8bc97f03d130f21f4f87ced35466ad152",
+    "format_version": "1",
+    "preset": "standard",
+    "cases": 188
+  },
+  "totals": {
+    "cases": 188,
+    "pass": 48,
+    "fail": 12,
+    "unsupported": 128
+  },
+  "categories": [
+    {
+      "name": "filters",
+      "totals": {
+        "cases": 163,
+        "pass": 39,
+        "fail": 6,
+        "unsupported": 118
+      }
+    },
+    {
+      "name": "logic",
+      "totals": {
+        "cases": 3,
+        "pass": 3,
+        "fail": 0,
+        "unsupported": 0
+      }
+    },
+    {
+      "name": "clipper-logic",
+      "totals": {
+        "cases": 13,
+        "pass": 5,
+        "fail": 5,
+        "unsupported": 3
+      }
+    },
+    {
+      "name": "diagnostics",
+      "totals": {
+        "cases": 5,
+        "pass": 1,
+        "fail": 1,
+        "unsupported": 3
+      }
+    },
+    {
+      "name": "typed-values",
+      "totals": {
+        "cases": 4,
+        "pass": 0,
+        "fail": 0,
+        "unsupported": 4
+      }
+    }
+  ],
+  "filters": {
+    "implemented": [
+      "blockquote",
+      "bold",
+      "callout",
+      "code",
+      "embed",
+      "footnote",
+      "fragment_link",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "image",
+      "indent",
+      "italic",
+      "kebab",
+      "link",
+      "list",
+      "table",
+      "wikilink",
+      "yaml",
+      "yaml_property"
+    ],
+    "missing": [
+      "calc",
+      "camel",
+      "capitalize",
+      "code_block",
+      "comment",
+      "compact",
+      "date",
+      "date_modify",
+      "decode_uri",
+      "duration",
+      "encode_uri",
+      "escape_md",
+      "first",
+      "hard_break",
+      "highlight",
+      "hr",
+      "join",
+      "last",
+      "length",
+      "lower",
+      "map",
+      "math",
+      "math_block",
+      "merge",
+      "nth",
+      "number_format",
+      "object",
+      "parse_json",
+      "pascal",
+      "remove_attr",
+      "remove_tags",
+      "replace",
+      "replace_tags",
+      "reverse",
+      "round",
+      "safe_name",
+      "slice",
+      "snake",
+      "sort",
+      "split",
+      "strike",
+      "strip_attr",
+      "strip_md",
+      "strip_tags",
+      "sum",
+      "table_pretty",
+      "template",
+      "title",
+      "toString",
+      "trim",
+      "truncate",
+      "truncatewords",
+      "uncamel",
+      "unescape",
+      "unique",
+      "upper",
+      "where"
+    ]
+  },
+  "unsupported_by_filter": [
+    {
+      "name": "replace",
+      "cases": 6
+    },
+    {
+      "name": "date",
+      "cases": 5
+    },
+    {
+      "name": "map",
+      "cases": 5
+    },
+    {
+      "name": "duration",
+      "cases": 4
+    },
+    {
+      "name": "length",
+      "cases": 4
+    },
+    {
+      "name": "slice",
+      "cases": 4
+    },
+    {
+      "name": "calc",
+      "cases": 3
+    },
+    {
+      "name": "date_modify",
+      "cases": 3
+    },
+    {
+      "name": "first",
+      "cases": 3
+    },
+    {
+      "name": "join",
+      "cases": 3
+    },
+    {
+      "name": "last",
+      "cases": 3
+    },
+    {
+      "name": "lower",
+      "cases": 3
+    },
+    {
+      "name": "number_format",
+      "cases": 3
+    },
+    {
+      "name": "object",
+      "cases": 3
+    },
+    {
+      "name": "reverse",
+      "cases": 3
+    },
+    {
+      "name": "round",
+      "cases": 3
+    },
+    {
+      "name": "sort",
+      "cases": 3
+    },
+    {
+      "name": "split",
+      "cases": 3
+    },
+    {
+      "name": "template",
+      "cases": 3
+    },
+    {
+      "name": "truncate",
+      "cases": 3
+    },
+    {
+      "name": "uncamel",
+      "cases": 3
+    },
+    {
+      "name": "unique",
+      "cases": 3
+    },
+    {
+      "name": "compact",
+      "cases": 2
+    },
+    {
+      "name": "decode_uri",
+      "cases": 2
+    },
+    {
+      "name": "highlight",
+      "cases": 2
+    },
+    {
+      "name": "hr",
+      "cases": 2
+    },
+    {
+      "name": "merge",
+      "cases": 2
+    },
+    {
+      "name": "nth",
+      "cases": 2
+    },
+    {
+      "name": "remove_attr",
+      "cases": 2
+    },
+    {
+      "name": "remove_tags",
+      "cases": 2
+    },
+    {
+      "name": "strip_md",
+      "cases": 2
+    },
+    {
+      "name": "strip_tags",
+      "cases": 2
+    },
+    {
+      "name": "sum",
+      "cases": 2
+    },
+    {
+      "name": "table_pretty",
+      "cases": 2
+    },
+    {
+      "name": "truncatewords",
+      "cases": 2
+    },
+    {
+      "name": "unescape",
+      "cases": 2
+    },
+    {
+      "name": "upper",
+      "cases": 2
+    },
+    {
+      "name": "where",
+      "cases": 2
+    },
+    {
+      "name": "camel",
+      "cases": 1
+    },
+    {
+      "name": "capitalize",
+      "cases": 1
+    },
+    {
+      "name": "code_block",
+      "cases": 1
+    },
+    {
+      "name": "comment",
+      "cases": 1
+    },
+    {
+      "name": "encode_uri",
+      "cases": 1
+    },
+    {
+      "name": "escape_md",
+      "cases": 1
+    },
+    {
+      "name": "hard_break",
+      "cases": 1
+    },
+    {
+      "name": "math",
+      "cases": 1
+    },
+    {
+      "name": "math_block",
+      "cases": 1
+    },
+    {
+      "name": "parse_json",
+      "cases": 1
+    },
+    {
+      "name": "pascal",
+      "cases": 1
+    },
+    {
+      "name": "replace_tags",
+      "cases": 1
+    },
+    {
+      "name": "safe_name",
+      "cases": 1
+    },
+    {
+      "name": "snake",
+      "cases": 1
+    },
+    {
+      "name": "strike",
+      "cases": 1
+    },
+    {
+      "name": "strip_attr",
+      "cases": 1
+    },
+    {
+      "name": "title",
+      "cases": 1
+    },
+    {
+      "name": "trim",
+      "cases": 1
+    }
+  ],
+  "unsupported_by_construct": [
+    {
+      "name": "argument on a k4o filter that takes none",
+      "cases": 8
+    }
+  ],
+  "fail_by_class": [
+    {
+      "name": "output mismatch",
+      "cases": 6
+    },
+    {
+      "name": "rejected valid template",
+      "cases": 5
+    },
+    {
+      "name": "error-case output mismatch",
+      "cases": 1
+    }
+  ],
+  "cases": [
+    {
+      "id": "filters/date/format-a-date",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "date",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 16: no filter named \"date\"",
+      "missing_filters": [
+        "date"
+      ],
+      "expected_output": "December 1, 2024",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/date/specify-the-data-format",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "date",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 16: no filter named \"date\"",
+      "missing_filters": [
+        "date"
+      ],
+      "expected_output": "2024-12-01",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/date/iso-week-and-literal-text",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "date",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 16: no filter named \"date\"",
+      "missing_filters": [
+        "date"
+      ],
+      "expected_output": "Week 48, 2024",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/date-modify/add-time",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "date_modify",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 16: no filter named \"date_modify\"",
+      "missing_filters": [
+        "date_modify"
+      ],
+      "expected_output": "2025-12-01",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/date-modify/subtract-time",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "date_modify",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 16: no filter named \"date_modify\"",
+      "missing_filters": [
+        "date_modify"
+      ],
+      "expected_output": "2024-10-01",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/date-modify/cross-midnight-and-format",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "date_modify, date",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 16: no filter named \"date_modify\"",
+      "missing_filters": [
+        "date_modify",
+        "date"
+      ],
+      "expected_output": "December 2, 2024",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/duration/iso-8601-duration",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "duration",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 15: no filter named \"duration\"",
+      "missing_filters": [
+        "duration"
+      ],
+      "expected_output": "01:30:00",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/duration/seconds",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "duration",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 14: no filter named \"duration\"",
+      "missing_filters": [
+        "duration"
+      ],
+      "expected_output": "1:01:05",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/duration/default-format",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "duration",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 15: no filter named \"duration\"",
+      "missing_filters": [
+        "duration"
+      ],
+      "expected_output": "05:30",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/duration/more-than-24-hours",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "duration",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 15: no filter named \"duration\"",
+      "missing_filters": [
+        "duration"
+      ],
+      "expected_output": "26:00:00",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/camel/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "camel",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"camel\"",
+      "missing_filters": [
+        "camel"
+      ],
+      "expected_output": "helloWorld",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/capitalize/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "capitalize",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"capitalize\"",
+      "missing_filters": [
+        "capitalize"
+      ],
+      "expected_output": "Hello world",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/decode-uri/unicode-text",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "decode_uri",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"decode_uri\"",
+      "missing_filters": [
+        "decode_uri"
+      ],
+      "expected_output": "你好",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/decode-uri/spaces",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "decode_uri",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"decode_uri\"",
+      "missing_filters": [
+        "decode_uri"
+      ],
+      "expected_output": "hello world",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/encode-uri/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "encode_uri",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"encode_uri\"",
+      "missing_filters": [
+        "encode_uri"
+      ],
+      "expected_output": "hello%20world%2F%E4%BD%A0%E5%A5%BD",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/kebab/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/lower/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "lower",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"lower\"",
+      "missing_filters": [
+        "lower"
+      ],
+      "expected_output": "hello world",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/pascal/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "pascal",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"pascal\"",
+      "missing_filters": [
+        "pascal"
+      ],
+      "expected_output": "HelloWorld",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/replace/remove-text",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "replace",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 25: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "replace"
+      ],
+      "expected_output": "hello world!",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/replace/multiple-replacements",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "replace",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 25: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "replace"
+      ],
+      "expected_output": "hall0 w0rld",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/replace/regular-expression",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "replace",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 34: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "replace"
+      ],
+      "expected_output": "h*ll* w*rld",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/replace/case-insensitive-match",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "replace",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 32: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "replace"
+      ],
+      "expected_output": "hi world",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/safe-name/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "safe_name",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"safe_name\"",
+      "missing_filters": [
+        "safe_name"
+      ],
+      "expected_output": "notes2024 recap",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/snake/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "snake",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"snake\"",
+      "missing_filters": [
+        "snake"
+      ],
+      "expected_output": "hello_world",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/title/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "title",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"title\"",
+      "missing_filters": [
+        "title"
+      ],
+      "expected_output": "Hello World",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/indent/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/indent/choose-a-width",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/trim/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "trim",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"trim\"",
+      "missing_filters": [
+        "trim"
+      ],
+      "expected_output": "hello world",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/truncate/default-suffix",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "truncate",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"truncate\"",
+      "missing_filters": [
+        "truncate"
+      ],
+      "expected_output": "A concise…",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/truncate/custom-suffix",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "truncate",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 21: tuple arguments hold quoted strings and 'true'/'false'",
+      "missing_filters": [
+        "truncate"
+      ],
+      "expected_output": "A concise...",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/truncate/no-suffix",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "truncate",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 21: tuple arguments hold quoted strings and 'true'/'false'",
+      "missing_filters": [
+        "truncate"
+      ],
+      "expected_output": "A concise",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/truncatewords/default-suffix",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "truncatewords",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"truncatewords\"",
+      "missing_filters": [
+        "truncatewords"
+      ],
+      "expected_output": "A concise introduction…",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/truncatewords/no-suffix",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "truncatewords",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 26: tuple arguments hold quoted strings and 'true'/'false'",
+      "missing_filters": [
+        "truncatewords"
+      ],
+      "expected_output": "A concise introduction",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/uncamel/camelcase",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "uncamel",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"uncamel\"",
+      "missing_filters": [
+        "uncamel"
+      ],
+      "expected_output": "camel case",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/uncamel/pascalcase",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "uncamel",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"uncamel\"",
+      "missing_filters": [
+        "uncamel"
+      ],
+      "expected_output": "pascal case",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/uncamel/initialism",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "uncamel",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"uncamel\"",
+      "missing_filters": [
+        "uncamel"
+      ],
+      "expected_output": "my html parser",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/unescape/newline",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "unescape",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"unescape\"",
+      "missing_filters": [
+        "unescape"
+      ],
+      "expected_output": "line1\nline2",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/unescape/quotes",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "unescape",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"unescape\"",
+      "missing_filters": [
+        "unescape"
+      ],
+      "expected_output": "He said \"hello\"",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/upper/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "upper",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"upper\"",
+      "missing_filters": [
+        "upper"
+      ],
+      "expected_output": "HELLO WORLD",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/blockquote/basic-usage",
+      "category": "filters",
+      "status": "fail",
+      "class": "rejected valid template",
+      "reason": "render error at line 1, column 12: filter 'blockquote' expects single-line text",
+      "exit": "1",
+      "diagnostic": "render error at line 1, column 12: filter 'blockquote' expects single-line text",
+      "expected_output": "> First line\n> Second line",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/bold/asterisks",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/bold/underscores",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "unsupported construct",
+      "reason": "argument on a k4o filter that takes none",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 11: filter 'bold' takes no arguments",
+      "expected_output": "__Important__",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/callout/type-and-title",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/callout/collapsed-callout",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/code/inline",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/code/language-block",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "unsupported construct",
+      "reason": "argument on a k4o filter that takes none",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 13: filter 'code' takes no arguments",
+      "expected_output": "```typescript\nconst answer = 42\n```",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/code-block/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "code_block",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"code_block\"",
+      "missing_filters": [
+        "code_block"
+      ],
+      "expected_output": "```typescript\nconst answer = 42\n```",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/comment/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "comment",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"comment\"",
+      "missing_filters": [
+        "comment"
+      ],
+      "expected_output": "%%Hidden note%%",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/embed/file",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/embed/alias",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/embed/array-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/escape-md/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "escape_md",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"escape_md\"",
+      "missing_filters": [
+        "escape_md"
+      ],
+      "expected_output": "\\# Draft \\*title\\*",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/footnote/array-footnotes",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/footnote/object-footnotes",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/fragment-link/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/fragment-link/custom-link-text",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h1/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h2/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h3/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h4/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h5/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h6/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/hard-break/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "hard_break",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"hard_break\"",
+      "missing_filters": [
+        "hard_break"
+      ],
+      "expected_output": "First line  \nSecond line\n\nNew paragraph",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/highlight/default",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "highlight",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"highlight\"",
+      "missing_filters": [
+        "highlight"
+      ],
+      "expected_output": "==Remember this==",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/highlight/color",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "highlight",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"highlight\"",
+      "missing_filters": [
+        "highlight"
+      ],
+      "expected_output": "==🔵Remember this==",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/hr/after",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "hr",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"hr\"",
+      "missing_filters": [
+        "hr"
+      ],
+      "expected_output": "Section end\n\n---",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/hr/before",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "hr",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"hr\"",
+      "missing_filters": [
+        "hr"
+      ],
+      "expected_output": "---\n\nSection start",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/image/string-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/image/array-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/image/object-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/italic/asterisk",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/italic/underscore",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "unsupported construct",
+      "reason": "argument on a k4o filter that takes none",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 11: filter 'italic' takes no arguments",
+      "expected_output": "_Emphasized_",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/link/string-data",
+      "category": "filters",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 1: expected \"[Example](https://example.com)\", got \"[https://example.com](Example)\"",
+      "exit": "0",
+      "expected_output": "[Example](https://example.com)",
+      "actual_output": "[https://example.com](Example)"
+    },
+    {
+      "id": "filters/link/array-data",
+      "category": "filters",
+      "status": "fail",
+      "class": "rejected valid template",
+      "reason": "render error at line 1, column 11: filter 'link' expects a text value, but got an array",
+      "exit": "1",
+      "diagnostic": "render error at line 1, column 11: filter 'link' expects a text value, but got an array",
+      "expected_output": "[Source](https://one.example)\n[Source](https://two.example)",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/link/object-data",
+      "category": "filters",
+      "status": "fail",
+      "class": "rejected valid template",
+      "reason": "bad argument at line 1, column 12: filter 'link' requires a URL argument, e.g. link:\"https://example.com/\"",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 12: filter 'link' requires a URL argument, e.g. link:\"https://example.com/\"",
+      "expected_output": "[One](https://one.example)\n[Two](https://two.example)",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/list/bullet-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/list/numbered-list",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "unsupported construct",
+      "reason": "argument on a k4o filter that takes none",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 12: filter 'list' takes no arguments",
+      "expected_output": "1. Apple\n2. Pear",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/list/task-list",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "unsupported construct",
+      "reason": "argument on a k4o filter that takes none",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 12: filter 'list' takes no arguments",
+      "expected_output": "- [ ] Write draft\n- [ ] Review edits",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/list/numbered-task-list",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "unsupported construct",
+      "reason": "argument on a k4o filter that takes none",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 12: filter 'list' takes no arguments",
+      "expected_output": "1. [ ] Write draft\n2. [ ] Review edits",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/math/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "math",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 17: no filter named \"math\"",
+      "missing_filters": [
+        "math"
+      ],
+      "expected_output": "$x^2 + y^2$",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/math-block/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "math_block",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 17: no filter named \"math_block\"",
+      "missing_filters": [
+        "math_block"
+      ],
+      "expected_output": "$$\nx^2 + y^2\n$$",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/strike/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "strike",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"strike\"",
+      "missing_filters": [
+        "strike"
+      ],
+      "expected_output": "~~Removed~~",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/table/array-of-objects",
+      "category": "filters",
+      "status": "fail",
+      "class": "rejected valid template",
+      "reason": "render error at line 1, column 13: filter 'table' expects each row to be an array of cells",
+      "exit": "1",
+      "diagnostic": "render error at line 1, column 13: filter 'table' expects each row to be an array of cells",
+      "expected_output": "| name | role |\n| - | - |\n| Ada | Engineer |\n| Lin | Designer |",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/table/simple-array",
+      "category": "filters",
+      "status": "fail",
+      "class": "rejected valid template",
+      "reason": "render error at line 1, column 12: filter 'table' expects each row to be an array of cells",
+      "exit": "1",
+      "diagnostic": "render error at line 1, column 12: filter 'table' expects each row to be an array of cells",
+      "expected_output": "| Value |\n| - |\n| Ada |\n| Lin |",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/table/array-of-arrays",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "unsupported construct",
+      "reason": "argument on a k4o filter that takes none",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 11: filter 'table' takes no arguments",
+      "expected_output": "| Name | Role |\n| - | - |\n| Ada | Engineer |\n| Lin | Designer |",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/table/custom-columns",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "unsupported construct",
+      "reason": "argument on a k4o filter that takes none",
+      "exit": "1",
+      "diagnostic": "bad argument at line 1, column 13: filter 'table' takes no arguments",
+      "expected_output": "| Name | Role |\n| - | - |\n| Ada | Writer |\n| Lin | Editor |",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/table-pretty/object-array",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "table_pretty",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"table_pretty\"",
+      "missing_filters": [
+        "table_pretty"
+      ],
+      "expected_output": "| name | role     |\n| ---- | -------- |\n| Ada  | Engineer |\n| Lin  | Designer |",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/table-pretty/custom-columns",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "table_pretty",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"table_pretty\"",
+      "missing_filters": [
+        "table_pretty"
+      ],
+      "expected_output": "| Name | Role   |\n| ---- | ------ |\n| Ada  | Writer |\n| Lin  | Editor |",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/wikilink/string-with-alias",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/wikilink/array-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/wikilink/object-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/scalar",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/ambiguous-strings",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/block-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/flow-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/frontmatter-from-an-object",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/wikilink-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/scalar",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/ambiguous-string",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/wikilink-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/nested-object",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/empty-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/calc/addition",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "calc",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"calc\"",
+      "missing_filters": [
+        "calc"
+      ],
+      "expected_output": "15",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/calc/exponentiation",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "calc",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"calc\"",
+      "missing_filters": [
+        "calc"
+      ],
+      "expected_output": "8",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/number-format/decimal-places",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "number_format",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"number_format\"",
+      "missing_filters": [
+        "number_format"
+      ],
+      "expected_output": "1,234,567.89",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/number-format/custom-separators",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "number_format",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 28: tuple arguments hold quoted strings and 'true'/'false'",
+      "missing_filters": [
+        "number_format"
+      ],
+      "expected_output": "1.234,57",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/number-format/array-data",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "number_format",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 14: no filter named \"number_format\"",
+      "missing_filters": [
+        "number_format"
+      ],
+      "expected_output": "[\"1,200.00\",\"3,500.50\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/round/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "round",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"round\"",
+      "missing_filters": [
+        "round"
+      ],
+      "expected_output": "3.14",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/first/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "first",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"first\"",
+      "missing_filters": [
+        "first"
+      ],
+      "expected_output": "a",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/first/empty-array",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "first",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"first\"",
+      "missing_filters": [
+        "first"
+      ],
+      "expected_output": "null",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/compact/array",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "compact",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"compact\"",
+      "missing_filters": [
+        "compact"
+      ],
+      "expected_output": "[\"one\",0,false,\"two\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/compact/object",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "compact",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"compact\"",
+      "missing_filters": [
+        "compact"
+      ],
+      "expected_output": "{\"count\":0,\"enabled\":false}",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/join/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "join",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"join\"",
+      "missing_filters": [
+        "join"
+      ],
+      "expected_output": "notes, ideas, books",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/last/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "last",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"last\"",
+      "missing_filters": [
+        "last"
+      ],
+      "expected_output": "c",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/last/empty-array",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "last",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"last\"",
+      "missing_filters": [
+        "last"
+      ],
+      "expected_output": "null",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/length/array-length",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "length",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"length\"",
+      "missing_filters": [
+        "length"
+      ],
+      "expected_output": "3",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/length/string-length",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "length",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"length\"",
+      "missing_filters": [
+        "length"
+      ],
+      "expected_output": "4",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/length/object-length",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "length",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"length\"",
+      "missing_filters": [
+        "length"
+      ],
+      "expected_output": "2",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/map/property-shorthand",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "map",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"map\"",
+      "missing_filters": [
+        "map"
+      ],
+      "expected_output": "[\"Ada\",\"Lin\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/map/nested-property",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "map",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"map\"",
+      "missing_filters": [
+        "map"
+      ],
+      "expected_output": "[\"Ada\",\"Lin\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/map/construct-objects",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "map",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 24: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "map"
+      ],
+      "expected_output": "[{\"name\":\"Ada\",\"role\":\"Engineer\"},{\"name\":\"Lin\",\"role\":\"Designer\"}]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/map/build-strings",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "map",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 22: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "map"
+      ],
+      "expected_output": "[\"genres/rock\",\"genres/pop\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/merge/append-one-value",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "merge",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"merge\"",
+      "missing_filters": [
+        "merge"
+      ],
+      "expected_output": "[\"notes\",\"ideas\",\"books\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/merge/append-multiple-values",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "merge",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"merge\"",
+      "missing_filters": [
+        "merge"
+      ],
+      "expected_output": "[\"notes\",\"drafts\",\"ideas\",\"books\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/nth/every-nth-item",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "nth",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 17: invalid number literal",
+      "missing_filters": [
+        "nth"
+      ],
+      "expected_output": "[\"b\",\"d\",\"f\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/nth/repeating-groups",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "nth",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 17: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "nth"
+      ],
+      "expected_output": "[2,3,6,7]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/object/keys",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "object",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"object\"",
+      "missing_filters": [
+        "object"
+      ],
+      "expected_output": "[\"name\",\"role\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/object/values",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "object",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"object\"",
+      "missing_filters": [
+        "object"
+      ],
+      "expected_output": "[\"Ada\",\"Writer\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/object/key-value-pairs",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "object",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"object\"",
+      "missing_filters": [
+        "object"
+      ],
+      "expected_output": "[[\"name\",\"Ada\"],[\"role\",\"Writer\"]]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/parse-json/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "parse_json, join",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"parse_json\"",
+      "missing_filters": [
+        "parse_json",
+        "join"
+      ],
+      "expected_output": "one, two",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/reverse/string",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "reverse",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"reverse\"",
+      "missing_filters": [
+        "reverse"
+      ],
+      "expected_output": "cba",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/reverse/array",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "reverse",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"reverse\"",
+      "missing_filters": [
+        "reverse"
+      ],
+      "expected_output": "[\"c\",\"b\",\"a\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/reverse/object",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "reverse",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"reverse\"",
+      "missing_filters": [
+        "reverse"
+      ],
+      "expected_output": "{\"second\":2,\"first\":1}",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/slice/string-range",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "slice",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 18: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "slice"
+      ],
+      "expected_output": "ell",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/slice/array-range",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "slice",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 19: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "slice"
+      ],
+      "expected_output": "[\"b\",\"c\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/slice/negative-start",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "slice",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"slice\"",
+      "missing_filters": [
+        "slice"
+      ],
+      "expected_output": "llo",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/slice/negative-end",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "slice",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 18: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "slice"
+      ],
+      "expected_output": "hel",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/sort/numbers",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "sort",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"sort\"",
+      "missing_filters": [
+        "sort"
+      ],
+      "expected_output": "[1,2,10]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/sort/descending",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "sort",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"sort\"",
+      "missing_filters": [
+        "sort"
+      ],
+      "expected_output": "[\"c\",\"b\",\"a\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/sort/object-property",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "sort",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"sort\"",
+      "missing_filters": [
+        "sort"
+      ],
+      "expected_output": "[{\"name\":\"Ada\"},{\"name\":\"Lin\"}]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/split/separator",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "split",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"split\"",
+      "missing_filters": [
+        "split"
+      ],
+      "expected_output": "[\"a\",\"b\",\"c\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/split/characters",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "split",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"split\"",
+      "missing_filters": [
+        "split"
+      ],
+      "expected_output": "[\"a\",\"b\",\"c\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/split/regular-expression",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "split",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 18: expected a filter argument after ':'",
+      "missing_filters": [
+        "split"
+      ],
+      "expected_output": "[\"a\",\"b\",\"c\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/sum/numeric-values",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "sum",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"sum\"",
+      "missing_filters": [
+        "sum"
+      ],
+      "expected_output": "12.5",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/sum/object-property",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "sum",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"sum\"",
+      "missing_filters": [
+        "sum"
+      ],
+      "expected_output": "12.5",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/template/object",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "template",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"template\"",
+      "missing_filters": [
+        "template"
+      ],
+      "expected_output": "Ada: Engineer",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/template/array-of-objects",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "template",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"template\"",
+      "missing_filters": [
+        "template"
+      ],
+      "expected_output": "Ada: Engineer\n\nLin: Designer",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/template/strings",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "template",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"template\"",
+      "missing_filters": [
+        "template"
+      ],
+      "expected_output": "- rock\n\n- pop",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/unique/primitive-values",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "unique",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"unique\"",
+      "missing_filters": [
+        "unique"
+      ],
+      "expected_output": "[\"notes\",\"ideas\"]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/unique/objects-in-an-array",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "unique",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"unique\"",
+      "missing_filters": [
+        "unique"
+      ],
+      "expected_output": "[{\"a\":1},{\"b\":2}]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/unique/duplicate-object-values",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "unique",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 13: no filter named \"unique\"",
+      "missing_filters": [
+        "unique"
+      ],
+      "expected_output": "{\"second\":\"different\",\"third\":\"same\"}",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/where/boolean-property",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "where, map, join",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"where\"",
+      "missing_filters": [
+        "where",
+        "map",
+        "join"
+      ],
+      "expected_output": "One",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/where/typed-equality",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "where",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"where\"",
+      "missing_filters": [
+        "where"
+      ],
+      "expected_output": "[{\"value\":\"1\"}]",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/remove-attr/one-attribute",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "remove_attr",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"remove_attr\"",
+      "missing_filters": [
+        "remove_attr"
+      ],
+      "expected_output": "<div id=\"intro\">Hello</div>",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/remove-attr/multiple-attributes",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "remove_attr",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"remove_attr\"",
+      "missing_filters": [
+        "remove_attr"
+      ],
+      "expected_output": "<div id=\"intro\">Hello</div>",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/remove-tags/one-tag",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "remove_tags",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"remove_tags\"",
+      "missing_filters": [
+        "remove_tags"
+      ],
+      "expected_output": "<p>Hello world!</p>",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/remove-tags/multiple-tags",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "remove_tags",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"remove_tags\"",
+      "missing_filters": [
+        "remove_tags"
+      ],
+      "expected_output": "<p>Hello world</p>",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/replace-tags/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "replace_tags",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 32: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "replace_tags"
+      ],
+      "expected_output": "<h2>Title</h2>",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/strip-attr/basic-usage",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "strip_attr",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"strip_attr\"",
+      "missing_filters": [
+        "strip_attr"
+      ],
+      "expected_output": "<a href=\"/about\">About</a>",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/strip-md/inline-formatting",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "strip_md",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"strip_md\"",
+      "missing_filters": [
+        "strip_md"
+      ],
+      "expected_output": "Bold and linked",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/strip-md/block-formatting",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "strip_md",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"strip_md\"",
+      "missing_filters": [
+        "strip_md"
+      ],
+      "expected_output": "Heading\n\nQuoted text",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/strip-tags/remove-every-tag",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "strip_tags",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"strip_tags\"",
+      "missing_filters": [
+        "strip_tags"
+      ],
+      "expected_output": "Hello world!",
+      "actual_output": ""
+    },
+    {
+      "id": "filters/strip-tags/keep-selected-tags",
+      "category": "filters",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "strip_tags",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"strip_tags\"",
+      "missing_filters": [
+        "strip_tags"
+      ],
+      "expected_output": "Hello <b>world</b>!",
+      "actual_output": ""
+    },
+    {
+      "id": "logic/if/choose-a-branch",
+      "category": "logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "logic/for/list-tags",
+      "category": "logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "logic/set/create-a-slug",
+      "category": "logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/if",
+      "category": "clipper-logic",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 11: expected \"Author: Ada\", got \"Author: Ada\\n\"",
+      "exit": "0",
+      "expected_output": "Author: Ada",
+      "actual_output": "Author: Ada\n"
+    },
+    {
+      "id": "clipper-logic/elseif",
+      "category": "clipper-logic",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 13: expected \"Draft article\", got \"Draft article\\n\"",
+      "exit": "0",
+      "expected_output": "Draft article",
+      "actual_output": "Draft article\n"
+    },
+    {
+      "id": "clipper-logic/assignment-with-filters",
+      "category": "clipper-logic",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "lower, replace",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 38: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "lower",
+        "replace"
+      ],
+      "expected_output": "File: hello-world.md",
+      "actual_output": ""
+    },
+    {
+      "id": "clipper-logic/fallback",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/chained-fallback",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/filter-before-fallback",
+      "category": "clipper-logic",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "upper",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 9: no filter named \"upper\"",
+      "missing_filters": [
+        "upper"
+      ],
+      "expected_output": "NEWS",
+      "actual_output": ""
+    },
+    {
+      "id": "clipper-logic/filter-fallback-value",
+      "category": "clipper-logic",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "lower",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 23: no filter named \"lower\"",
+      "missing_filters": [
+        "lower"
+      ],
+      "expected_output": "untitled",
+      "actual_output": ""
+    },
+    {
+      "id": "clipper-logic/index",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/quoted-key",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/nested-loops",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/combined-logic",
+      "category": "clipper-logic",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 5: expected \"- Ada\", got \"- Ada\\n\\n\"",
+      "exit": "0",
+      "expected_output": "- Ada",
+      "actual_output": "- Ada\n\n"
+    },
+    {
+      "id": "clipper-logic/empty-iterations-before-and-after-content",
+      "category": "clipper-logic",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 0: expected \"- Ada\\n- Grace\", got \"\\n- Ada\\n\\n\\n- Grace\\n\\n\"",
+      "exit": "0",
+      "expected_output": "- Ada\n- Grace",
+      "actual_output": "\n- Ada\n\n\n- Grace\n\n"
+    },
+    {
+      "id": "clipper-logic/loop-metadata",
+      "category": "clipper-logic",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 4: expected \"1/0/0/2/true/false: a\\n2/1/1/2/false/true: b\", got \"1/0//2/true/false: a\\n2/1//2/false/true: b\"",
+      "exit": "0",
+      "expected_output": "1/0/0/2/true/false: a\n2/1/1/2/false/true: b",
+      "actual_output": "1/0//2/true/false: a\n2/1//2/false/true: b"
+    },
+    {
+      "id": "diagnostics/unclosed-variable",
+      "category": "diagnostics",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 1: unclosed '{{' tag (missing '}}')"
+    },
+    {
+      "id": "diagnostics/unknown-filter",
+      "category": "diagnostics",
+      "status": "fail",
+      "class": "error-case output mismatch",
+      "reason": "error code matches; expected 5 bytes of output alongside the error, k4o's buffered contract emits 0",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"toString\"",
+      "missing_filters": [
+        "toString"
+      ],
+      "expected_output": "value",
+      "actual_output": ""
+    },
+    {
+      "id": "diagnostics/pass-through-warnings",
+      "category": "diagnostics",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "replace, date",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 25: unexpected text in output tag (expected '|' or end of tag)",
+      "missing_filters": [
+        "replace",
+        "date"
+      ],
+      "expected_output": "a[b\nnot-a-date",
+      "actual_output": ""
+    },
+    {
+      "id": "diagnostics/calc-invalid-input",
+      "category": "diagnostics",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "calc",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"calc\"",
+      "missing_filters": [
+        "calc"
+      ],
+      "expected_output": "42abc",
+      "actual_output": ""
+    },
+    {
+      "id": "diagnostics/round-invalid-input",
+      "category": "diagnostics",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "round",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"round\"",
+      "missing_filters": [
+        "round"
+      ],
+      "expected_output": "42abc",
+      "actual_output": ""
+    },
+    {
+      "id": "typed-values/round-into-yaml-property",
+      "category": "typed-values",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "round",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"round\"",
+      "missing_filters": [
+        "round"
+      ],
+      "expected_output": "price: 42.57",
+      "actual_output": ""
+    },
+    {
+      "id": "typed-values/first-nested-collection",
+      "category": "typed-values",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "first",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"first\"",
+      "missing_filters": [
+        "first"
+      ],
+      "expected_output": "[1,2]",
+      "actual_output": ""
+    },
+    {
+      "id": "typed-values/last-nested-collection",
+      "category": "typed-values",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "last",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"last\"",
+      "missing_filters": [
+        "last"
+      ],
+      "expected_output": "[3]",
+      "actual_output": ""
+    },
+    {
+      "id": "typed-values/length-singleton-array",
+      "category": "typed-values",
+      "status": "unsupported",
+      "class": "missing filter",
+      "reason": "length",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 11: no filter named \"length\"",
+      "missing_filters": [
+        "length"
+      ],
+      "expected_output": "1",
+      "actual_output": ""
+    }
+  ]
+}

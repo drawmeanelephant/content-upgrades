@@ -1,0 +1,1699 @@
+{
+  "report": "knap-conformance",
+  "report_version": 1,
+  "label": "main",
+  "revision": "bdfb838a115e86483d9ef1f14d6768a9b9ea0754",
+  "engine": {
+    "path": "~/.cache/knap-engines/k4o-bdfb838/k4o",
+    "version": "k4o 0.1.0",
+    "sha256": "ea9b18150686489e5f7a8ee321c0e69030e1ba40351b3047b8e80e064c35726b",
+    "command": "k4o render <case.knap> --data <data.json> --format markdown"
+  },
+  "corpus": {
+    "path": "../corpus/render.json",
+    "sha256": "a7c011908343cf34c3c1a07d282349b8bc97f03d130f21f4f87ced35466ad152",
+    "format_version": "1",
+    "preset": "standard",
+    "cases": 188
+  },
+  "totals": {
+    "cases": 188,
+    "pass": 181,
+    "fail": 7,
+    "unsupported": 0
+  },
+  "categories": [
+    {
+      "name": "filters",
+      "totals": {
+        "cases": 163,
+        "pass": 163,
+        "fail": 0,
+        "unsupported": 0
+      }
+    },
+    {
+      "name": "logic",
+      "totals": {
+        "cases": 3,
+        "pass": 3,
+        "fail": 0,
+        "unsupported": 0
+      }
+    },
+    {
+      "name": "clipper-logic",
+      "totals": {
+        "cases": 13,
+        "pass": 12,
+        "fail": 1,
+        "unsupported": 0
+      }
+    },
+    {
+      "name": "diagnostics",
+      "totals": {
+        "cases": 5,
+        "pass": 1,
+        "fail": 4,
+        "unsupported": 0
+      }
+    },
+    {
+      "name": "typed-values",
+      "totals": {
+        "cases": 4,
+        "pass": 2,
+        "fail": 2,
+        "unsupported": 0
+      }
+    }
+  ],
+  "filters": {
+    "implemented": [
+      "blockquote",
+      "bold",
+      "calc",
+      "callout",
+      "camel",
+      "capitalize",
+      "code",
+      "code_block",
+      "comment",
+      "compact",
+      "date",
+      "date_modify",
+      "decode_uri",
+      "duration",
+      "embed",
+      "encode_uri",
+      "escape_md",
+      "first",
+      "footnote",
+      "fragment_link",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "hard_break",
+      "highlight",
+      "hr",
+      "image",
+      "indent",
+      "italic",
+      "join",
+      "kebab",
+      "last",
+      "length",
+      "link",
+      "list",
+      "lower",
+      "map",
+      "math",
+      "math_block",
+      "merge",
+      "nth",
+      "number_format",
+      "object",
+      "parse_json",
+      "pascal",
+      "remove_attr",
+      "remove_tags",
+      "replace",
+      "replace_tags",
+      "reverse",
+      "round",
+      "safe_name",
+      "slice",
+      "snake",
+      "sort",
+      "split",
+      "strike",
+      "strip_attr",
+      "strip_md",
+      "strip_tags",
+      "sum",
+      "table",
+      "table_pretty",
+      "template",
+      "title",
+      "trim",
+      "truncate",
+      "truncatewords",
+      "uncamel",
+      "unescape",
+      "unique",
+      "upper",
+      "where",
+      "wikilink",
+      "yaml",
+      "yaml_property"
+    ],
+    "missing": [
+      "toString"
+    ]
+  },
+  "unsupported_by_filter": [],
+  "unsupported_by_construct": [],
+  "fail_by_class": [
+    {
+      "name": "missing warnings",
+      "cases": 3
+    },
+    {
+      "name": "output mismatch",
+      "cases": 3
+    },
+    {
+      "name": "error-case output mismatch",
+      "cases": 1
+    }
+  ],
+  "cases": [
+    {
+      "id": "filters/date/format-a-date",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/date/specify-the-data-format",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/date/iso-week-and-literal-text",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/date-modify/add-time",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/date-modify/subtract-time",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/date-modify/cross-midnight-and-format",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/duration/iso-8601-duration",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/duration/seconds",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/duration/default-format",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/duration/more-than-24-hours",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/camel/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/capitalize/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/decode-uri/unicode-text",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/decode-uri/spaces",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/encode-uri/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/kebab/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/lower/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/pascal/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/replace/remove-text",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/replace/multiple-replacements",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/replace/regular-expression",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/replace/case-insensitive-match",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/safe-name/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/snake/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/title/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/indent/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/indent/choose-a-width",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/trim/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/truncate/default-suffix",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/truncate/custom-suffix",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/truncate/no-suffix",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/truncatewords/default-suffix",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/truncatewords/no-suffix",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/uncamel/camelcase",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/uncamel/pascalcase",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/uncamel/initialism",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/unescape/newline",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/unescape/quotes",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/upper/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/blockquote/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/bold/asterisks",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/bold/underscores",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/callout/type-and-title",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/callout/collapsed-callout",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/code/inline",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/code/language-block",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/code-block/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/comment/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/embed/file",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/embed/alias",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/embed/array-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/escape-md/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/footnote/array-footnotes",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/footnote/object-footnotes",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/fragment-link/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/fragment-link/custom-link-text",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h1/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h2/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h3/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h4/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h5/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/h6/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/hard-break/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/highlight/default",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/highlight/color",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/hr/after",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/hr/before",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/image/string-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/image/array-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/image/object-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/italic/asterisk",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/italic/underscore",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/link/string-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/link/array-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/link/object-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/list/bullet-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/list/numbered-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/list/task-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/list/numbered-task-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/math/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/math-block/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/strike/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/table/array-of-objects",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/table/simple-array",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/table/array-of-arrays",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/table/custom-columns",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/table-pretty/object-array",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/table-pretty/custom-columns",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/wikilink/string-with-alias",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/wikilink/array-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/wikilink/object-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/scalar",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/ambiguous-strings",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/block-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/flow-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/frontmatter-from-an-object",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml/wikilink-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/scalar",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/ambiguous-string",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/wikilink-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/nested-object",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/yaml-property/empty-list",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/calc/addition",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/calc/exponentiation",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/number-format/decimal-places",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/number-format/custom-separators",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/number-format/array-data",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/round/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/first/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/first/empty-array",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/compact/array",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/compact/object",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/join/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/last/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/last/empty-array",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/length/array-length",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/length/string-length",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/length/object-length",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/map/property-shorthand",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/map/nested-property",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/map/construct-objects",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/map/build-strings",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/merge/append-one-value",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/merge/append-multiple-values",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/nth/every-nth-item",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/nth/repeating-groups",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/object/keys",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/object/values",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/object/key-value-pairs",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/parse-json/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/reverse/string",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/reverse/array",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/reverse/object",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/slice/string-range",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/slice/array-range",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/slice/negative-start",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/slice/negative-end",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/sort/numbers",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/sort/descending",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/sort/object-property",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/split/separator",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/split/characters",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/split/regular-expression",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/sum/numeric-values",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/sum/object-property",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/template/object",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/template/array-of-objects",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/template/strings",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/unique/primitive-values",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/unique/objects-in-an-array",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/unique/duplicate-object-values",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/where/boolean-property",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/where/typed-equality",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/remove-attr/one-attribute",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/remove-attr/multiple-attributes",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/remove-tags/one-tag",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/remove-tags/multiple-tags",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/replace-tags/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/strip-attr/basic-usage",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/strip-md/inline-formatting",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/strip-md/block-formatting",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/strip-tags/remove-every-tag",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "filters/strip-tags/keep-selected-tags",
+      "category": "filters",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "logic/if/choose-a-branch",
+      "category": "logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "logic/for/list-tags",
+      "category": "logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "logic/set/create-a-slug",
+      "category": "logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/if",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/elseif",
+      "category": "clipper-logic",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 13: expected \"Draft article\", got \"Draft article\\n\"",
+      "exit": "0",
+      "expected_output": "Draft article",
+      "actual_output": "Draft article\n"
+    },
+    {
+      "id": "clipper-logic/assignment-with-filters",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/fallback",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/chained-fallback",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/filter-before-fallback",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/filter-fallback-value",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/index",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/quoted-key",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/nested-loops",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/combined-logic",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/empty-iterations-before-and-after-content",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "clipper-logic/loop-metadata",
+      "category": "clipper-logic",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "diagnostics/unclosed-variable",
+      "category": "diagnostics",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "1",
+      "diagnostic": "syntax error at line 1, column 1: unclosed '{{' tag (missing '}}')"
+    },
+    {
+      "id": "diagnostics/unknown-filter",
+      "category": "diagnostics",
+      "status": "fail",
+      "class": "error-case output mismatch",
+      "reason": "error code matches; expected 5 bytes of output alongside the error, k4o's buffered contract emits 0",
+      "exit": "1",
+      "diagnostic": "unknown filter at line 1, column 12: no filter named \"toString\"",
+      "missing_filters": [
+        "toString"
+      ],
+      "expected_output": "value",
+      "actual_output": ""
+    },
+    {
+      "id": "diagnostics/pass-through-warnings",
+      "category": "diagnostics",
+      "status": "fail",
+      "class": "missing warnings",
+      "reason": "output byte-exact; k4o reported no warnings, expected INVALID_FILTER_INPUT:replace, INVALID_FILTER_INPUT:date",
+      "exit": "0",
+      "expected_output": "a[b\nnot-a-date",
+      "actual_output": "a[b\nnot-a-date"
+    },
+    {
+      "id": "diagnostics/calc-invalid-input",
+      "category": "diagnostics",
+      "status": "fail",
+      "class": "missing warnings",
+      "reason": "output byte-exact; k4o reported no warnings, expected INVALID_FILTER_INPUT:calc",
+      "exit": "0",
+      "expected_output": "42abc",
+      "actual_output": "42abc"
+    },
+    {
+      "id": "diagnostics/round-invalid-input",
+      "category": "diagnostics",
+      "status": "fail",
+      "class": "missing warnings",
+      "reason": "output byte-exact; k4o reported no warnings, expected INVALID_FILTER_INPUT:round",
+      "exit": "0",
+      "expected_output": "42abc",
+      "actual_output": "42abc"
+    },
+    {
+      "id": "typed-values/round-into-yaml-property",
+      "category": "typed-values",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "typed-values/first-nested-collection",
+      "category": "typed-values",
+      "status": "pass",
+      "class": "pass",
+      "reason": "",
+      "exit": "0"
+    },
+    {
+      "id": "typed-values/last-nested-collection",
+      "category": "typed-values",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 0: expected \"[3]\", got \"3\"",
+      "exit": "0",
+      "expected_output": "[3]",
+      "actual_output": "3"
+    },
+    {
+      "id": "typed-values/length-singleton-array",
+      "category": "typed-values",
+      "status": "fail",
+      "class": "output mismatch",
+      "reason": "first difference at byte 0: expected \"1\", got \"5\"",
+      "exit": "0",
+      "expected_output": "1",
+      "actual_output": "5"
+    }
+  ]
+}
