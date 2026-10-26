@@ -3,11 +3,11 @@
 {{ subtitle | italic }}
 
 {% for s in sources %}
-{{ s.name | h3 }}
+{{ s.name | wikilink | h3 }}
 
 {{ s.url }}
 
-Reliability: {{ s.reliability | bold }} — Give-a-shit: {{ s.gaf }}
+Reliability: {{ s.reliability | bold }} — rel: {{ s.rel }} — Give-a-shit: {{ s.gaf }}
 
 {% if s.quotes %}
 {{ s.quotes | list }}

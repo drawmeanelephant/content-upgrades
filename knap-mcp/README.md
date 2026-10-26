@@ -29,6 +29,7 @@ knap-mcp render verdict -d data/verdict.sample.json --target markdown
 knap-mcp render apparatus -d data/apparatus.sample.json --target html
 knap-mcp repair verdict -d data/verdict.sample.json --backend mock
 knap-mcp lint templates/verdict.knap
+knap-mcp format-check doc-<id>                  # advisory structure lint on a stored doc
 knap-mcp eval --corpus eval/seeds.json --backend mock   # convergence table
 knap-mcp backends                               # backend availability
 knap-mcp                                        # MCP stdio server
@@ -37,8 +38,14 @@ knap-mcp                                        # MCP stdio server
 ## MCP tools
 
 `knap_templates` · `knap_validate` · `knap_render` · `knap_repair` ·
-`knap_lint` — plus `resources/list`/`resources/read` over
-`knap://templates/<id>` and `knap://docs/<doc_id>` artifact handles.
+`knap_lint` · `knap_format_check` — plus `resources/list`/`resources/read`
+over `knap://templates/<id>` and `knap://docs/<doc_id>` artifact handles.
+
+`knap_format_check(doc_id)` is layer-2 validation: advisory structure lint
+over a rendered doc (skipped heading levels, wall-of-text where a table
+belongs, unresolved/unused footnotes, empty callouts, bare-URL count,
+heading/length ratio, unclosed fences, list-heavy docs). Warnings only —
+it never blocks.
 
 ## Repair loop
 
@@ -64,7 +71,10 @@ dangling `|`, unclosed `{{`. Proves the loop with zero API access.
 `eval/seeds.json` mutates shipped templates through pinned error classes;
 each seed runs the repair loop; output is a markdown convergence table plus
 a JSON report in the artifact store. This is the slide-number factory —
-"backend fixes N/M seeded breaks, mean iters X".
+"backend fixes N/M seeded breaks, mean iters X". The corpus includes
+referential-apparatus breaks (unclosed sources loop, bad `wikilink` arg,
+missing `yaml_property` arg) that the mock backend cannot patch — their
+NO rows are the honest non-convergence signal, not a bug.
 
 ## Layout
 
@@ -74,6 +84,7 @@ a JSON report in the artifact store. This is the slide-number factory —
 - `src/engine.zig` — subprocess dispatch + diagnostic parsing
 - `src/backend.zig` — backend interface, mock + remote
 - `src/repair.zig` — bounded loop
+- `src/formatcheck.zig` — advisory structure lint (8 pinned rules)
 - `src/eval.zig` — seeded-breakage harness
 - `src/store.zig` — doc_id artifact handles + scratch files
 - `src/ctx.zig` — shared context (paths, env, allocators)

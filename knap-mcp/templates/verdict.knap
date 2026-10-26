@@ -1,3 +1,8 @@
+{% if frontmatter %}
+---
+{{ frontmatter | yaml }}
+---
+{% endif %}
 {{ title | h1 }}
 
 {{ verdict | bold }} — {{ take }}
@@ -21,3 +26,17 @@
 {{ "Verdict" | h2 }}
 
 {{ bottom_line }}
+
+{% if sources %}
+{{ "Sources" | h2 }}
+
+{% for s in sources %}
+- {{ s.name | wikilink }} — {{ s.url }} ({{ s.rel }}, reliability {{ s.reliability }}, gaf {{ s.gaf }})
+{% endfor %}
+{% endif %}
+
+{% if footnotes %}
+{{ "Footnotes" | h2 }}
+
+{{ footnotes | footnote }}
+{% endif %}

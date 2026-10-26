@@ -7,6 +7,7 @@
 //!     knap-mcp render <id> [-d <file|->] [--target <t>] [--out <file>]
 //!     knap-mcp repair <id> [-d <file|->] [--backend <b>]
 //!     knap-mcp lint <file.knap>             k4o lint passthrough
+//!     knap-mcp format-check <doc_id>        advisory structure lint on a doc
 //!     knap-mcp eval [--corpus <seeds.json>] [--backend <b>]
 //!     knap-mcp backends                     backend availability
 //!     knap-mcp --help | --version
@@ -38,6 +39,7 @@ const usage_text =
     \\  knap-mcp render <id> [options]        render via k4o/dogbed, print doc
     \\  knap-mcp repair <id> [options]        bounded repair loop (max 4)
     \\  knap-mcp lint <file.knap>             k4o lint passthrough
+    \\  knap-mcp format-check <doc_id>        advisory structure lint (warnings only)
     \\  knap-mcp eval [--corpus f] [--backend k]  seeded-breakage convergence
     \\  knap-mcp backends                     backend availability
     \\  knap-mcp --help | --version
@@ -92,6 +94,7 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, cmd, "render")) return cliTool(&ctx, "knap_render", rest);
     if (std.mem.eql(u8, cmd, "repair")) return cliTool(&ctx, "knap_repair", rest);
     if (std.mem.eql(u8, cmd, "lint")) return cmdLint(&ctx, rest);
+    if (std.mem.eql(u8, cmd, "format-check")) return cmdFormatCheck(&ctx, rest);
     if (std.mem.eql(u8, cmd, "eval")) return cmdEval(&ctx, rest);
     if (std.mem.eql(u8, cmd, "backends")) return cmdBackends(&ctx);
     return usage(&ctx, "unknown command");
@@ -228,6 +231,22 @@ fn cmdLint(ctx: *Ctx, args: [][]const u8) !u8 {
     try a.put(ctx.arena, "template_text", .{ .string = text });
     var out: std.Io.Writer.Allocating = .init(ctx.arena);
     tools.dispatch(ctx, "knap_lint", a, &out) catch return usageErr(ctx);
+    var obuf: [8192]u8 = undefined;
+    var w = std.Io.File.stdout().writer(ctx.io, &obuf);
+    w.interface.writeAll(out.written()) catch return 1;
+    w.interface.writeAll("\n") catch return 1;
+    w.flush() catch return 1;
+    return 0;
+}
+
+/// `format-check <doc_id>` takes an artifact handle, not a template_id.
+fn cmdFormatCheck(ctx: *Ctx, args: [][]const u8) !u8 {
+    const o = parseOpts(ctx, args) catch return usageErr(ctx);
+    if (o.positional.items.len != 1) return usageWith(ctx, "format-check needs exactly one doc_id");
+    var a: std.json.ObjectMap = .empty;
+    try a.put(ctx.arena, "doc_id", .{ .string = o.positional.items[0] });
+    var out: std.Io.Writer.Allocating = .init(ctx.arena);
+    tools.dispatch(ctx, "knap_format_check", a, &out) catch return usageErr(ctx);
     var obuf: [8192]u8 = undefined;
     var w = std.Io.File.stdout().writer(ctx.io, &obuf);
     w.interface.writeAll(out.written()) catch return 1;
