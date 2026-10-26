@@ -35,6 +35,7 @@ pub const all = [_]Tool{
     @import("tools/verify_citation.zig").tool,
     @import("tools/boris_ask.zig").tool,
     @import("tools/boris_check.zig").tool,
+    @import("tools/publish_check.zig").tool,
 };
 
 pub const templatePath = common.templatePath;
