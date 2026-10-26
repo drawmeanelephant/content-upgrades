@@ -56,11 +56,6 @@ with a `backend.Task`; don't add another curl path. `mock` has no live
 completion, so a feature that needs offline output keeps its own canned
 path (as `repairPatch` does).
 
-Known gap: `formatcheck.zig`'s tests leak under `std.testing.allocator`,
-so its test-import line is commented out. Until it is fixed, no test may
-call a tool handler: the `knap_format_check` handler would pull those
-leaking tests in and fail `make test`.
-
 ## Gates
 
 Before opening a PR:
