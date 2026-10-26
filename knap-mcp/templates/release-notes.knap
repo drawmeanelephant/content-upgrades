@@ -1,0 +1,91 @@
+{# release-notes.knap: a release, judged. Should you give a shit about this
+   upgrade? Frontmatter is built key by key with yaml_property; optional
+   fields fall back with ?? so the page never renders a hole. Callout kinds,
+   callout titles and section headings are template-owned: the model writes
+   values only. Shape descriptor: shapes/release-notes.json.
+   Spacing: optional blocks open with a blank line and close flush against
+   the next block, and loop separators sit behind "not loop.last", so
+   markdown (which trims one trailing newline per loop body) and textile
+   come out with identical single blank lines. #}{% set heading = title ?? product %}
+{% set slug = heading | kebab %}
+{% set cn = codename ?? "none (too busy shipping)" %}
+{% set bw = breaking_warning ?? "Something in here will break your build. Read it before you upgrade, not after." %}
+---
+{{ product | yaml_property:"product" }}
+{{ version | yaml_property:"version" }}
+{{ cn | yaml_property:"codename" }}
+{{ date | yaml_property:"released" }}
+{{ verdict | yaml_property:"verdict" }}
+{{ gaf | yaml_property:"gaf" }}
+{{ slug | yaml_property:"slug" }}
+{% if tags %}{{ tags | yaml_property:"tags" }}
+{% endif %}{% if related %}{{ related | wikilink | yaml_property:"related" }}
+{% endif %}---
+{{ heading | h1 }}
+
+{{ verdict | bold }} — {{ take }}
+
+{{ version | code }} · released {{ date }} · give-a-shit: {{ gaf | bold }}
+{% if screenshot %}
+
+{% if screenshot_alt %}{{ screenshot | image:screenshot_alt }}{% else %}{{ screenshot | image:product }}{% endif %}
+{% endif %}
+{{ tldr | callout:("tip", "TL;DR") }}
+{% if breaking %}
+
+{{ "Breaking changes" | h2 }}
+
+{{ bw | callout:("danger", "Read this before you upgrade") }}
+
+{% for b in breaking %}
+{{ b.change | h3 }}
+
+{{ b.fix }}{% if b.note %}[^{{ b.note | kebab }}]{% endif %}{% if not loop.last %}
+
+
+{% endif %}{% endfor %}
+{% endif %}
+{{ "What actually changed" | h2 }}
+
+{% for h in highlights %}
+{{ h.name | h3 }}
+
+{{ h.what }}{% if h.note %}[^{{ h.note | kebab }}]{% endif %}{% if h.claim %}
+
+
+{{ h.claim | fragment_link:changelog_url | callout:("quote", "Their words, not ours") }}{% endif %}{% if not loop.last %}
+
+
+{% endif %}{% endfor %}
+{% if upgrade_matrix %}
+
+{{ "Upgrade math" | h2 }}
+
+{{ upgrade_matrix | table }}
+{% endif %}{% if known_issues %}
+
+{{ "Still broken" | h2 }}
+
+{{ known_issues | list }}
+{% endif %}{% if migration_guide %}
+
+{{ "Migration guide" | h2 }}
+
+{{ migration_guide | embed }}
+{% endif %}
+{{ "The verdict" | h2 }}
+
+{{ bottom_line }}
+
+{{ "Receipts" | h2 }}
+
+{{ "Full changelog" | link:changelog_url }}{% if docs_url %} · {{ "Upgrade docs" | link:docs_url }}{% endif %}{% if related %}
+
+
+Filed under:
+{% for r in related %}{% if not loop.first %} · {% endif %}{{ r | wikilink }}{% endfor %}{% endif %}{% if notes %}
+
+
+{{ "Footnotes" | h2 }}
+
+{{ notes | footnote }}{% endif %}
