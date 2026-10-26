@@ -5,6 +5,7 @@
     {
       "name": "AcmeDB docs — backups",
       "url": "https://example.com/acmedb/docs#backups",
+      "rel": "documentation",
       "reliability": "high",
       "gaf": "high",
       "quotes": [
@@ -15,6 +16,7 @@
     {
       "name": "AcmeDB launch post",
       "url": "https://example.com/acmedb/launch",
+      "rel": "self-published",
       "reliability": "medium",
       "gaf": "low",
       "quotes": [
