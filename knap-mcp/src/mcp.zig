@@ -15,9 +15,9 @@ const Allocating = std.Io.Writer.Allocating;
 
 pub fn serve(init: std.process.Init, ctx: *Ctx) !u8 {
     var in_buf: [4 * 1024 * 1024]u8 = undefined;
-    var r = std.Io.File.stdin().reader(init.io, &in_buf);
+    var r = std.Io.File.stdin().readerStreaming(init.io, &in_buf);
     var out_buf: [64 * 1024]u8 = undefined;
-    var w = std.Io.File.stdout().writer(init.io, &out_buf);
+    var w = std.Io.File.stdout().writerStreaming(init.io, &out_buf);
 
     var arena_state = std.heap.ArenaAllocator.init(init.gpa);
     defer arena_state.deinit();
@@ -85,7 +85,7 @@ fn dispatch(ctx: *Ctx, method: []const u8, params: ?std.json.Value, out: *Alloca
     if (std.mem.eql(u8, method, "initialize")) {
         try out.writer.writeAll("{\"protocolVersion\":\"" ++ protocol_version ++ "\",\"capabilities\":{\"tools\":{},\"resources\":{}},\"serverInfo\":{\"name\":\"knap-mcp\",\"version\":");
         try std.json.Stringify.value(@import("build_options").version, .{}, &out.writer);
-        try out.writer.writeAll("}");
+        try out.writer.writeAll("}}");
         return;
     }
     if (std.mem.eql(u8, method, "ping")) {
@@ -219,4 +219,16 @@ fn writeResponse(w: anytype, id: std.json.Value, body: []const u8, comptime fiel
     try std.json.Stringify.value(id, .{}, &w.interface);
     try w.interface.print(",\"{s}\":{s}}}\n", .{ field, body });
     try w.flush();
+}
+
+test "initialize returns one valid JSON object" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx: Ctx = undefined;
+    ctx.arena = arena.allocator();
+    var body: Allocating = .init(ctx.arena);
+    try dispatch(&ctx, "initialize", null, &body);
+    const v = try std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, body.written(), .{});
+    try std.testing.expectEqualStrings(protocol_version, v.object.get("protocolVersion").?.string);
+    try std.testing.expectEqualStrings("knap-mcp", v.object.get("serverInfo").?.object.get("name").?.string);
 }
