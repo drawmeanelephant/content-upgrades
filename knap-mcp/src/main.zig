@@ -402,6 +402,7 @@ fn report(comptime fmt: []const u8, args: anytype) void {
 test {
     _ = @import("backend.zig");
     _ = @import("ctx.zig");
+    _ = @import("density.zig");
     _ = @import("engine.zig");
     _ = @import("eval.zig");
     _ = @import("formatcheck.zig");
