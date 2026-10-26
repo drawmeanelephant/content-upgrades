@@ -1,0 +1,1183 @@
+{
+  "report": "knap-conformance-summary",
+  "report_version": 1,
+  "headline": "k4o main 181/188 → #70 43/188 → #71 48/188",
+  "revisions": [
+    {
+      "label": "main",
+      "revision": "bdfb838a115e86483d9ef1f14d6768a9b9ea0754",
+      "totals": {
+        "cases": 188,
+        "pass": 181,
+        "fail": 7,
+        "unsupported": 0
+      }
+    },
+    {
+      "label": "#70",
+      "revision": "2436fee774221534fff876a5188550be7724c229",
+      "totals": {
+        "cases": 188,
+        "pass": 43,
+        "fail": 12,
+        "unsupported": 133
+      }
+    },
+    {
+      "label": "#71",
+      "revision": "f97c5dbbaec81ded2d90de66b0f4e62bb4c475b1",
+      "totals": {
+        "cases": 188,
+        "pass": 48,
+        "fail": 12,
+        "unsupported": 128
+      }
+    }
+  ],
+  "changes": [
+    {
+      "id": "filters/date/format-a-date",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/date/specify-the-data-format",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/date/iso-week-and-literal-text",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/date-modify/add-time",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/date-modify/subtract-time",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/date-modify/cross-midnight-and-format",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/duration/iso-8601-duration",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/duration/seconds",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/duration/default-format",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/duration/more-than-24-hours",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/camel/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/capitalize/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/decode-uri/unicode-text",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/decode-uri/spaces",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/encode-uri/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/lower/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/pascal/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/replace/remove-text",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/replace/multiple-replacements",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/replace/regular-expression",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/replace/case-insensitive-match",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/safe-name/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/snake/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/title/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/trim/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/truncate/default-suffix",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/truncate/custom-suffix",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/truncate/no-suffix",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/truncatewords/default-suffix",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/truncatewords/no-suffix",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/uncamel/camelcase",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/uncamel/pascalcase",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/uncamel/initialism",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/unescape/newline",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/unescape/quotes",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/upper/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/blockquote/basic-usage",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "filters/bold/underscores",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/callout/type-and-title",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/callout/collapsed-callout",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "filters/code/language-block",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/code-block/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/comment/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/escape-md/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/hard-break/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/highlight/default",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/highlight/color",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/hr/after",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/hr/before",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/italic/underscore",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/link/string-data",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "filters/link/array-data",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "filters/link/object-data",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "filters/list/numbered-list",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/list/task-list",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/list/numbered-task-list",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/math/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/math-block/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/strike/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/table/array-of-objects",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "filters/table/simple-array",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "filters/table/array-of-arrays",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/table/custom-columns",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/table-pretty/object-array",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/table-pretty/custom-columns",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/calc/addition",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/calc/exponentiation",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/number-format/decimal-places",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/number-format/custom-separators",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/number-format/array-data",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/round/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/first/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/first/empty-array",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/compact/array",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/compact/object",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/join/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/last/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/last/empty-array",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/length/array-length",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/length/string-length",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/length/object-length",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/map/property-shorthand",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/map/nested-property",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/map/construct-objects",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/map/build-strings",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/merge/append-one-value",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/merge/append-multiple-values",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/nth/every-nth-item",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/nth/repeating-groups",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/object/keys",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/object/values",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/object/key-value-pairs",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/parse-json/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/reverse/string",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/reverse/array",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/reverse/object",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/slice/string-range",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/slice/array-range",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/slice/negative-start",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/slice/negative-end",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/sort/numbers",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/sort/descending",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/sort/object-property",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/split/separator",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/split/characters",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/split/regular-expression",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/sum/numeric-values",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/sum/object-property",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/template/object",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/template/array-of-objects",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/template/strings",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/unique/primitive-values",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/unique/objects-in-an-array",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/unique/duplicate-object-values",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/where/boolean-property",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/where/typed-equality",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/remove-attr/one-attribute",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/remove-attr/multiple-attributes",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/remove-tags/one-tag",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/remove-tags/multiple-tags",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/replace-tags/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/strip-attr/basic-usage",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/strip-md/inline-formatting",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/strip-md/block-formatting",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/strip-tags/remove-every-tag",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "filters/strip-tags/keep-selected-tags",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "logic/set/create-a-slug",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "clipper-logic/if",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "clipper-logic/assignment-with-filters",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "clipper-logic/fallback",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "clipper-logic/chained-fallback",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "pass"
+      ]
+    },
+    {
+      "id": "clipper-logic/filter-before-fallback",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "clipper-logic/filter-fallback-value",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "clipper-logic/combined-logic",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "clipper-logic/empty-iterations-before-and-after-content",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "clipper-logic/loop-metadata",
+      "statuses": [
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "id": "diagnostics/pass-through-warnings",
+      "statuses": [
+        "fail",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "diagnostics/calc-invalid-input",
+      "statuses": [
+        "fail",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "diagnostics/round-invalid-input",
+      "statuses": [
+        "fail",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "typed-values/round-into-yaml-property",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "typed-values/first-nested-collection",
+      "statuses": [
+        "pass",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "typed-values/last-nested-collection",
+      "statuses": [
+        "fail",
+        "unsupported",
+        "unsupported"
+      ]
+    },
+    {
+      "id": "typed-values/length-singleton-array",
+      "statuses": [
+        "fail",
+        "unsupported",
+        "unsupported"
+      ]
+    }
+  ]
+}
