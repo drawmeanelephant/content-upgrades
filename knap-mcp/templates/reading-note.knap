@@ -31,7 +31,7 @@
 
 {{ title | h1 }}
 
-by {% if author %}{{ author | wikilink }}{% else %}{{ byline }}{% endif %}{% if year %}, {{ year }}{% endif %} · {{ source_url | link:"read it free" }}
+by {% if author %}{{ author | wikilink }}{% else %}{{ byline }}{% endif %}{{ year | replace:"/(.+)/":", $1" }} · {{ source_url | link:"read it free" }}
 {% if cover %}
 
 {{ cover | image:title }}
