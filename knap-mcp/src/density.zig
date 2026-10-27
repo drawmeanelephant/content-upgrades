@@ -230,7 +230,7 @@ pub fn score(arena: std.mem.Allocator, markdown: []const u8) !Score {
     return .{ .total = std.math.clamp(total, 0, 100), .words = s.words, .signals = out, .warnings = warnings };
 }
 
-/// `{"scorer":"density/1","total":..,"words":..,"signals":[{name,raw,
+/// `{"scorer":"density/2","total":..,"words":..,"signals":[{name,raw,
 /// value,normalized,weight,contribution}..],"warnings":[{rule,line,
 /// detail}..]}`. Fixed precision, so equal docs give byte-identical JSON.
 pub fn writeJson(sc: Score, w: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -998,7 +998,7 @@ test "short docs can't saturate positive signals" {
     defer arena.deinit();
     const a = arena.allocator();
     // One of every apparatus token in a 30-word stub scored 100 under
-    // density/1; the length factor keeps it far below real dense docs.
+    // density/2; the length factor keeps it far below real dense docs.
     const doc = try loadFixture(a, "verdict.md");
     const salad =
         "---\ntitle: \"T\"\nsubject: \"S\"\nverdict: \"V\"\ngaf: \"high\"\ntags: \"x\"\n---\n# T\n## S\n### U\n\n" ++
