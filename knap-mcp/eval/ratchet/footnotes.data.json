@@ -1,0 +1,12 @@
+{
+  "title": "AcmeDB 2.0, footnoted",
+  "intro": "AcmeDB 2.0 adds online snapshots and makes cold starts fast. Both claims have receipts in the changelog.",
+  "items": [
+    {"name": "Point-in-time snapshots", "what": "Take a consistent snapshot without pausing writes, and restore to any second inside the retention window."},
+    {"name": "Manifest compaction", "what": "The manifest no longer grows forever, so cold starts on old databases drop from minutes to seconds."}
+  ],
+  "sources": [
+    {"id": "changelog", "quote": "Snapshots are online, incremental, and restorable to any point in the last seven days."},
+    {"id": "changelog", "quote": "Cold start on a 500 GB database fell from 4 minutes to 9 seconds."}
+  ]
+}

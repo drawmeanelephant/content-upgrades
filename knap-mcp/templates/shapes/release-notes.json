@@ -38,6 +38,6 @@
     "bottom_line":      {"type": "string", "role": "closing verdict, 1-2 sentences", "voice": true},
     "changelog_url":    {"type": "string", "role": "release notes or changelog URL (http/https, no #fragment); the 'Full changelog' link and the deep-link target for every highlight `claim`"},
     "docs_url":         {"type": "string", "role": "upgrade docs URL (http/https)", "optional": true, "apparatus": "link"},
-    "notes":            {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key must be referenced by some `note`, and every `note` must be a key here; format_check flags strays", "optional": true, "apparatus": "footnote", "evidence": true}
+    "notes":            {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key must be referenced by some `note`, and every `note` must be a key here; format_check flags strays. As a ratchet step the server picks the key and the item it attaches to; write the note text only, copied verbatim from a source", "optional": true, "apparatus": "footnote", "evidence": true}
   }
 }

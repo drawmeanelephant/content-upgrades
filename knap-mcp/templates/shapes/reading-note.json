@@ -28,6 +28,6 @@
     "bottom_line": {"type": "string", "role": "closing verdict, 1-2 sentences", "voice": true},
     "connections": {"type": "array<string>", "role": "names of existing site pages (author, influences, collections); rendered as [[wikilinks]] in frontmatter `related` and the Connections link cloud. Name only pages that exist; an invented name is a dangling wikilink", "optional": true, "apparatus": "wikilink", "max_items": 3, "words": 3},
     "up_next":     {"type": "string", "role": "name of an existing site page, embedded as ![[name]] under 'Up next'", "optional": true, "apparatus": "embed", "words": 2},
-    "notes":       {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key must be referenced by some quote `note`, and every `note` must be a key here; format_check flags strays", "optional": true, "apparatus": "footnote", "evidence": true}
+    "notes":       {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key must be referenced by some quote `note`, and every `note` must be a key here; format_check flags strays. As a ratchet step the server picks the key and the item it attaches to; write the note text only, copied verbatim from a source", "optional": true, "apparatus": "footnote", "evidence": true}
   }
 }
