@@ -98,7 +98,7 @@ const usage_tail =
     \\Options:
     \\  -d, --data <file|->     JSON data file; - reads stdin (default {})
     \\  --target <t>            markdown (default) | oliver | html
-    \\  --backend <b>           mock (default) | spark | wonder | baseten | acp
+    \\  --backend <b>           mock (default) | spark | wonder | baseten | acp | compat
     \\  --tone <t>              voice tone: mild | spicy | feral
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
@@ -115,10 +115,12 @@ const usage_tail =
     \\  KNAP_MCP_HOME                      artifact store dir (default .knap-mcp)
     \\  KNAP_BACKEND                       default backend kind
     \\  MODEL_API_KEY                      enables spark/wonder/baseten
-    \\  KNAP_<KIND>_URL                    chat endpoint (KIND = SPARK|WONDER|BASETEN)
+    \\  KNAP_<KIND>_URL                    chat endpoint (KIND = SPARK|WONDER|BASETEN|COMPAT)
     \\  KNAP_<KIND>_MODEL                  model id override per backend
     \\  KNAP_<KIND>_MODELS_URL             model-list URL (default: _URL-derived)
     \\  KNAP_<KIND>_TEMPERATURE            0..2 or 'omit'; else KNAP_TEMPERATURE, else 0
+    \\  KNAP_COMPAT_URL / KNAP_COMPAT_MODEL  compat endpoint + model (both required)
+    \\  KNAP_COMPAT_KEY                    compat bearer token (optional)
     \\  KNAP_TEMPERATURE                   shared temperature fallback
     \\  KNAP_ACP_AGENT                     backend acp: agent command (e.g. 'devin acp --agent-type summarizer')
     \\  KNAP_ACP_TIMEOUT / KNAP_ACP_INIT_TIMEOUT   acp call / spawn+init caps, seconds
@@ -379,7 +381,7 @@ fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     const has_key = ctx.environ.get("MODEL_API_KEY") != null;
     try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "backend", "model", "status" });
     try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "mock", "-", "always available (canned patches)" });
-    for ([_]backend.Kind{ .spark, .wonder, .baseten }) |k| {
+    for ([_]backend.Kind{ .spark, .wonder, .baseten, .compat }) |k| {
         ctx.err_msg = "";
         const ep = backend.endpoint(ctx, k) catch {
             try w.interface.print("{s: <10} {s}\n", .{ @tagName(k), ctx.err_msg });
@@ -388,7 +390,12 @@ fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
         try w.interface.print("{s: <10} {s: <32} {s}\n", .{
             @tagName(k),
             ep.model,
-            if (has_key) "MODEL_API_KEY set — live calls enabled" else "needs MODEL_API_KEY",
+            if (k == .compat)
+                backend.statusLine(ctx, k)
+            else if (has_key)
+                "MODEL_API_KEY set — live calls enabled"
+            else
+                "needs MODEL_API_KEY",
         });
         if (!probe) continue;
         ctx.err_msg = "";
