@@ -1,0 +1,133 @@
+/* Demo-only stylesheet for the beat-4 hero still (demo/hero/verdict.png).
+   Wraps dogbed's verdict.html fragment. Catppuccin Mocha, matching the tape
+   theme in demo/tapes/_settings.tape. Compact so the callouts, the receipts
+   table and the footnotes all sit above the 1920x1080 fold. No JavaScript. */
+
+:root {
+  --bg: #1e1e2e;
+  --surface: #313244;
+  --text: #cdd6f4;
+  --subtext: #a6adc8;
+  --mauve: #cba6f7;
+  --blue: #89b4fa;
+  --red: #f38ba8;
+  --yellow: #f9e2af;
+  --green: #a6e3a1;
+  --overlay: #45475a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Doc sits left; the empty right third is the slot for the Muse Image art
+   overlay (placed in Kdenlive by a human). */
+main {
+  max-width: 1200px;
+  margin: 0;
+  padding: 28px 24px 24px 56px;
+}
+
+h1 {
+  font-size: 30px;
+  color: var(--mauve);
+  margin: 0 0 4px;
+  border-bottom: 1px solid var(--overlay);
+  padding-bottom: 6px;
+}
+
+h2 {
+  font-size: 17px;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 14px 0 6px;
+}
+
+p { margin: 6px 0; }
+
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+strong { color: #f5c2e7; }
+code {
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.85em;
+}
+
+ul { margin: 6px 0; padding-left: 22px; }
+li { margin: 2px 0; }
+
+/* Callouts: left accent bar + tinted surface, kind colored. Folded callouts
+   (callout-fold-closed) render as their title bar only — the fold state is
+   template-owned and stays honest on screen. */
+.callout {
+  background: var(--surface);
+  border-left: 4px solid var(--overlay);
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin: 10px 0;
+}
+.callout-title {
+  font-weight: 700;
+  font-size: 0.92em;
+  margin-bottom: 4px;
+}
+.callout > :last-child { margin-bottom: 0; }
+.callout-quote   { border-left-color: var(--mauve); }
+.callout-quote   .callout-title { color: var(--mauve); }
+.callout-danger  { border-left-color: var(--red); }
+.callout-danger  .callout-title { color: var(--red); }
+.callout-warning { border-left-color: var(--yellow); }
+.callout-warning .callout-title { color: var(--yellow); }
+.callout-info    { border-left-color: var(--blue); }
+.callout-info    .callout-title { color: var(--blue); }
+.callout-fold-closed > :not(.callout-title) { display: none; }
+.callout-fold-closed .callout-title::after {
+  content: " ▸";
+  color: var(--subtext);
+  font-weight: 400;
+}
+
+/* Receipts table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 0.92em;
+}
+th, td {
+  text-align: left;
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--overlay);
+  vertical-align: top;
+}
+th {
+  color: var(--green);
+  border-bottom: 2px solid var(--overlay);
+}
+tbody tr:hover { background: rgba(69, 71, 90, 0.35); }
+
+/* Footnotes */
+.footnotes {
+  border-top: 1px solid var(--overlay);
+  margin-top: 12px;
+  padding-top: 4px;
+  font-size: 0.85em;
+  color: var(--subtext);
+}
+.footnotes ol { margin: 4px 0; padding-left: 20px; }
+sup.footnote-ref a { color: var(--yellow); }
+.footnote-backref { color: var(--subtext); }
+
+.embed {
+  color: var(--subtext);
+  font-style: italic;
+}
