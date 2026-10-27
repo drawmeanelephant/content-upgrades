@@ -52,6 +52,15 @@ pub fn repairPatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, d
     };
 }
 
+/// Whether `kind` needs MODEL_API_KEY in the environment. `mock` is
+/// canned and `acp` runs a local agent subprocess — neither sees the key.
+pub fn needsKey(kind: Kind) bool {
+    return switch (kind) {
+        .mock, .acp => false,
+        .spark, .wonder, .baseten => true,
+    };
+}
+
 /// One line for `knap-mcp backends`: what `kind` needs, and whether this
 /// environment has it. Nothing is probed.
 pub fn statusLine(ctx: *Ctx, kind: Kind) []const u8 {

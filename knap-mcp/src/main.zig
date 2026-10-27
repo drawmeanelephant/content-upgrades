@@ -98,7 +98,7 @@ const usage_tail =
     \\Options:
     \\  -d, --data <file|->     JSON data file; - reads stdin (default {})
     \\  --target <t>            markdown (default) | oliver | html
-    \\  --backend <b>           mock (default) | spark | wonder | baseten
+    \\  --backend <b>           mock (default) | spark | wonder | baseten | acp
     \\  --tone <t>              voice tone: mild | spicy | feral
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
@@ -120,6 +120,9 @@ const usage_tail =
     \\  KNAP_<KIND>_MODELS_URL             model-list URL (default: _URL-derived)
     \\  KNAP_<KIND>_TEMPERATURE            0..2 or 'omit'; else KNAP_TEMPERATURE, else 0
     \\  KNAP_TEMPERATURE                   shared temperature fallback
+    \\  KNAP_ACP_AGENT                     backend acp: agent command (e.g. 'devin acp --agent-type summarizer')
+    \\  KNAP_ACP_TIMEOUT / KNAP_ACP_INIT_TIMEOUT   acp call / spawn+init caps, seconds
+    \\  KNAP_ACP_CWD                       acp session cwd (default: process cwd)
     \\  KNAP_BORIS_SITE                    boris site dir (default <templates>/../../boris-site)
     \\  KNAP_BORIS_PATH                    boris binary for publish-check (default: PATH)
     \\  KNAP_ENGINE_TIMEOUT                engine subprocess cap, seconds (default 60, 0 off)
@@ -397,6 +400,7 @@ fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
         for (ids) |id| try w.interface.print(" {s}", .{id});
         try w.interface.writeAll("\n");
     }
+    try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "acp", "-", backend.statusLine(ctx, .acp) });
     try w.interface.print("default    {s} (KNAP_BACKEND)\n", .{@tagName(ctx.backend_kind)});
     try w.flush();
     return 0;

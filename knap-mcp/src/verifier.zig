@@ -128,7 +128,7 @@ fn decide(ctx: *Ctx, claim: []const u8, evidence: []const []const u8) Allocator.
     const why: []const u8 = why: {
         const bk = ctx.backend_kind;
         if (bk == .mock) break :why "backend mock has no live completion";
-        if (ctx.environ.get("MODEL_API_KEY") == null) break :why "no MODEL_API_KEY";
+        if (backend.needsKey(bk) and ctx.environ.get("MODEL_API_KEY") == null) break :why "no MODEL_API_KEY";
 
         var user: std.Io.Writer.Allocating = .init(ctx.arena);
         writePrompt(&user.writer, claim, evidence) catch return error.OutOfMemory;
