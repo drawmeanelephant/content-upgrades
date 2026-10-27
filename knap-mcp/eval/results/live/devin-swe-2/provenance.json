@@ -7,11 +7,11 @@
   "effort": "medium",
   "expect": "swe-2-*",
   "note": null,
-  "started": "2026-10-27T13:33:01Z",
-  "finished": "2026-10-27T13:35:45Z",
+  "started": "2026-10-27T19:35:10Z",
+  "finished": "2026-10-27T19:38:20Z",
   "knap_mcp": {
     "version": "0.1.0",
-    "git": "6096bd5+dirty"
+    "git": "6a1ddc1"
   },
   "engines": {
     "k4o": "k4o-aeba163",
@@ -23,7 +23,8 @@
       "suite": "smoke",
       "command": "knap-mcp smoke --backend acp",
       "exit": 0,
-      "seconds": 11,
+      "seconds": 14,
+      "at": "2026-10-27T19:35:24Z",
       "out": "smoke.out",
       "err": "smoke.err"
     },
@@ -31,7 +32,8 @@
       "suite": "repair",
       "command": "knap-mcp eval --corpus eval/seeds.json --backend acp",
       "exit": 0,
-      "seconds": 63,
+      "seconds": 79,
+      "at": "2026-10-27T19:36:43Z",
       "out": "repair-seeds.out",
       "err": "repair-seeds.err"
     },
@@ -39,7 +41,8 @@
       "suite": "ratchet",
       "command": "knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend acp",
       "exit": 1,
-      "seconds": 46,
+      "seconds": 48,
+      "at": "2026-10-27T19:37:31Z",
       "out": "ratchet.out",
       "err": "ratchet.err"
     },
@@ -47,7 +50,8 @@
       "suite": "voice",
       "command": "knap-mcpvoice_suite",
       "exit": 0,
-      "seconds": 44,
+      "seconds": 49,
+      "at": "2026-10-27T19:38:20Z",
       "out": "voice.out",
       "err": "voice.err"
     }

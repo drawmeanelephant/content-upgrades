@@ -2,8 +2,8 @@ profile: devin-wonder
 label:   Muse Wonder 1.0 via ACP (devin, low thinking)
 backend: acp   model: muse-wonder-1-0-high   effort: low
 smoke:   6/6 ok
-repair:  22/22 conv, 1.05 iters, 10/22 exact
+repair:  22/22 conv, 1.05 iters, 11/22 exact
 repair (2nap): 167/167 conv, 1.03 iters, 108/159 exact
-ratchet: 2/9 cases ok, inert 0
+ratchet: 3/9 cases ok, inert 0
 voice:   2/2 layout-identical
 
