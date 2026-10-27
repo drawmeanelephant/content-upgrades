@@ -3,7 +3,7 @@ backend: acp   corpus: eval/seeds.json   max_iters: 4
 | seed | class | break | converged | iters | residual diags | exact |
 |---|---|---|---|---|---|---|
 | unclosed-if | unclosed-if | remove | yes | 1 | 0 | no |
-| unclosed-for | unclosed-for | remove | yes | 1 | 0 | no |
+| unclosed-for | unclosed-for | remove | yes | 1 | 0 | yes |
 | unclosed-var | unclosed-output | remove | yes | 1 | 0 | no |
 | unknown-filter | unknown-filter | replace | yes | 1 | 0 | yes |
 | dangling-filter | dangling-pipe | replace | yes | 1 | 0 | no |
@@ -15,11 +15,11 @@ backend: acp   corpus: eval/seeds.json   max_iters: 4
 | apparatus-control | control | none | clean | 0 | 0 | - |
 | wikilink-typo | unknown-filter | replace | yes | 1 | 0 | no |
 | bare-dangling-pipe | dangling-pipe | replace | yes | 1 | 0 | no |
-| orphan-endfor | orphan-endfor | remove | yes | 1 | 0 | no |
+| orphan-endfor | orphan-endfor | remove | yes | 1 | 0 | yes |
 | mismatched-endif | mismatched-close | replace | yes | 1 | 0 | yes |
 | unclosed-endif-tag | unclosed-block-tag | replace | yes | 1 | 0 | yes |
 | endif-as-end | unknown-tag | replace | yes | 1 | 0 | yes |
-| if-missing-condition | missing-value | replace | yes | 2 | 0 | no |
+| if-missing-condition | missing-value | replace | yes | 1 | 0 | no |
 | heading-extra-arg | bad-filter-arg | replace | yes | 1 | 0 | yes |
 | callout-control | control | none | clean | 0 | 0 | - |
 | set-missing-value | missing-value | replace | yes | 1 | 0 | no |
@@ -31,23 +31,23 @@ backend: acp   corpus: eval/seeds.json   max_iters: 4
 | class | breaks | converged | rate | mean iters | exact | no-op |
 |---|---|---|---|---|---|---|
 | unclosed-if | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
-| unclosed-for | 2 | 2 | 100% | 1.50 | 0/2 | 0 |
+| unclosed-for | 2 | 2 | 100% | 1.50 | 1/2 | 0 |
 | unclosed-output | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
 | unknown-filter | 2 | 2 | 100% | 1.00 | 1/2 | 0 |
 | dangling-pipe | 2 | 2 | 100% | 1.00 | 0/2 | 0 |
 | orphan-endif | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
-| orphan-endfor | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
+| orphan-endfor | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
 | mismatched-close | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
 | unclosed-block-tag | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
 | unknown-tag | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
-| missing-value | 3 | 3 | 100% | 1.33 | 0/3 | 0 |
+| missing-value | 3 | 3 | 100% | 1.00 | 0/3 | 0 |
 | bad-filter-arg | 2 | 2 | 100% | 1.00 | 2/2 | 0 |
 | missing-filter-arg | 2 | 2 | 100% | 1.00 | 1/2 | 0 |
 | empty-filter-arg | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
 | unclosed-tuple | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
-| all | 22 | 22 | 100% | 1.09 | 8/22 | 0 |
+| all | 22 | 22 | 100% | 1.05 | 10/22 | 0 |
 
-converged 22/22 breaks   mean iters 1.09   exact 8/22   no-op seeds 0   controls 3/3 clean
-calls: 24  mean slice: 419 B  max: 2058 B  prefix: 331 B
-report: knap://docs/doc-1793107830004777000-74
-tokens: prompt 327759  completion 10296  total 338055  reasoning 0
+converged 22/22 breaks   mean iters 1.05   exact 10/22   no-op seeds 0   controls 3/3 clean
+calls: 23  mean slice: 422 B  max: 2058 B  prefix: 331 B
+report: knap://docs/doc-1793108800789656000-73
+tokens: prompt 314065  completion 11019  total 325084  reasoning 0
