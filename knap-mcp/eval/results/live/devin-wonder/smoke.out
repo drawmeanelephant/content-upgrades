@@ -2,13 +2,13 @@ backend: acp   model: muse-wonder-1-0-high   effort: low   served: n/a
 
 | row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
 |---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
-| repair | yes | 3087 | end_turn | 17 | 0 | 13496 | 19 | 13515 | - | exact |  |
-| voice | yes | 1321 | end_turn | 16 | 0 | 13496 | 19 | 13515 | - | exact |  |
-| verify | yes | 1809 | end_turn | 17 | 0 | 13496 | 19 | 13515 | - | exact |  |
-| judge | yes | 1466 | end_turn | 16 | 0 | 13497 | 19 | 13516 | - | exact |  |
-| enrich | yes | 1591 | end_turn | 17 | 0 | 13497 | 25 | 13522 | - | exact |  |
-| repair-patch | yes | 2674 | - | 49 | - | 13572 | 123 | 13695 | - | exact |  |
+| repair | yes | 1679 | end_turn | 17 | 0 | 13496 | 19 | 13515 | - | exact |  |
+| voice | yes | 3729 | end_turn | 16 | 0 | 13496 | 24 | 13520 | - | exact |  |
+| verify | yes | 1756 | end_turn | 17 | 0 | 13496 | 19 | 13515 | - | exact |  |
+| judge | yes | 1862 | end_turn | 16 | 0 | 13497 | 19 | 13516 | - | exact |  |
+| enrich | yes | 3565 | end_turn | 17 | 0 | 13497 | 19 | 13516 | - | exact |  |
+| repair-patch | yes | 2239 | - | 48 | - | 13572 | 109 | 13681 | - | exact |  |
 
-smoke: 6/6 ok   wall 11948 ms   mean 1991 ms/call
+smoke: 6/6 ok   wall 14830 ms   mean 2471 ms/call
 calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
-tokens: prompt 81054  completion 224  total 81278  reasoning 0
+tokens: prompt 81054  completion 209  total 81263  reasoning 0

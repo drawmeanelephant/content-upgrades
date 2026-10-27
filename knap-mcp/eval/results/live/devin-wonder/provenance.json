@@ -7,11 +7,11 @@
   "effort": "low",
   "expect": "muse-wonder-1-0-*",
   "note": null,
-  "started": "2026-10-27T13:44:40Z",
-  "finished": "2026-10-27T13:55:40Z",
+  "started": "2026-10-27T19:31:17Z",
+  "finished": "2026-10-27T19:35:10Z",
   "knap_mcp": {
     "version": "0.1.0",
-    "git": "33ffd02"
+    "git": "6a1ddc1"
   },
   "engines": {
     "k4o": "k4o-aeba163",
@@ -20,40 +20,6 @@
   "host": "Darwin arm64",
   "runs": [
     {
-      "suite": "ratchet",
-      "command": "knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend acp",
-      "exit": 1,
-      "seconds": 90,
-      "out": "ratchet.out",
-      "err": "ratchet.err"
-    },
-    {
-      "suite": "voice",
-      "command": "knap-mcpvoice_suite",
-      "exit": 0,
-      "seconds": 61,
-      "out": "voice.out",
-      "err": "voice.err"
-    },
-    {
-      "suite": "smoke",
-      "command": "knap-mcp smoke --backend acp",
-      "exit": 0,
-      "seconds": 12,
-      "at": "2026-10-27T13:44:52Z",
-      "out": "smoke.out",
-      "err": "smoke.err"
-    },
-    {
-      "suite": "repair",
-      "command": "knap-mcp eval --corpus eval/seeds.json --backend acp",
-      "exit": 0,
-      "seconds": 108,
-      "at": "2026-10-27T13:46:40Z",
-      "out": "repair-seeds.out",
-      "err": "repair-seeds.err"
-    },
-    {
       "suite": "repair",
       "command": "knap-mcp eval --corpus eval/seeds.2nap.json --backend acp",
       "exit": 0,
@@ -61,6 +27,42 @@
       "at": "2026-10-27T13:55:40Z",
       "out": "repair-seeds.2nap.out",
       "err": "repair-seeds.2nap.err"
+    },
+    {
+      "suite": "smoke",
+      "command": "knap-mcp smoke --backend acp",
+      "exit": 0,
+      "seconds": 17,
+      "at": "2026-10-27T19:31:34Z",
+      "out": "smoke.out",
+      "err": "smoke.err"
+    },
+    {
+      "suite": "repair",
+      "command": "knap-mcp eval --corpus eval/seeds.json --backend acp",
+      "exit": 0,
+      "seconds": 92,
+      "at": "2026-10-27T19:33:06Z",
+      "out": "repair-seeds.out",
+      "err": "repair-seeds.err"
+    },
+    {
+      "suite": "ratchet",
+      "command": "knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend acp",
+      "exit": 1,
+      "seconds": 80,
+      "at": "2026-10-27T19:34:26Z",
+      "out": "ratchet.out",
+      "err": "ratchet.err"
+    },
+    {
+      "suite": "voice",
+      "command": "knap-mcpvoice_suite",
+      "exit": 0,
+      "seconds": 44,
+      "at": "2026-10-27T19:35:10Z",
+      "out": "voice.out",
+      "err": "voice.err"
     }
   ]
 }

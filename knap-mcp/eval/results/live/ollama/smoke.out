@@ -1,0 +1,14 @@
+backend: compat   model: qwen2.5-coder:1.5b   effort: -   served: yes
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | yes | 6466 | stop | 17 | 0 | 54 | 7 | 61 | - | exact |  |
+| voice | yes | 164 | stop | 16 | 0 | 54 | 7 | 61 | - | exact |  |
+| verify | yes | 180 | stop | 17 | 0 | 54 | 7 | 61 | - | exact |  |
+| judge | yes | 178 | stop | 16 | 0 | 54 | 7 | 61 | - | exact |  |
+| enrich | yes | 167 | stop | 17 | 0 | 55 | 7 | 62 | - | exact |  |
+| repair-patch | NO | 430 | - | 37 | - | 131 | 12 | 143 | - | wrong |  |
+
+smoke: 5/6 ok   wall 7585 ms   mean 1264 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 402  completion 47  total 449  reasoning 0

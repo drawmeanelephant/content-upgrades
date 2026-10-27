@@ -1,0 +1,9 @@
+profile: ollama
+label:   qwen2.5-coder:1.5b via ollama (local)
+backend: compat   model: qwen2.5-coder:1.5b   effort: -
+smoke:   5/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   -
+note:    smoke repair-patch: wrong shape
