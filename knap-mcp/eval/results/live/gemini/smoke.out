@@ -1,0 +1,14 @@
+backend: acp   model: gemini-1.5-flash   effort: -   served: n/a
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | NO | 1300 | - | - | - | - | - | - | - | none | acp agent 'gemini' failed session/prompt: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Permission denied: Consumer 'projects/undefined' has been suspended.\",\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"rea |
+| voice | NO | 465 | - | - | - | - | - | - | - | none | acp agent 'gemini' failed session/prompt: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Permission denied: Consumer 'projects/undefined' has been suspended.\",\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"rea |
+| verify | NO | 508 | - | - | - | - | - | - | - | none | acp agent 'gemini' failed session/prompt: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Permission denied: Consumer 'projects/undefined' has been suspended.\",\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"rea |
+| judge | NO | 578 | - | - | - | - | - | - | - | none | acp agent 'gemini' failed session/prompt: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Permission denied: Consumer 'projects/undefined' has been suspended.\",\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"rea |
+| enrich | NO | 561 | - | - | - | - | - | - | - | none | acp agent 'gemini' failed session/prompt: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Permission denied: Consumer 'projects/undefined' has been suspended.\",\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"rea |
+| repair-patch | NO | 542 | - | - | - | - | - | - | - | none | acp agent 'gemini' failed session/prompt: {"error":{"message":"{\n  \"error\": {\n    \"code\": 403,\n    \"message\": \"Permission denied: Consumer 'projects/undefined' has been suspended.\",\n    \"status\": \"PERMISSION_DENIED\",\n    \"details\": [\n      {\n        \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",\n        \"rea |
+
+smoke: 0/6 ok   wall 3954 ms   mean 659 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 0  completion 0  total 0  reasoning 0

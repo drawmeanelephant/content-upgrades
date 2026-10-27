@@ -1,0 +1,9 @@
+profile: codex
+label:   gpt-6-luna via ACP (@zed-industries/codex-acp, ChatGPT account)
+backend: acp   model: gpt-6-luna   effort: -
+smoke:   0/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   -
+note:    smoke repair: acp agent 'npx' failed session/prompt: Internal error
