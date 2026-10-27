@@ -11,7 +11,8 @@
 //! the inline kinds: strong, emphasis, strikethrough, code, links, images,
 //! wikilinks, embeds, footnote refs, raw URLs, inline html, hard breaks.
 //! Whitespace-insensitive. Default mode drops link and image targets,
-//! wikilink targets and footnote labels; `strict` keeps them.
+//! wikilink targets, footnote labels and raw-URL/autolink targets;
+//! `strict` keeps them.
 //!
 //! HTML (dogbed output): tag names, nesting, attribute names, and values of
 //! structural attributes (`class`, `type`, `colspan`, ...). Text nodes and
@@ -33,7 +34,8 @@ const startsWith = std.mem.startsWith;
 pub const Format = enum { markdown, html };
 
 pub const Options = struct {
-    /// Keep link, image, wikilink and embed targets and footnote labels.
+    /// Keep link, image, wikilink and embed targets, footnote labels,
+    /// and raw-URL/autolink targets.
     strict: bool = false,
 };
 
@@ -151,8 +153,9 @@ fn mdDoc(o: *Out, doc: []const u8) !void {
     try blocks(o, all);
 }
 
-/// Containers nested deeper than this are flattened to one token, so a
-/// hostile doc cannot exhaust the stack.
+/// Block containers nested deeper than this are flattened to one `deep`
+/// token, and scanInline stops recursing into link text past it, so a
+/// hostile doc cannot exhaust the stack on either axis.
 const max_depth = 64;
 
 fn blocks(o: *Out, lines: Lines) Allocator.Error!void {
@@ -249,6 +252,8 @@ const Marker = struct {
     ordered: bool,
     /// Bullet char, or the ordered delimiter ('.' or ')').
     char: u8,
+    /// The ordered list's start number (0 for bullets).
+    start: u32,
     start_one: bool,
     /// Column where the item's content starts.
     content: usize,
@@ -280,7 +285,7 @@ fn listMarker(line: []const u8) ?Marker {
     const s = trimWs(line);
     if (s.len == 0 or isHr(s)) return null;
     var w: usize = 0;
-    var m: Marker = .{ .indent = indent, .ordered = false, .char = s[0], .start_one = false, .content = 0, .empty = false, .text = "" };
+    var m: Marker = .{ .indent = indent, .ordered = false, .char = s[0], .start = 0, .start_one = false, .content = 0, .empty = false, .text = "" };
     if (s[0] == '-' or s[0] == '*' or s[0] == '+') {
         w = 1;
     } else {
@@ -288,7 +293,8 @@ fn listMarker(line: []const u8) ?Marker {
         if (w == 0 or w >= s.len or (s[w] != '.' and s[w] != ')')) return null;
         m.ordered = true;
         m.char = s[w];
-        m.start_one = std.fmt.parseInt(u32, s[0..w], 10) catch 0 == 1;
+        m.start = std.fmt.parseInt(u32, s[0..w], 10) catch 0;
+        m.start_one = m.start == 1;
         w += 1;
     }
     if (w == s.len) {
@@ -311,7 +317,9 @@ fn sameList(a: Marker, b: Marker) bool {
 /// Parse a list starting at line i; returns the line after it.
 fn list(o: *Out, lines: Lines, start: usize) !usize {
     const first = listMarker(lines[start]).?;
-    try o.open(if (first.ordered) "ol" else "ul");
+    // The start number is layout: `3.` renders a list numbered from 3.
+    const kind: []const u8 = if (!first.ordered) "ul" else if (first.start == 1) "ol" else try std.fmt.allocPrint(o.alloc, "ol:{d}", .{first.start});
+    try o.open(kind);
     var i = start;
     while (i < lines.len) {
         const m = listMarker(lines[i]) orelse break;
@@ -541,7 +549,13 @@ fn joinTrimmed(alloc: Allocator, lines: Lines) ![]const u8 {
     for (lines, 0..) |l, n| {
         if (n > 0) try b.append(alloc, '\n');
         // Keep a trailing backslash: it is a hard break.
-        try b.appendSlice(alloc, std.mem.trimStart(u8, std.mem.trimEnd(u8, l, " \t"), " \t"));
+        const t = trimWs(l);
+        try b.appendSlice(alloc, t);
+        // Two or more trailing spaces are the other hard break: leave the
+        // scanner's `\<newline>` sentinel so it emits the same `br`.
+        if (n + 1 < lines.len and t.len > 0 and t[t.len - 1] != '\\' and
+            l.len - std.mem.trimEnd(u8, l, " ").len >= 2)
+            try b.append(alloc, '\\');
     }
     return b.items;
 }
@@ -662,7 +676,7 @@ const Inl = struct {
 
 fn inlines(o: *Out, text: []const u8) !void {
     var p: Inl = .{ .o = o };
-    try scanInline(&p, text, 0);
+    try scanInline(&p, text, 0, 0);
     std.mem.sort(Ev, p.evs.items, {}, struct {
         fn lt(_: void, a: Ev, b: Ev) bool {
             return a.pos < b.pos or (a.pos == b.pos and a.seq < b.seq);
@@ -694,7 +708,9 @@ fn isSpace(c: u8) bool {
 
 /// Scan `text` (at absolute offset `off`) for inline kinds. Emphasis is
 /// resolved per call, so link text is its own scope (as in CommonMark).
-fn scanInline(p: *Inl, text: []const u8, off: usize) Allocator.Error!void {
+/// `depth` counts nested links: past max_depth the text is left plain
+/// under a single `deep` token, mirroring the block-container cap.
+fn scanInline(p: *Inl, text: []const u8, off: usize, depth: u16) Allocator.Error!void {
     var delims: std.ArrayList(Delim) = .empty;
     var i: usize = 0;
     while (i < text.len) {
@@ -750,7 +766,11 @@ fn scanInline(p: *Inl, text: []const u8, off: usize) Allocator.Error!void {
                     }
                 } else if (linkAt(text, i)) |l| {
                     try p.add(off + i, try p.target("link", text[l.url_start..l.url_end]));
-                    try scanInline(p, text[i + 1 .. l.text_end], off + i + 1);
+                    if (depth < max_depth) {
+                        try scanInline(p, text[i + 1 .. l.text_end], off + i + 1, depth + 1);
+                    } else {
+                        try p.add(off + i + 1, "deep");
+                    }
                     try p.add(off + l.text_end, "/link");
                     i = l.end;
                     continue;
@@ -758,7 +778,7 @@ fn scanInline(p: *Inl, text: []const u8, off: usize) Allocator.Error!void {
                 i += 1;
             },
             '<' => {
-                if (angle(text, i)) |a| {
+                if (try angle(p, text, i)) |a| {
                     try p.add(off + i, a.kind);
                     i = a.end;
                 } else i += 1;
@@ -767,9 +787,9 @@ fn scanInline(p: *Inl, text: []const u8, off: usize) Allocator.Error!void {
                 if ((i == 0 or !std.ascii.isAlphanumeric(text[i - 1])) and
                     (startsWith(u8, text[i..], "https://") or startsWith(u8, text[i..], "http://")))
                 {
-                    try p.add(off + i, "rawurl");
                     var j = i;
                     while (j < text.len and !isSpace(text[j]) and text[j] != '<' and text[j] != ')') j += 1;
+                    try p.add(off + i, try p.target("rawurl", text[i..j]));
                     i = j;
                 } else i += 1;
             },
@@ -857,35 +877,84 @@ fn linkAt(text: []const u8, i: usize) ?LinkSpan {
 const Angle = struct { kind: []const u8, end: usize };
 
 /// An autolink `<scheme:...>` or an inline html tag at text[i] == '<'.
-fn angle(text: []const u8, i: usize) ?Angle {
+/// Tags keep their name and attributes, like the HTML side: every
+/// attribute name survives, structural attribute values survive.
+fn angle(p: *Inl, text: []const u8, i: usize) !?Angle {
     if (startsWith(u8, text[i..], "<!--")) {
         const end = std.mem.findPos(u8, text, i + 4, "-->") orelse return null;
         return .{ .kind = "html:comment", .end = end + 3 };
     }
-    const gt = std.mem.findScalarPos(u8, text, i + 1, '>') orelse return null;
+    const gt = tagClose(text, i + 1) orelse return null;
     const inner = text[i + 1 .. gt];
     if (inner.len == 0) return null;
     if (std.mem.findAny(u8, inner, " \t\n<") == null and std.mem.findScalar(u8, inner, ':') != null and std.ascii.isAlphabetic(inner[0]))
-        return .{ .kind = "autolink", .end = gt + 1 };
+        return .{ .kind = try p.target("autolink", inner), .end = gt + 1 };
     const closing = inner[0] == '/';
     const name_start: usize = if (closing) 1 else 0;
     var n = name_start;
     while (n < inner.len and (std.ascii.isAlphanumeric(inner[n]) or inner[n] == '-')) n += 1;
     if (n == name_start or !std.ascii.isAlphabetic(inner[name_start])) return null;
     if (n < inner.len and !isSpace(inner[n]) and inner[n] != '/') return null;
-    return .{ .kind = tagKinds(inner[name_start..n], closing), .end = gt + 1 };
+    const name = try std.ascii.allocLowerString(p.o.alloc, inner[name_start..n]);
+    if (closing)
+        return .{ .kind = try std.fmt.allocPrint(p.o.alloc, "html:</{s}>", .{name}), .end = gt + 1 };
+    const attrs = try mdAttrs(p.o, inner[n..]);
+    const tag = try tagToken(p.o, name, attrs.items);
+    return .{ .kind = try std.fmt.allocPrint(p.o.alloc, "html:{s}", .{tag}), .end = gt + 1 };
 }
 
-fn tagKinds(name: []const u8, closing: bool) []const u8 {
-    // Common inline tags get static kinds; others are lumped together so
-    // the sink needs no allocator here.
-    const known = [_][]const u8{ "br", "sup", "sub", "span", "kbd", "mark", "abbr", "u", "s", "b", "i", "em", "strong", "small", "img", "a", "div", "details", "summary", "code", "del", "ins" };
-    const open_k = [_][]const u8{ "html:br", "html:sup", "html:sub", "html:span", "html:kbd", "html:mark", "html:abbr", "html:u", "html:s", "html:b", "html:i", "html:em", "html:strong", "html:small", "html:img", "html:a", "html:div", "html:details", "html:summary", "html:code", "html:del", "html:ins" };
-    const close_k = [_][]const u8{ "html:/br", "html:/sup", "html:/sub", "html:/span", "html:/kbd", "html:/mark", "html:/abbr", "html:/u", "html:/s", "html:/b", "html:/i", "html:/em", "html:/strong", "html:/small", "html:/img", "html:/a", "html:/div", "html:/details", "html:/summary", "html:/code", "html:/del", "html:/ins" };
-    for (known, 0..) |k, idx| {
-        if (std.ascii.eqlIgnoreCase(k, name)) return if (closing) close_k[idx] else open_k[idx];
+/// The `>` ending a tag that opens at `from - 1`, skipping `>` inside
+/// quoted attribute values.
+fn tagClose(text: []const u8, from: usize) ?usize {
+    var q: u8 = 0;
+    var j = from;
+    while (j < text.len) : (j += 1) {
+        const c = text[j];
+        if (q != 0) {
+            if (c == q) q = 0;
+        } else if (c == '"' or c == '\'') {
+            q = c;
+        } else if (c == '>') return j;
     }
-    return if (closing) "html:/tag" else "html:tag";
+    return null;
+}
+
+/// Attributes of a markdown inline-html tag, parsed like htmlDoc's:
+/// `name`, `name=value` with quotes optional.
+fn mdAttrs(o: *Out, s: []const u8) !std.ArrayList(Attr) {
+    var attrs: std.ArrayList(Attr) = .empty;
+    var j: usize = 0;
+    while (j < s.len) {
+        while (j < s.len and isSpace(s[j])) j += 1;
+        if (j >= s.len or s[j] == '/') break;
+        const an = j;
+        while (j < s.len and !isSpace(s[j]) and s[j] != '=' and s[j] != '/') j += 1;
+        if (j == an) {
+            j += 1;
+            continue;
+        }
+        const aname = try std.ascii.allocLowerString(o.alloc, s[an..j]);
+        var value: ?[]const u8 = null;
+        var k = j;
+        while (k < s.len and isSpace(s[k])) k += 1;
+        if (k < s.len and s[k] == '=') {
+            k += 1;
+            while (k < s.len and isSpace(s[k])) k += 1;
+            if (k < s.len and (s[k] == '"' or s[k] == '\'')) {
+                const q = s[k];
+                const end = std.mem.findScalarPos(u8, s, k + 1, q) orelse s.len;
+                value = s[k + 1 .. end];
+                j = @min(end + 1, s.len);
+            } else {
+                const vs = k;
+                while (k < s.len and !isSpace(s[k]) and s[k] != '/') k += 1;
+                value = s[vs..k];
+                j = k;
+            }
+        }
+        try attrs.append(o.alloc, .{ .name = aname, .value = value });
+    }
+    return attrs;
 }
 
 /// CommonMark's process_emphasis, simplified: match each closer with the
@@ -1232,7 +1301,7 @@ test "markdown: inline kinds and emphasis rules" {
     try testing.expectEqualStrings("p", try kinds(a, "wal_dir is now storage.wal_path, 5 * 3", .markdown, .{}));
     try testing.expectEqualStrings("p em /em code del /del rawurl", try kinds(a, "_a_ `b*c*` ~~d~~ https://x.example/y", .markdown, .{}));
     try testing.expectEqualStrings("p delim:* delim:* strong /strong", try kinds(a, "**give a **shit**", .markdown, .{}));
-    try testing.expectEqualStrings("p html:sup html:/sup autolink", try kinds(a, "a<sup>1</sup> <https://x.example>", .markdown, .{}));
+    try testing.expectEqualStrings("p html:<sup> html:</sup> autolink", try kinds(a, "a<sup>1</sup> <https://x.example>", .markdown, .{}));
     try testing.expectEqualStrings("p link strong /strong /link", try kinds(a, "[**bold** text](u)", .markdown, .{}));
 }
 
@@ -1263,6 +1332,81 @@ test "markdown: nested and ordered lists, quotes, fences, rules" {
     try expectDiffer("- a\n  - b\n", "- a\n- b\n", .markdown);
     try expectDiffer("1. a\n", "- a\n", .markdown);
     try expectDiffer("> [!warning]- Spoilers\n> x\n", "> [!warning] Spoilers\n> x\n", .markdown);
+}
+
+test "markdown: trailing-space hard breaks survive" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("p br", try kinds(a, "a  \nb\n", .markdown, .{}));
+    try testing.expectEqualStrings("p br", try kinds(a, "a\\\nb\n", .markdown, .{}));
+    try expectSame("a  \nb\n", "a\\\nb\n", .markdown);
+    // One trailing space is a soft break and stays invisible.
+    try expectSame("a\nb\n", "a \nb\n", .markdown);
+    try expectDiffer("a  \nb\n", "a\nb\n", .markdown);
+    try expectDiffer("a  \nb\n", "a \nb\n", .markdown);
+}
+
+test "markdown: nested links are depth-capped, not fatal" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // ~10^5 nested links used to overflow the stack via scanInline.
+    const n = 100_000;
+    var b: std.ArrayList(u8) = .empty;
+    for (0..n) |_| try b.appendSlice(a, "[a ");
+    try b.appendSlice(a, "x");
+    for (0..n) |_| try b.appendSlice(a, "](u)");
+    const toks = try skeleton(a, b.items, .markdown);
+    var links: usize = 0;
+    var deeps: usize = 0;
+    for (toks) |t| {
+        if (eql(u8, t.kind, "link")) links += 1;
+        if (eql(u8, t.kind, "deep")) deeps += 1;
+    }
+    try testing.expectEqual(@as(usize, max_depth + 1), links);
+    try testing.expectEqual(@as(usize, 1), deeps);
+    try testing.expectEqualStrings("p link link /link /link", try kinds(a, "[a [b](u)](u)", .markdown, .{}));
+}
+
+test "markdown: inline html keeps tag names and attributes" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("p html:<video controls>", try kinds(a, "x <video controls> y", .markdown, .{}));
+    try testing.expectEqualStrings("p html:<span class=\"a\"> html:</span>", try kinds(a, "x <span class=\"a\">1</span> y", .markdown, .{}));
+    try testing.expectEqualStrings("p html:<br> html:<img src>", try kinds(a, "x<br/><img src=i.png>", .markdown, .{}));
+    try expectDiffer("x <video controls> y", "x <audio> y", .markdown);
+    try expectDiffer("x <video controls> y", "x <video> y", .markdown);
+    try expectDiffer("x <span class=\"a\"> y", "x <span class=\"b\"> y", .markdown);
+    // Attribute order and text-derived values (id, title) are still dropped.
+    try expectSame("x <span id=\"a\" class=\"k\"> y", "x <span class=\"k\" id=\"b\"> y", .markdown);
+}
+
+test "markdown: ordered-list start number is kept" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("ol:3 li p /li li p /li /ol", try kinds(a, "3. a\n4. b\n", .markdown, .{}));
+    try testing.expectEqualStrings("ol li p /li /ol", try kinds(a, "1. a\n", .markdown, .{}));
+    try expectDiffer("3. a\n4. b\n", "1. a\n2. b\n", .markdown);
+    try expectSame("3. a\n4. b\n", "3. x\n4. y\n", .markdown);
+}
+
+test "markdown: strict keeps raw-url and autolink targets" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const doc_a = "see https://a.example/x and <https://a.example/y>\n";
+    const doc_b = "see https://b.example/x and <https://b.example/y>\n";
+    try expectSame(doc_a, doc_b, .markdown);
+    const sa = try hashOpts(testing.allocator, doc_a, .markdown, .{ .strict = true });
+    const sb = try hashOpts(testing.allocator, doc_b, .markdown, .{ .strict = true });
+    try testing.expect(sa != sb);
+    try testing.expectEqualStrings(
+        "p rawurl(https://a.example/x) autolink(https://a.example/y)",
+        try kinds(a, doc_a, .markdown, .{ .strict = true }),
+    );
 }
 
 test "markdown: table cell padding is ignored, cell count is not" {
