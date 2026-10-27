@@ -1,10 +1,14 @@
-# Beat 1: cold open, the generic AI doc. Clean, but flat: no callouts,
-# no footnotes, no deep links, voice ironed out.
+# Beat 1: cold open, the frozen real flat doc. A verbatim model reply
+# (gpt-5-5-none via ACP (devin), frozen in #140), clean but flat: no
+# callouts, no footnotes, no deep links, no table, voice ironed out.
 # target: 5s
-# status: ready (fixture doc); density score blocked on D1
+# status: ready (frozen real take, labeled as model output on screen)
 # depends: demo/fixtures/generic-ai-doc.md
 #
-# No typing on screen: the doc is already up when the clip starts.
+# No typing on screen: the doc and its label are already up when the clip
+# starts. The label is a dim caption row printed under the doc. The
+# density/2 score (25.7) is recorded in the storyboard row for the
+# Kdenlive overlay (human).
 Output demo/out/tapes/01-cold-open.mp4
 Require glow
 Require jq
@@ -13,17 +17,8 @@ Source demo/tapes/_settings.tape
 Hide
 Type "source demo/lib/env.sh"
 Enter
-Type "clear; glow fixtures/generic-ai-doc.md"
+Type `clear; glow fixtures/generic-ai-doc.md; printf '\e[2m%s\e[0m\n' 'model output: gpt-5-5-none via ACP (devin)'`
 Enter
 Sleep 1s
 Show
 Sleep 5s
-
-# TODO(D1): show the flat doc's density score (expected: low).
-#   docs/next-phase-plan.md has `knap-mcp density <doc_id>`, which scores
-#   stored docs only, so this fixture can't be scored from the CLI. Either
-#   D1 accepts a file path, or the cold open switches to the plan's
-#   "generic" artifact (a template rendered with only required fields):
-#   Type "knap-mcp density $(knap-mcp render verdict -d seeded/verdict.required.json | jq -r .doc_id) | jq -c '{score}'"
-#   Enter
-#   Sleep 2s

@@ -100,7 +100,7 @@ beats() {
     "$(basename "$(dirname "$KNAP_K4O_PATH")")" "$(basename "$(dirname "$KNAP_DOGBED_PATH")")"
 
   beat 1 "cold open: the generic AI doc"
-  say "flat model-style markdown: no callouts, footnotes, deep links or table"
+  say "flat model output, verbatim (gpt-5-5-none via ACP): no callouts, footnotes, deep links or table"
   run <<'CMD'
 head -12 fixtures/generic-ai-doc.md
 CMD
@@ -135,14 +135,22 @@ CMD
   run 1 <<'CMD'
 KNAP_TEMPLATES_DIR=seeded knap-mcp validate verdict -d data/verdict.sample.json | jq -c '.diagnostics[0]'
 CMD
+  say "frozen live repair take (I5): Muse Wonder 1.0 via ACP (devin), converged in 1 iteration"
   run <<'CMD'
-KNAP_TEMPLATES_DIR=seeded knap-mcp repair verdict -d data/verdict.sample.json --target markdown --backend mock --out out/repaired.md | jq -c '{converged, iterations, steps}'
+jq -c '{converged, iterations, step: .steps[0] | {line, detail, patch_applied}}' "$ROOT/demo/frozen/03-repair.json"
+CMD
+  say "the patch itself: what steps[0].patch changes in the seeded region"
+  run <<'CMD'
+jq -j '.steps[0].patch' "$ROOT/demo/frozen/03-repair.json" > out/repair.patch
+CMD
+  run 1 <<'CMD'
+rs=$(jq -r '.steps[0].region_start' "$ROOT/demo/frozen/03-repair.json") && tail -n +$rs seeded/verdict.knap | diff - out/repair.patch
 CMD
   run <<'CMD'
 knap-mcp render verdict -d data/verdict.sample.json --target markdown --out out/verdict.md | jq -c '{ok, target, bytes}'
 CMD
   run <<'CMD'
-cmp out/repaired.md out/verdict.md && echo "repaired doc is byte-identical to the clean render"
+cmp "$ROOT/demo/frozen/03-repaired.md" out/verdict.md && echo "repaired doc is byte-identical to the clean render"
 CMD
 
   beat 4 "the doc: render -> format_check -> density"
