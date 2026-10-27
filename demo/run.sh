@@ -117,7 +117,7 @@ CMD
   run <<'CMD'
 knap-mcp templates | jq -r '.templates[] | select(.id == "verdict") | .shape.fields | keys[]'
 CMD
-  say "the sources the draft drew on: ranked hits from the frozen boris artifact"
+  say "the evidence store: ranked hits from the frozen boris artifact"
   run <<'CMD'
 knap-mcp boris-ask 'AcmeDB backups' --limit 3 | jq -c '.results[] | {score, title}'
 CMD

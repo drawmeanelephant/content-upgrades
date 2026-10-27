@@ -31,7 +31,7 @@ Type `knap-mcp templates | jq -r '.templates[] | select(.id=="verdict") | .shape
 Enter
 Sleep 1.2s
 
-# The sources the draft drew on: ranked hits from the frozen boris artifact.
+# The evidence store: ranked hits from the frozen boris artifact (the draft itself was given only the sample's sources array).
 Type "knap-mcp boris-ask 'AcmeDB backups' --limit 3 | jq -c '.results[] | {score,title}'"
 Enter
 Sleep 1s
