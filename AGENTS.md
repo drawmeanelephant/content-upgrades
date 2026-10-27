@@ -20,6 +20,25 @@ tables and file-ownership hot map live in `docs/PARALLEL-PLAN.md`.
 - A pin bump is its own PR: change one SHA line at the top of
   `scripts/engines.sh`.
 
+## Picking up an issue
+
+The roadmap is the GitHub milestones (`1 · Pre-freeze hardening` →
+`4 · Ship`), not the plan docs. Each issue is one lane.
+
+- Labels say who takes it: `agent:swe-2` (default), `agent:advanced`
+  (Opus-class; the body says why), `human-only` (skip it). Don't take an
+  issue above your tier.
+- Skip anything labeled `blocked:model-key`, and anything whose
+  **Depends on:** issues are still open.
+- Work the lowest-numbered milestone first. Claim the issue with a comment
+  before you start, and leave it alone if someone else already claimed it.
+- The issue's **Files you own** is your lane's ownership list. Its
+  **Done when** plus the Gates below is your gate.
+- Put `Closes #N` in the PR body. If the spec turns out wrong, comment on
+  the issue instead of improvising.
+- New work you find goes in a new issue that follows
+  `.github/ISSUE_TEMPLATE/task.md`, with a tier label and a milestone.
+
 ## File ownership
 
 - Edit only the files your lane owns. If you need another file, don't
