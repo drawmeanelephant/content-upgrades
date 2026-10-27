@@ -27,7 +27,7 @@ Sleep 13s
 
 # The hero shot is the styled dogbed html still, demo/hero/verdict.png
 # (demo/hero/build.sh: wrap + headless Chrome, zero JavaScript); it is
-# composited in Kdenlive, not on this tape. The Muse Image art overlay is
+# composited in Kdenlive, not on this tape. The art overlay (#102) is
 # human work and goes in the still's empty right third.
 # Off screen (the 30s budget goes to the doc itself; demo/run.sh beat 4
 # shows them): format-check (zero warnings on this render) and density

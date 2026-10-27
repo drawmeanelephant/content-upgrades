@@ -42,7 +42,7 @@ export KNAP_MCP_HOME="$WORK/store"
   --target html --out "$WORK/fragment.html" | jq -c '{ok, target, bytes}'
 
 # Wrap the fragment in a real page that links the demo stylesheet. The body
-# class leaves room for the Muse Image art overlay (human, in Kdenlive): the
+# class leaves room for the art overlay (#102, human, in Kdenlive): the
 # still keeps the doc to one column on the left.
 {
   printf '<!doctype html>\n<html lang="en">\n<head>\n'
