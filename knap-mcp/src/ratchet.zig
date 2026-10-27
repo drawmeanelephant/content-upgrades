@@ -698,6 +698,16 @@ fn candLess(_: void, x: Cand, y: Cand) bool {
     return x.slot < y.slot;
 }
 
+/// Rank the probes best-first and keep the ones worth a backend call: at
+/// most `top_k`, and none with gain below `eps` — a sub-ε candidate can
+/// never be accepted, so asking it only burns a call.
+fn askSlice(cands: []Cand, eps: f64) []Cand {
+    std.mem.sort(Cand, cands, {}, candLess);
+    var n = @min(top_k, cands.len);
+    while (n > 0 and cands[n - 1].gain < eps) n -= 1;
+    return cands[0..n];
+}
+
 /// The template's own ceiling: the same greedy probe policy with stub
 /// values, for at most `max_iterations` steps. The plan's "stub every slot
 /// at once" overshoots into the curves' overload decay (reading-note's
@@ -783,15 +793,15 @@ pub fn run(
                 .diag => {},
             }
         }
-        std.mem.sort(Cand, cands.items, {}, candLess);
-        if (cands.items.len == 0 or cands.items[0].gain < eps) {
+        const ask = askSlice(cands.items, eps);
+        if (ask.len == 0) {
             stop = .plateau;
             break;
         }
 
         iterations = iter + 1;
         var accepted = false;
-        for (cands.items[0..@min(top_k, cands.items.len)]) |c| {
+        for (ask) |c| {
             if (calls == max_backend_calls) {
                 stop = .budget;
                 break :outer;
@@ -1490,6 +1500,86 @@ test "warnsSubset compares rule counts, not lines" {
     const more = [_]W{ .{ .rule = "raw-url-count", .line = 9, .detail = "" }, .{ .rule = "skipped-heading", .line = 1, .detail = "" } };
     try testing.expect(warnsSubset(&moved, &old));
     try testing.expect(!warnsSubset(&more, &old));
+}
+
+test "ask slice drops sub-epsilon probes so no backend call is spent on them" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, test_shape);
+    const pull_i = for (sh.slots, 0..) |s, i| {
+        if (std.mem.eql(u8, s.path, "pull")) break i;
+    } else unreachable;
+    const tags_i = for (sh.slots, 0..) |s, i| {
+        if (std.mem.eql(u8, s.path, "tags[+]")) break i;
+    } else unreachable;
+
+    // The issue's case: the second of the top_k probes sits below eps, so
+    // the ask slice drops it rather than spending a retry call on it.
+    var cands = [_]Cand{
+        .{ .slot = pull_i, .gain = epsilon - 0.01 },
+        .{ .slot = tags_i, .gain = 3 * epsilon },
+    };
+    const ask = askSlice(&cands, epsilon);
+    try testing.expectEqual(@as(usize, 1), ask.len);
+    try testing.expectEqual(tags_i, ask[0].slot);
+
+    // Boundary: gain == eps still earns a call (the accept rule is
+    // gain >= eps), and the input is ranked best-first.
+    var edge = [_]Cand{
+        .{ .slot = pull_i, .gain = epsilon },
+        .{ .slot = tags_i, .gain = 3 * epsilon },
+    };
+    const ask2 = askSlice(&edge, epsilon);
+    try testing.expectEqual(@as(usize, 2), ask2.len);
+    try testing.expectEqual(tags_i, ask2[0].slot);
+    try testing.expectEqual(pull_i, ask2[1].slot);
+
+    // top_k caps the slice even when every probe clears eps.
+    var capped = [_]Cand{
+        .{ .slot = pull_i, .gain = 3 * epsilon },
+        .{ .slot = tags_i, .gain = 5 * epsilon },
+        .{ .slot = 0, .gain = 9 * epsilon },
+    };
+    const ask3 = askSlice(&capped, epsilon);
+    try testing.expectEqual(@as(usize, top_k), ask3.len);
+    try testing.expectEqual(@as(usize, 0), ask3[0].slot);
+    try testing.expectEqual(tags_i, ask3[1].slot);
+    var none: [0]Cand = .{};
+    try testing.expectEqual(@as(usize, 0), askSlice(&none, epsilon).len);
+
+    // The same drive the run loop uses: r.ask is the only backend-call
+    // site, and mock_used records every call spent on a slot.
+    var env: std.process.Environ.Map = .init(a);
+    var io_state: std.Io.Threaded = .init(testing.allocator, .{});
+    defer io_state.deinit();
+    var ctx: Ctx = .{
+        .arena = a,
+        .gpa = a,
+        .io = io_state.io(),
+        .environ = &env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = ".knap-mcp",
+        .project_root = ".",
+    };
+    var r: Run = .{
+        .ctx = &ctx,
+        .kind = .mock,
+        .tpl = "",
+        .shape = sh,
+        .opts = .{ .mock = try testData(a, "{\"pull\":[\"p\"],\"tags[+]\":[\"t\"]}") },
+        .evidence = &.{},
+    };
+    var calls: usize = 0;
+    for (ask) |c| {
+        _ = try r.ask(sh.slots[c.slot], try testData(a, "{}"));
+        calls += 1;
+    }
+    try testing.expectEqual(@as(usize, 1), calls);
+    try testing.expect(r.mock_used.get("pull") == null);
+    try testing.expectEqual(@as(usize, 1), r.mock_used.get("tags[+]").?);
 }
 
 const boris_fixture_search =
