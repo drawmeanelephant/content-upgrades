@@ -3,10 +3,14 @@
    fields fall back with ?? so the page never renders a hole. Callout kinds,
    callout titles and section headings are template-owned: the model writes
    values only. Shape descriptor: shapes/release-notes.json.
-   Spacing: optional blocks open with a blank line and close flush against
-   the next block, and loop separators sit behind "not loop.last", so
-   markdown (which trims one trailing newline per loop body) and textile
-   come out with identical single blank lines. Engine note: fragment_link
+   Spacing: optional blocks open with a blank line and close with
+   `{{ "" }}{% endif %}`, which shields the last content line's newline
+   from the standalone-endif trim so every block ends exactly one newline.
+   Loop bodies end with a blank line: each iteration drops one trailing
+   newline and the loop joins iterations with one, which leaves a single
+   blank line between items. Footnote refs come from a replace filter so a
+   silent inline if cannot arm the post-tag whitespace strip that eats the
+   next newline. Engine note: fragment_link
    links only arrays of two or more items, so each lone claim is padded
    with merge and unwrapped with first (see verdict.knap). #}{% set heading = title ?? product %}
 {% set slug = heading | kebab %}
@@ -23,6 +27,7 @@
 {% if tags %}{{ tags | yaml_property:"tags" }}
 {% endif %}{% if related %}{{ related | wikilink | yaml_property:"related" }}
 {% endif %}---
+
 {{ heading | h1 }}
 
 {{ verdict | bold }} — {{ take }}
@@ -31,7 +36,7 @@
 {% if screenshot %}
 
 {% if screenshot_alt %}{{ screenshot | image:screenshot_alt }}{% else %}{{ screenshot | image:product }}{% endif %}
-{% endif %}
+{{ "" }}{% endif %}
 {{ tldr | callout:("tip", "TL;DR") }}
 {% if breaking %}
 
@@ -42,24 +47,21 @@
 {% for b in breaking %}
 {{ b.change | h3 }}
 
-{{ b.fix }}{% if b.note %}[^{{ b.note | kebab }}]{% endif %}{% if not loop.last %}
+{{ b.fix }}{{ b.note | kebab | replace:"/(.+)/":"[^$1]" }}
 
-
-{% endif %}{% endfor %}
+{% endfor %}
 {% endif %}
 {{ "What actually changed" | h2 }}
 
 {% for h in highlights %}
 {{ h.name | h3 }}
 
-{{ h.what }}{% if h.note %}[^{{ h.note | kebab }}]{% endif %}{% if h.claim %}
+{{ h.what }}{{ h.note | kebab | replace:"/(.+)/":"[^$1]" }}{% if h.claim %}
 
 
-{{ h.claim | merge:"" | fragment_link:changelog_url | first | callout:("quote", "Their words, not ours") }}{% endif %}{% if not loop.last %}
+{{ h.claim | merge:"" | fragment_link:changelog_url | first | callout:("quote", "Their words, not ours") }}{% endif %}
 
-
-{% endif %}{% endfor %}
-{% if upgrade_matrix %}
+{% endfor %}{% if upgrade_matrix %}
 
 {{ "Upgrade math" | h2 }}
 
@@ -68,17 +70,17 @@
 {% for r in upgrade_matrix %}
 | {{ r.on }} | {{ r.effort }} | {{ r.downtime }} | {{ r.bother }} |
 {% endfor %}
-{% endif %}{% if known_issues %}
+{{ "" }}{% endif %}{% if known_issues %}
 
 {{ "Still broken" | h2 }}
 
 {{ known_issues | list }}
-{% endif %}{% if migration_guide %}
+{{ "" }}{% endif %}{% if migration_guide %}
 
 {{ "Migration guide" | h2 }}
 
 {{ migration_guide | embed }}
-{% endif %}
+{{ "" }}{% endif %}
 {{ "The verdict" | h2 }}
 
 {{ bottom_line }}

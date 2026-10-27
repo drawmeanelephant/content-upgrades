@@ -19,6 +19,7 @@
 {% endif %}
 {{ sources | map:"name" | wikilink | yaml_property:"sources" }}
 ---
+
 {{ heading | h1 }}
 
 {{ deck | italic }}
