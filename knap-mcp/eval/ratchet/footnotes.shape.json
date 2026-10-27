@@ -1,0 +1,44 @@
+{
+  "template_id": "footnotes",
+  "description": "Ratchet eval fixture: footnotes as a ratchet step (issue #83). `notes` grows one key at a time through a paired write: the server picks the item whose `note` is empty and the key slug, the model writes only the note text, copied verbatim from a source. `extras` items may carry a `note`, which must already be a key in `notes`.",
+  "fields": {
+    "title": {
+      "type": "string",
+      "role": "page heading"
+    },
+    "intro": {
+      "type": "string",
+      "role": "one paragraph of prose",
+      "voice": true
+    },
+    "items": {
+      "type": "array<object>",
+      "role": "what changed, one h2 each",
+      "fields": {
+        "name": {"type": "string", "role": "feature name, h2 heading"},
+        "what": {"type": "string", "role": "what it does, 1-3 sentences", "voice": true, "footnote_abutting": true},
+        "note": {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref", "optional": true, "ref": "notes"}
+      }
+    },
+    "extras": {
+      "type": "array<object>",
+      "role": "smaller changes, one bullet each",
+      "optional": true,
+      "apparatus": "list",
+      "max_items": 2,
+      "words": 8,
+      "fields": {
+        "what": {"type": "string", "role": "the change, one sentence"},
+        "note": {"type": "string", "role": "key into `notes`; must match a `notes` key exactly", "optional": true, "ref": "notes"}
+      }
+    },
+    "notes": {
+      "type": "object<string,string>",
+      "role": "footnotes: key -> note text, rendered as [^key]: definitions. The server picks the key and the item it attaches to; write the note text only, copied verbatim from a source",
+      "optional": true,
+      "apparatus": "footnote",
+      "evidence": true,
+      "max_items": 2
+    }
+  }
+}

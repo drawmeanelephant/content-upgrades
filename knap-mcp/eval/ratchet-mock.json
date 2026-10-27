@@ -12,6 +12,10 @@
         {"on": "1.8.x", "effort": "config key plus driver bump", "downtime": "one restart", "bother": "yes, this week"},
         {"on": "1.7 or older", "effort": "dump and reload", "downtime": "plan a window", "bother": "yes, but bring snacks"}
       ],
+      "notes{+}": [
+        "Snapshots are online, incremental, and restorable to any point in the last seven days.",
+        "Cold start on a 500 GB database fell from 4 minutes to 9 seconds."
+      ],
       "known_issues[+]": [
         "Snapshots of databases over 2 TB take hours, not minutes.",
         "Still single-region. Cross-region replication is on the roadmap. Again."
@@ -50,6 +54,15 @@
       "callouts[+]": [
         {"kind": "warning", "body": "Back up before you upgrade; the migration is one way."},
         {"kind": "tip", "body": "Run the doctor command first, it catches the config rename."}
+      ]
+    },
+    "footnotes": {
+      "notes{+}": [
+        "Snapshots are online, incremental, and restorable to any point in the last seven days.",
+        "Cold start on a 500 GB database fell from 4 minutes to 9 seconds."
+      ],
+      "extras[+]": [
+        {"what": "acmedb doctor explains what is wrong in plain English."}
       ]
     },
     "ladder": {

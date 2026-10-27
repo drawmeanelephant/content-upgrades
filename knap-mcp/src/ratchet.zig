@@ -13,6 +13,11 @@
 //! shape enumerates, and declining with null. v1 fills empty top-level
 //! scalars and appends to top-level arrays; it never changes a non-empty
 //! value, and the best score only goes up.
+//!
+//! Footnotes are the one paired write: a `notes{+}` slot appends one key
+//! to an `object<string,string>` map and, in the same write, sets the empty
+//! `ref` field of an existing array element to that key. The server picks
+//! the element and the key slug; the model writes only the note text.
 
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
@@ -60,9 +65,26 @@ pub const Error = error{ ToolFailed, OutOfMemory, WriteFailed } || std.process.R
 /// addition to the plan's list (a plain URL slot rendered through `link`).
 pub const Apparatus = enum { footnote, callout, wikilink, embed, image, link, fragment_link, table, quote, frontmatter, list };
 
-/// Value kinds the ratchet can grow. `object<…>` maps (footnote notes) are
-/// `other`: filling them needs a nested write, which v1 does not do.
-pub const Kind = enum { string, number, strings, objects, rows, other };
+/// Value kinds the ratchet can grow. `keyed` is an `object<string,string>`
+/// map (footnote notes) that grows one key at a time through a paired
+/// write; it is a slot only when some array<object> item field `ref`s it.
+pub const Kind = enum { string, number, strings, objects, rows, keyed, other };
+
+/// Longest server-chosen footnote key, in kebab words and bytes.
+const max_key_words = 4;
+const max_key_len = 32;
+
+/// A field whose value must be a key of the map `target`: a top-level
+/// string or array<string> (`sub == null`), or the item field `sub` of an
+/// array<object>.
+pub const RefSite = struct {
+    field: []const u8,
+    sub: ?[]const u8 = null,
+    target: []const u8,
+    /// The item's first required plain string field: the footnote key is
+    /// its kebab form.
+    label: ?[]const u8 = null,
+};
 
 pub const Field = struct {
     name: []const u8,
@@ -91,8 +113,11 @@ pub const Slot = struct {
     role: []const u8,
     /// The shape entry as JSON, quoted into the enrich slice.
     schema: []const u8,
-    /// `name` for scalars, `name[+]` for arrays.
+    /// `name` for scalars, `name[+]` for arrays, `name{+}` for keyed maps.
     path: []const u8,
+    /// Keyed slots: the item ref fields a new key can anchor to, in shape
+    /// order.
+    hosts: []const RefSite = &.{},
 
     pub fn isArray(s: Slot) bool {
         return switch (s.field.kind) {
@@ -113,6 +138,8 @@ pub const Shape = struct {
     slots: []const Slot,
     /// Required top-level string fields: the HEADLINE context of a slice.
     headline: []const []const u8,
+    /// Every `ref` in the shape, for document-level ref integrity.
+    refs: []const RefSite = &.{},
 };
 
 pub fn loadShape(ctx: *Ctx, path: []const u8) Error!Shape {
@@ -134,6 +161,7 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
         else => "",
     };
 
+    const refs = try parseRefs(arena, fields.object);
     var slots: std.ArrayList(Slot) = .empty;
     var headline: std.ArrayList([]const u8) = .empty;
     var it = fields.object.iterator();
@@ -149,9 +177,15 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
         const has_max = spec.object.get("max_items") != null;
         // A required field grows only when the shape bounds it.
         if (f.kind == .other or (!f.optional and !has_max)) continue;
+        var hosts: std.ArrayList(RefSite) = .empty;
+        if (f.kind == .keyed) {
+            for (refs) |rs| if (rs.sub != null and std.mem.eql(u8, rs.target, name)) try hosts.append(arena, rs);
+            // A key nothing can reference only adds an unused footnote.
+            if (hosts.items.len == 0) continue;
+        }
         // evidenceClaims can only quote strings; on any other slot kind
         // the evidence flag would gate the slot but verify nothing.
-        if (f.evidence and f.kind != .string and f.kind != .strings) return error.BadShape;
+        if (f.evidence and f.kind != .string and f.kind != .strings and f.kind != .keyed) return error.BadShape;
         // The slice carries ROLE on its own line; keep it out of SCHEMA.
         var schema = try spec.object.clone(arena);
         _ = schema.orderedRemove("role");
@@ -163,14 +197,45 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
             .role = str(spec.object, "role") orelse "",
             .schema = try std.json.Stringify.valueAlloc(arena, Value{ .object = schema }, .{}),
             .path = name,
+            .hosts = hosts.items,
         };
-        if (!slot.isArray()) slot.max_items = 1;
+        if (!slot.isArray() and f.kind != .keyed) slot.max_items = 1;
         slot.field.url = apparatus == .image or apparatus == .link;
         slot.field.page = apparatus == .wikilink or apparatus == .embed;
         if (slot.isArray()) slot.path = try std.fmt.allocPrint(arena, "{s}[+]", .{name});
+        if (f.kind == .keyed) slot.path = try std.fmt.allocPrint(arena, "{s}{{+}}", .{name});
         try slots.append(arena, slot);
     }
-    return .{ .template_id = id, .slots = slots.items, .headline = headline.items };
+    return .{ .template_id = id, .slots = slots.items, .headline = headline.items, .refs = refs };
+}
+
+/// Every `ref` annotation, top-level and array<object> item fields, in
+/// shape order.
+fn parseRefs(arena: std.mem.Allocator, fields: ObjectMap) ![]const RefSite {
+    var out: std.ArrayList(RefSite) = .empty;
+    var it = fields.iterator();
+    while (it.next()) |e| {
+        if (e.value_ptr.* != .object) return error.BadShape;
+        const spec = e.value_ptr.object;
+        if (str(spec, "ref")) |t| try out.append(arena, .{ .field = e.key_ptr.*, .target = t });
+        const sv = spec.get("fields") orelse continue;
+        if (sv != .object) return error.BadShape;
+        if (!std.mem.eql(u8, str(spec, "type") orelse "", "array<object>")) continue;
+        var label: ?[]const u8 = null;
+        for (sv.object.keys(), sv.object.values()) |k, v| {
+            if (v != .object) return error.BadShape;
+            const plain = std.mem.eql(u8, str(v.object, "type") orelse "string", "string");
+            if (plain and !boolean(v.object, "optional") and str(v.object, "ref") == null) {
+                label = k;
+                break;
+            }
+        }
+        for (sv.object.keys(), sv.object.values()) |k, v| {
+            const t = str(v.object, "ref") orelse continue;
+            try out.append(arena, .{ .field = e.key_ptr.*, .sub = k, .target = t, .label = label });
+        }
+    }
+    return out.items;
 }
 
 fn parseField(arena: std.mem.Allocator, name: []const u8, spec: ObjectMap, inherit_words: usize) !Field {
@@ -216,6 +281,8 @@ fn kindOf(ty: []const u8) Kind {
         .{ "array<string>", .strings },
         .{ "array<object>", .objects },
         .{ "array<array<string>>", .rows },
+        .{ "object<string,string>", .keyed },
+        .{ "object<string>", .keyed },
     };
     for (map) |m| if (std.mem.eql(u8, ty, m[0])) return m[1];
     return .other;
@@ -258,6 +325,14 @@ fn isEmpty(v: ?Value) bool {
 /// wrong type never grows.
 pub fn canGrow(data: ObjectMap, s: Slot) bool {
     const v = data.get(s.field.name);
+    if (s.field.kind == .keyed) {
+        const n: usize = switch (v orelse @as(Value, .null)) {
+            .null => 0,
+            .object => |o| o.count(),
+            else => return false,
+        };
+        return n < s.max_items and anchor(data, s) != null;
+    }
     if (!s.isArray()) return isEmpty(v);
     return switch (v orelse return true) {
         .null => true,
@@ -266,10 +341,87 @@ pub fn canGrow(data: ObjectMap, s: Slot) bool {
     };
 }
 
+/// Where a keyed slot's next key attaches: an existing array element and
+/// its empty ref field.
+pub const Anchor = struct {
+    site: RefSite,
+    index: usize,
+    item: ObjectMap,
+};
+
+/// The first element, in shape order then data order, whose ref field into
+/// the slot's map is empty. The server's choice, never the model's.
+pub fn anchor(data: ObjectMap, s: Slot) ?Anchor {
+    for (s.hosts) |h| {
+        const arr = data.get(h.field) orelse continue;
+        if (arr != .array) continue;
+        for (arr.array.items, 0..) |item, i| {
+            if (item != .object) continue;
+            if (isEmpty(item.object.get(h.sub.?))) return .{ .site = h, .index = i, .item = item.object };
+        }
+    }
+    return null;
+}
+
+/// The key a new note gets: the anchor's label field in kebab case (at most
+/// `max_key_words` words and `max_key_len` bytes, so k4o's `kebab` leaves
+/// it unchanged), made unique against the map's keys. `note` when the
+/// label has no ASCII word.
+pub fn noteKey(arena: std.mem.Allocator, at: Anchor, keys: ObjectMap) ![]const u8 {
+    const label = if (at.site.label) |l| str(at.item, l) orelse "" else "";
+    var aw: std.Io.Writer.Allocating = .init(arena);
+    var words: usize = 0;
+    var i: usize = 0;
+    while (words < max_key_words) {
+        while (i < label.len and !std.ascii.isAlphanumeric(label[i])) i += 1;
+        const start = i;
+        while (i < label.len and std.ascii.isAlphanumeric(label[i])) i += 1;
+        if (i == start or aw.written().len + (i - start) + 1 > max_key_len) break;
+        if (words > 0) try aw.writer.writeByte('-');
+        for (label[start..i]) |c| try aw.writer.writeByte(std.ascii.toLower(c));
+        words += 1;
+    }
+    const base = if (words == 0) "note" else aw.written();
+    if (keys.get(base) == null) return base;
+    var n: usize = 2;
+    while (true) : (n += 1) {
+        const k = try std.fmt.allocPrint(arena, "{s}-{d}", .{ base, n });
+        if (keys.get(k) == null) return k;
+    }
+}
+
+/// `field[i].sub=key` for the write a keyed slot would make on `data`.
+fn anchorLabel(arena: std.mem.Allocator, data: ObjectMap, s: Slot) ![]const u8 {
+    const at = anchor(data, s) orelse return "";
+    return std.fmt.allocPrint(arena, "{s}[{d}].{s}={s}", .{ at.site.field, at.index, at.site.sub.?, try noteKey(arena, at, keysOf(data, s)) });
+}
+
+fn keysOf(data: ObjectMap, s: Slot) ObjectMap {
+    const v = data.get(s.field.name) orelse return .empty;
+    return if (v == .object) v.object else .empty;
+}
+
 /// A copy of `data` with `value` set on (or appended to) the slot. The
-/// original is never touched, so `best` stays intact.
+/// original is never touched, so `best` stays intact. A keyed slot is the
+/// paired write: the new key and the anchor's ref land together, so the
+/// ref always resolves.
 pub fn withValue(arena: std.mem.Allocator, data: ObjectMap, s: Slot, value: Value) !ObjectMap {
     var m = try data.clone(arena);
+    if (s.field.kind == .keyed) {
+        // Callers only write slots canGrow accepted.
+        const at = anchor(data, s) orelse unreachable;
+        var keys = try keysOf(data, s).clone(arena);
+        const key = try noteKey(arena, at, keys);
+        try keys.put(arena, key, value);
+        var item = try at.item.clone(arena);
+        try item.put(arena, at.site.sub.?, .{ .string = key });
+        var arr = std.json.Array.init(arena);
+        try arr.appendSlice(data.get(at.site.field).?.array.items);
+        arr.items[at.index] = .{ .object = item };
+        try m.put(arena, at.site.field, .{ .array = arr });
+        try m.put(arena, s.field.name, .{ .object = keys });
+        return m;
+    }
     if (!s.isArray()) {
         try m.put(arena, s.field.name, value);
         return m;
@@ -295,7 +447,7 @@ fn rowWidth(data: ObjectMap, s: Slot) usize {
 pub fn stub(arena: std.mem.Allocator, data: ObjectMap, s: Slot) !Value {
     switch (s.field.kind) {
         .number => return .{ .integer = 1 },
-        .string, .strings => return .{ .string = try stubText(arena, s.field) },
+        .string, .strings, .keyed => return .{ .string = try stubText(arena, s.field) },
         .objects => {
             var o: ObjectMap = .empty;
             for (s.field.sub) |f| {
@@ -338,7 +490,7 @@ fn filled(data: ObjectMap, slots: []const Slot) usize {
 /// Returns the rejection detail, or null when the value fits.
 pub fn checkSchema(arena: std.mem.Allocator, s: Slot, value: Value, data: ObjectMap) !?[]const u8 {
     switch (s.field.kind) {
-        .string, .strings => {
+        .string, .strings, .keyed => {
             if (try checkString(arena, s.field, value)) |why| return why;
             if (s.field.ref) |ref| {
                 const keys = data.get(ref);
@@ -408,6 +560,67 @@ fn checkString(arena: std.mem.Allocator, f: Field, v: Value) !?[]const u8 {
         if (!scheme or std.mem.indexOfAny(u8, s, " \t") != null) return "url: needs an http/https URL";
     }
     return null;
+}
+
+/// Document-level `ref` integrity: every non-empty ref names a key of its
+/// map, and every key of a referenced map is named by some ref (format_check's
+/// `unresolved-footnote` / `unused-footnote`, caught before the render).
+/// Returns the first stray, or null.
+pub fn refCheck(arena: std.mem.Allocator, shape: Shape, data: ObjectMap) !?[]const u8 {
+    for (shape.refs) |rs| {
+        const v = data.get(rs.field) orelse continue;
+        const items: []const Value = switch (v) {
+            .array => |a| a.items,
+            else => @as(*const [1]Value, &v),
+        };
+        for (items, 0..) |item, i| {
+            const key = refValue(rs, item) orelse continue;
+            if (keyIn(data, rs.target, key)) continue;
+            const path = if (v != .array)
+                rs.field
+            else if (rs.sub) |sub|
+                try std.fmt.allocPrint(arena, "{s}[{d}].{s}", .{ rs.field, i, sub })
+            else
+                try std.fmt.allocPrint(arena, "{s}[{d}]", .{ rs.field, i });
+            return try std.fmt.allocPrint(arena, "ref: {s} '{s}' is not a key in '{s}'", .{ path, key, rs.target });
+        }
+    }
+    for (shape.refs, 0..) |rs, n| {
+        const seen = for (shape.refs[0..n]) |p| {
+            if (std.mem.eql(u8, p.target, rs.target)) break true;
+        } else false;
+        if (seen) continue;
+        const map = data.get(rs.target) orelse continue;
+        if (map != .object) continue;
+        keys: for (map.object.keys()) |k| {
+            for (shape.refs) |q| {
+                if (!std.mem.eql(u8, q.target, rs.target)) continue;
+                const v = data.get(q.field) orelse continue;
+                const items: []const Value = switch (v) {
+                    .array => |a| a.items,
+                    else => @as(*const [1]Value, &v),
+                };
+                for (items) |item| if (std.mem.eql(u8, refValue(q, item) orelse continue, k)) continue :keys;
+            }
+            return try std.fmt.allocPrint(arena, "ref: '{s}' key '{s}' is never referenced", .{ rs.target, k });
+        }
+    }
+    return null;
+}
+
+/// The non-empty ref a field value (or one array item) carries.
+fn refValue(rs: RefSite, item: Value) ?[]const u8 {
+    const v = if (rs.sub) |sub| switch (item) {
+        .object => |o| o.get(sub) orelse return null,
+        else => return null,
+    } else item;
+    if (v != .string or std.mem.trim(u8, v.string, " \t\r\n").len == 0) return null;
+    return v.string;
+}
+
+fn keyIn(data: ObjectMap, map: []const u8, key: []const u8) bool {
+    const m = data.get(map) orelse return false;
+    return m == .object and m.object.get(key) != null;
 }
 
 fn countWords(s: []const u8) usize {
@@ -832,7 +1045,14 @@ pub fn run(
                         step.detail = why;
                         break :judge;
                     };
-                    const cand = switch (try r.render(try withValue(a, best.data, s, v))) {
+                    const next = try withValue(a, best.data, s, v);
+                    // Never make a ref-clean document dirty.
+                    if ((try refCheck(a, shape, best.data)) == null) if (try refCheck(a, shape, next)) |why| {
+                        step.reason = .schema;
+                        step.detail = why;
+                        break :judge;
+                    };
+                    const cand = switch (try r.render(next)) {
                         .ok => |b| b,
                         .diag => |d| {
                             step.reason = .render;
@@ -847,6 +1067,7 @@ pub fn run(
                         step.reason = .new_warnings;
                     } else {
                         step.accepted = true;
+                        if (s.field.kind == .keyed) step.detail = try anchorLabel(a, best.data, s);
                         best = cand;
                     }
                 },
@@ -898,9 +1119,13 @@ pub fn buildSlice(
 ) ![]const u8 {
     var aw: std.Io.Writer.Allocating = .init(arena);
     const w = &aw.writer;
-    try w.print("FIELD: {s}   ({s})\nSCHEMA: {s}\nROLE: {s}\n", .{
-        s.path, if (s.isArray()) "append one item" else "fill this empty field", s.schema, s.role,
-    });
+    const mode = if (s.isArray())
+        "append one item"
+    else if (s.field.kind == .keyed)
+        "write one note; the server picks its key and anchor"
+    else
+        "fill this empty field";
+    try w.print("FIELD: {s}   ({s})\nSCHEMA: {s}\nROLE: {s}\n", .{ s.path, mode, s.schema, s.role });
     if (tone) |t| try w.print("TONE: {s}\n", .{t});
 
     var head: ObjectMap = .empty;
@@ -912,12 +1137,17 @@ pub fn buildSlice(
     try std.json.Stringify.value(Value{ .object = head }, .{}, w);
     try w.writeAll("\n");
 
-    if (s.isArray()) {
+    if (s.isArray() or s.field.kind == .keyed) {
         if (data.get(s.field.name)) |sib| {
             const text = try std.json.Stringify.valueAlloc(arena, sib, .{});
             if (aw.written().len + text.len + 64 < max_slice_bytes) try w.print("SIBLINGS: {s}\n", .{text});
         }
     }
+    // The element the note is about; the model sees it but cannot move it.
+    if (s.field.kind == .keyed) if (anchor(data, s)) |at| {
+        const text = try std.json.Stringify.valueAlloc(arena, Value{ .object = at.item }, .{});
+        if (aw.written().len + text.len + 64 < max_slice_bytes) try w.print("ANCHOR: {s}[{d}] {s}\n", .{ at.site.field, at.index, text });
+    };
 
     try w.writeAll("EVIDENCE: [");
     var n: usize = 0;
@@ -1293,9 +1523,11 @@ test "slots: apparatus-annotated, growable kinds, required only with max_items" 
         try paths.appendSlice(arena.allocator(), s.path);
         try paths.append(arena.allocator(), ' ');
     }
-    // notes (object map), voiceonly (no apparatus), body (required, no
-    // max_items) and title are not slots.
-    try testing.expectEqualStrings("cover author pull tags[+] quotes[+] grid[+] ", paths.items);
+    // voiceonly (no apparatus), body (required, no max_items) and title
+    // are not slots; notes is keyed because quotes[].note refs it.
+    try testing.expectEqualStrings("cover author pull tags[+] quotes[+] grid[+] notes{+} ", paths.items);
+    try testing.expectEqual(@as(usize, 1), slotNamed(sh, "notes{+}").hosts.len);
+    try testing.expectEqualStrings("text", slotNamed(sh, "notes{+}").hosts[0].label.?);
     try testing.expect(slotNamed(sh, "cover").field.url);
     try testing.expect(slotNamed(sh, "author").field.page);
     try testing.expect(slotNamed(sh, "quotes[+]").gated());
@@ -1396,11 +1628,83 @@ test "parseShape rejects evidence on slots that cannot carry a claim" {
         \\{"template_id":"t","fields":{
         \\ "objs":{"type":"array<object>","optional":true,"apparatus":"list","max_items":2,"fields":{"n":{"type":"number","evidence":true}}}}}
     ));
-    // evidence on a non-slot field (kind .other) stays legal.
+    // evidence on a keyed map nothing refs (not a slot) stays legal.
     _ = try parseShape(a,
         \\{"template_id":"t","fields":{
         \\ "notes":{"type":"object<string,string>","optional":true,"apparatus":"footnote","evidence":true}}}
     );
+}
+
+test "keyed slot: paired write sets one key and the anchor's ref together" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, test_shape);
+    const s = slotNamed(sh, "notes{+}");
+    // No element to anchor to: the map cannot grow.
+    try testing.expect(!canGrow(try testData(a, "{}"), s));
+    const d = try testData(a,
+        \\{"quotes":[{"text":"Has one","kind":"tip","note":"has-one"},{"text":"Beware of first-hand ideas!","kind":"tip"}],"notes":{"has-one":"x"}}
+    );
+    try testing.expect(canGrow(d, s));
+    try testing.expectEqual(@as(?[]const u8, null), try refCheck(a, sh, d));
+    const d2 = try withValue(a, d, s, .{ .string = "A note." });
+    try testing.expectEqualStrings("beware-of-first-hand", d2.get("quotes").?.array.items[1].object.get("note").?.string);
+    try testing.expectEqualStrings("A note.", d2.get("notes").?.object.get("beware-of-first-hand").?.string);
+    try testing.expectEqual(@as(?[]const u8, null), try refCheck(a, sh, d2));
+    // `data` is untouched and every anchor is now taken.
+    try testing.expect(d.get("quotes").?.array.items[1].object.get("note") == null);
+    try testing.expectEqual(@as(usize, 1), d.get("notes").?.object.count());
+    try testing.expect(!canGrow(d2, s));
+    try testing.expectEqual(@as(?[]const u8, null), try checkSchema(a, s, .{ .string = "A note." }, d));
+    try testing.expectEqualStrings("expected a string", (try checkSchema(a, s, .{ .object = try testData(a, "{\"key\":\"k\"}") }, d)).?);
+}
+
+test "noteKey: kebab label, bounded, unique, fallback" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const site: RefSite = .{ .field = "h", .sub = "note", .target = "notes", .label = "name" };
+    const at = struct {
+        fn f(arena2: std.mem.Allocator, s: RefSite, name: []const u8) !Anchor {
+            var item: ObjectMap = .empty;
+            try item.put(arena2, "name", .{ .string = name });
+            return .{ .site = s, .index = 0, .item = item };
+        }
+    }.f;
+    const keys = try testData(a, "{\"acmedb-doctor\":\"x\",\"acmedb-doctor-2\":\"y\"}");
+    try testing.expectEqualStrings("point-in-time-snapshots", try noteKey(a, try at(a, site, "Point-in-time snapshots, finally"), .empty));
+    try testing.expectEqualStrings("acmedb-doctor-3", try noteKey(a, try at(a, site, "acmedb doctor"), keys));
+    try testing.expectEqualStrings("note", try noteKey(a, try at(a, site, "¿¡…!?"), .empty));
+    const long = try noteKey(a, try at(a, site, "Supercalifragilistic expialidocious extraordinarily"), .empty);
+    try testing.expect(long.len <= max_key_len);
+}
+
+test "refCheck: dangling refs and unreferenced keys" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, test_shape);
+    const dangling = try testData(a,
+        \\{"quotes":[{"text":"t","kind":"tip","note":"n9"}],"notes":{"n1":"x"}}
+    );
+    try testing.expectEqualStrings("ref: quotes[0].note 'n9' is not a key in 'notes'", (try refCheck(a, sh, dangling)).?);
+    const unused = try testData(a,
+        \\{"quotes":[{"text":"t","kind":"tip","note":"n1"}],"notes":{"n1":"x","n2":"y"}}
+    );
+    try testing.expectEqualStrings("ref: 'notes' key 'n2' is never referenced", (try refCheck(a, sh, unused)).?);
+}
+
+test "slice for a keyed slot names the anchor, not the key" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, test_shape);
+    const d = try testData(a, "{\"title\":\"T\",\"quotes\":[{\"text\":\"Beware!\",\"kind\":\"tip\"}]}");
+    const slice = try buildSlice(a, slotNamed(sh, "notes{+}"), sh, d, &.{}, null);
+    try testing.expect(std.mem.indexOf(u8, slice, "FIELD: notes{+}   (write one note;") != null);
+    try testing.expect(std.mem.indexOf(u8, slice, "ANCHOR: quotes[0] {\"text\":\"Beware!\",\"kind\":\"tip\"}") != null);
+    try testing.expect(std.mem.indexOf(u8, slice, "beware") == null);
 }
 
 test "isInert rejects markup anywhere in a value" {

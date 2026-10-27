@@ -1,0 +1,22 @@
+{# footnotes.knap: ratchet eval fixture (issue #83). Footnote references
+   sit behind template-owned `[^key]` slots on array items; `notes{+}` is
+   the paired write (one key plus the anchor's ref), and `extras[+]` is an
+   append whose optional `note` must already be a key in `notes`. #}{{ title | h1 }}
+
+{{ intro }}
+
+{% for h in items %}
+
+{{ h.name | h2 }}
+
+{{ h.what }}{% if h.note %}[^{{ h.note | kebab }}]{% endif %}{% endfor %}
+{% if extras %}
+
+{{ "Also" | h2 }}
+
+{% for e in extras %}
+- {{ e.what }}{% if e.note %}[^{{ e.note | kebab }}]{% endif %}{% endfor %}
+{% endif %}{% if notes %}
+
+
+{{ notes | footnote }}{% endif %}
