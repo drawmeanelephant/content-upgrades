@@ -36,7 +36,7 @@ Status key:
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
 | 6 | Same template, mild vs feral | 20s | 21.8s | `06-voice.tape` | C3 (mock replies), `knap_voice`: C1; structure hash: C2 | ready (mock) |
-| 7 | One source -> md + html + apparatus | 15s | 18.6s | `07-one-source.tape` | main; oliver target: P1; one shared data file: cut (T2/I5 deferred) | partial |
+| 7 | One source -> md + html + apparatus | 15s | 15.2s | `07-one-source.tape` | main; oliver target: P1; one shared data file: cut (T2/I5 deferred) | ready |
 | 8 | Numbers card, measured only | 10s | 12.0s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
 
 **Runtime.** SPEC calls the demo "~2 min", but its per-beat targets add up to 2:20
@@ -208,20 +208,24 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   `demo_seed_voice` used to apply, so the take is fixed.
 - **Missing:** only a live-backend voice pass (M1).
 
-### 7. One source -> several views (15s): partial
+### 7. One source -> several views (15s): ready
 
-- **On screen:** three renders from the CLI (verdict markdown, verdict html, apparatus
-  html), then `grep -c '<script'` printing 0 for each file.
+- **On screen:** one typed line loops the verdict renders (markdown, oliver,
+  html), one more renders apparatus html, then `grep -c '<script'` prints
+  `:0` for `verdict.md`, `verdict.oliver`, `verdict.html` and
+  `apparatus.html` — SPEC's list plus the html view, zero JavaScript.
 - **Commands:**
   ```sh
-  knap-mcp render verdict -d data/verdict.sample.json --target markdown --out verdict.md | jq -c '{ok, bytes}'
-  knap-mcp render verdict -d data/verdict.sample.json --target html --out verdict.html | jq -c '{ok, bytes}'
-  knap-mcp render apparatus -d data/apparatus.sample.json --target html --out apparatus.html | jq -c '{ok, bytes}'
-  grep -c '<script' verdict.md verdict.html apparatus.html
+  for t in markdown oliver html; do knap-mcp render verdict -d v --target $t --out verdict.$t | jq -c '{ok}'; done
+  knap-mcp render apparatus -d a --target html --out apparatus.html | jq -c '{ok}'
+  mv verdict.markdown verdict.md; grep -c '<script' verdict.md verdict.oliver verdict.html apparatus.html
   ```
-- **Changed from SPEC:** SPEC's beat 7 names `verdict.oliver`; the tape shows
-  verdict.html instead, because oliver renders byte-identical to markdown for
-  this template and html makes the second view visible.
+  `v` / `a` are copies of `data/verdict.sample.json` / `data/apparatus.sample.json`
+  made in the hidden preamble, and the `mv` gives the markdown render its SPEC
+  file name — both keep every typed line under the 121-column frame.
+- **Changed from SPEC:** nothing — `verdict.oliver` is on screen now. Oliver
+  renders byte-identical to markdown for this template, so html is still the
+  view that makes "several views" visible.
 - **Cut:** "one source" — one data file behind both templates (T2/I5) is
   deferred. apparatus keeps its own `data/apparatus.sample.json`; the take
   shows verdict and apparatus rendered from their own sample files.
