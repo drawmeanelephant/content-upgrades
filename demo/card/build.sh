@@ -146,7 +146,7 @@ jq -n \
          {value: $w2n_c, detail: $w2n_d, source: "eval/results/live/devin-wonder/repair-seeds.2nap.out"}]},
       {metric: "density ratchet: cases ok", corpus: "eval/ratchet.live.json · 9 cases · density/2",
        cells: [
-         {value: $rm_ok, detail: ("best " + $rm_g), source: "eval/results/live/mock.txt"},
+         {value: "n/a", detail: ("canned: " + $rm_ok + " by construction, bars tuned to mock"), source: "eval/results/live/mock.txt"},
          {value: $rs_ok, detail: ("best " + $rs_g), source: "eval/results/live/acp.txt"},
          {value: $rw_ok, detail: ("best " + $rw_g), source: "eval/results/live/devin-wonder/ratchet.out"}]},
       {metric: "repair calls × mean slice", corpus: "eval/seeds.2nap.json · repair eval",
@@ -162,7 +162,7 @@ jq -n \
     ],
     facts: [
       {label: "k4o conformance", value: $conf,
-       detail: ("pin " + $k4o + " · " + $k4o_ver + " · " + $lineage),
+       detail: ("pin " + $k4o + " · " + $k4o_ver),
        source: $conf_src},
       {label: "server", value: ($loc + " lines of Zig"),
        detail: "knap-mcp/src/*.zig",
