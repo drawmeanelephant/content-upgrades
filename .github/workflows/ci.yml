@@ -126,34 +126,6 @@ jobs:
       - name: Install boris v0.8.2
         run: scripts/install-boris.sh
 
-      # Debug (temporary): beat 2's `validate` flakes on this runner —
-      # "engine terminated abnormally" ~half the time while the same call
-      # passes directly. Reproduce in run.sh's exact env and capture
-      # per-iteration results + kernel signal evidence.
-      - name: Repro validate loop
-        run: |
-          export KNAP_ENGINES_DIR="$HOME/.cache/knap-engines"
-          export KNAP_K4O_PATH="$(scripts/engines.sh path k4o)"
-          (cd knap-mcp && zig build)
-          WORK=$(mktemp -d); cd "$WORK"
-          for d in data templates eval src prompts; do ln -s "$GITHUB_WORKSPACE/knap-mcp/$d" "$d"; done
-          export KNAP_MCP_HOME="$WORK/.knap-mcp" KNAP_BACKEND=mock
-          export TZ=UTC LC_ALL=C
-          unset KNAP_TEMPLATES_DIR MODEL_API_KEY
-          for i in $(seq 1 20); do
-            "$GITHUB_WORKSPACE/knap-mcp/zig-out/bin/knap-mcp" validate verdict -d data/verdict.sample.json > "out.$i" 2> "err.$i"
-            rc=$?
-            echo "iter $i: exit $rc $(cat "err.$i")"
-          done
-          echo "--- k4o direct, 20x ---"
-          for i in $(seq 1 20); do
-            "$KNAP_K4O_PATH" render templates/verdict.knap --data data/verdict.sample.json --format markdown > /dev/null
-            echo "direct $i: $?"
-          done
-          echo "--- dmesg tail ---"
-          sudo dmesg 2>/dev/null | tail -15 || dmesg 2>/dev/null | tail -15 || echo "dmesg unavailable"
-          exit 0
-
       # KNAP_BORIS_PATH makes beat 5 (publish-check) run instead of skipping.
       - name: Demo
         run: KNAP_BORIS_PATH="$HOME/.cache/knap-boris/v0.8.2/boris" KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" KNAP_ENGINES_SRC="$RUNNER_TEMP/src" make demo
