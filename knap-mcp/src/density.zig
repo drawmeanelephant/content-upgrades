@@ -18,10 +18,12 @@ const formatcheck = @import("formatcheck.zig");
 
 /// Scorer contract version. Any change to the tables below bumps it, and
 /// every published number cites it.
-pub const version = "density/1";
+pub const version = "density/2";
 
 /// Short docs are normalized as if they had this many words, so a 40-word
-/// stub with one table doesn't read as 25 tables per 1000 words.
+/// stub with one table doesn't read as 25 tables per 1000 words. Positive
+/// credit also scales by `min(1, words/min_words)`, so a token salad can't
+/// max the score by dropping one of each marker into a stub.
 pub const min_words: f64 = 200;
 
 const no_decay = std.math.inf(f64);
@@ -194,6 +196,10 @@ pub fn score(arena: std.mem.Allocator, markdown: []const u8) !Score {
 
     const words = @max(@as(f64, @floatFromInt(s.words)), min_words);
     const chars: f64 = @floatFromInt(s.text_chars);
+    // Below the word floor the floor still normalizes rates, but positive
+    // credit shrinks linearly to 0 — the floor stops absurd rates without
+    // turning item counts into item presence for stubs.
+    const length: f64 = @min(1, @as(f64, @floatFromInt(s.words)) / min_words);
 
     const out = try arena.alloc(Signal, specs.len + penalties.len);
     var total: f64 = 0;
@@ -207,7 +213,7 @@ pub fn score(arena: std.mem.Allocator, markdown: []const u8) !Score {
             .absolute => rf,
         };
         if (sp.weight > 0 and v > sp.over) overloaded += 1;
-        const n = curve(sp, v);
+        const n = curve(sp, v) * (if (sp.weight > 0) length else 1);
         // `+ 0.0` turns -0.0 (zero credit on a penalty row) into 0.0.
         sig.* = .{ .name = @tagName(sp.id), .raw = r, .value = v, .normalized = n, .weight = sp.weight, .contribution = n * sp.weight + 0.0 };
         total += sig.contribution;
@@ -309,8 +315,10 @@ const Scan = struct {
     raw_urls: usize = 0,
     props: usize = 0,
     inline_notes: usize = 0,
-    refs: std.ArrayList([]const u8) = .empty,
-    defs: std.ArrayList([]const u8) = .empty,
+    /// Inside a link label: bare http(s) text is label text, not a raw URL.
+    no_raw_urls: bool = false,
+    refs: std.StringHashMapUnmanaged(void) = .empty,
+    defs: std.StringHashMapUnmanaged(void) = .empty,
 
     fn blocks(s: *Scan, doc: []const u8) Error!void {
         var lines: std.ArrayList([]const u8) = .empty;
@@ -326,25 +334,25 @@ const Scan = struct {
             const t = trim(line);
             if (t.len == 0) {
                 i += 1;
-            } else if (fenceOpen(line)) |f| {
+            } else if (formatcheck.fenceOpen(line)) |f| {
                 i = s.codeBlock(ls, i, f);
-            } else if (headingLevel(t) > 0) {
+            } else if (formatcheck.headingLevel(t) > 0) {
                 try s.heading(t);
                 i += 1;
             } else if (t[0] == '>') {
                 i = try s.quote(ls, i);
-            } else if (isRule(t)) {
+            } else if (formatcheck.isRule(t)) {
                 s.kinds.insert(.rule);
                 i += 1;
             } else if (std.ascii.startsWithIgnoreCase(t, "<table")) {
                 i = try s.htmlTable(ls, i);
             } else if (pipeTableAt(ls, i)) {
                 i = try s.pipeTable(ls, i);
-            } else if (footnoteDefId(t)) |id| {
+            } else if (formatcheck.footnoteDefId(t)) |id| {
                 i = try s.footnoteDef(ls, i, id);
-            } else if (isLinkDef(t)) {
+            } else if (formatcheck.isLinkDef(t)) {
                 i += 1;
-            } else if (listItem(line) != null) {
+            } else if (formatcheck.listItem(line) != null) {
                 i = try s.list(ls, i);
             } else {
                 i = try s.paragraph(ls, i);
@@ -368,9 +376,9 @@ const Scan = struct {
         return 0;
     }
 
-    fn codeBlock(s: *Scan, ls: []const []const u8, start: usize, f: Fence) usize {
+    fn codeBlock(s: *Scan, ls: []const []const u8, start: usize, f: formatcheck.Fence) usize {
         for (ls[start + 1 ..], start + 1..) |line, i| {
-            if (isFenceClose(line, f)) {
+            if (formatcheck.isFenceClose(trim(line), f)) {
                 s.fences += 1;
                 s.kinds.insert(.code);
                 return i + 1;
@@ -381,7 +389,7 @@ const Scan = struct {
     }
 
     fn heading(s: *Scan, t: []const u8) Error!void {
-        const lv = headingLevel(t);
+        const lv = formatcheck.headingLevel(t);
         s.headings += 1;
         s.levels |= @as(u8, 1) << @intCast(lv - 1);
         s.kinds.insert(.heading);
@@ -455,7 +463,7 @@ const Scan = struct {
     }
 
     fn footnoteDef(s: *Scan, ls: []const []const u8, start: usize, id: []const u8) Error!usize {
-        try addNote(s.alloc, &s.defs, id);
+        try s.defs.put(s.alloc, id, {});
         s.kinds.insert(.footnote);
         const t = trim(ls[start]);
         try s.prose(trim(t[id.len + 4 ..])); // past `[^id]:`
@@ -477,14 +485,14 @@ const Scan = struct {
             if (t.len == 0) {
                 var j = i + 1;
                 while (j < ls.len and trim(ls[j]).len == 0) j += 1;
-                if (j < ls.len and (listItem(ls[j]) != null or isIndented(ls[j]))) {
+                if (j < ls.len and (formatcheck.listItem(ls[j]) != null or isIndented(ls[j]))) {
                     i = j;
                     continue;
                 }
                 return i;
             }
-            if (isRule(t)) return i;
-            if (listItem(line)) |c| {
+            if (formatcheck.isRule(t)) return i;
+            if (formatcheck.listItem(line)) |c| {
                 try s.prose(c);
             } else if (isIndented(line)) {
                 try s.prose(t);
@@ -499,25 +507,52 @@ const Scan = struct {
         var i = start;
         while (i < ls.len) : (i += 1) {
             const t = trim(ls[i]);
-            if (t.len == 0 or (i > start and startsBlock(ls, i))) break;
+            if (t.len == 0) break;
+            if (i > start) {
+                // `===`/`---` under paragraph lines is a setext heading.
+                const sx = formatcheck.setextLevel(t);
+                if (sx > 0) {
+                    s.headings += 1;
+                    s.levels |= @as(u8, 1) << @intCast(sx - 1);
+                    s.kinds.insert(.heading);
+                    return i + 1;
+                }
+                if (startsBlock(ls, i)) break;
+            }
             try s.prose(t);
         }
         return i;
     }
 
     fn prose(s: *Scan, text: []const u8) Error!void {
-        s.words += countWords(text);
+        s.words += formatcheck.countWords(text);
         try s.inlines(text, 0);
     }
 
     fn inlines(s: *Scan, text: []const u8, depth: u8) Error!void {
+        // A marker that opens nothing rescans up to max_span at each
+        // position, so a marker-dense line is super-linear without a cap.
+        // Charge each failure against a budget linear in the input; past
+        // it, the rest of the text only feeds text_chars.
+        var budget: usize = text.len +| 8 *| max_span;
         var i: usize = 0;
         while (i < text.len) {
             if (try s.inlineAt(text, i, depth)) |next| {
                 i = next;
                 continue;
             }
-            if (std.ascii.isAlphanumeric(text[i])) s.text_chars += 1;
+            const c = text[i];
+            if (isScanMarker(c)) {
+                const cost = @min(max_span, text.len - i);
+                if (cost > budget) {
+                    for (text[i..]) |b| {
+                        if (formatcheck.wordByte(b)) s.text_chars += 1;
+                    }
+                    break;
+                }
+                budget -= cost;
+            }
+            if (formatcheck.wordByte(c)) s.text_chars += 1;
             i += 1;
         }
     }
@@ -530,11 +565,11 @@ const Scan = struct {
         switch (text[i]) {
             '\\' => return @min(i + 2, text.len),
             '`' => {
-                const n = runLen(text, i, '`');
+                const n = formatcheck.runLen(text, i, '`');
                 const close = closeBackticks(text, i + n, n) orelse return i + n;
                 const body = text[i + n .. close];
                 s.mark(.code, body, depth);
-                s.text_chars += alnum(body);
+                s.text_chars += formatcheck.alnum(body);
                 return close + n;
             },
             '!' => {
@@ -557,26 +592,31 @@ const Scan = struct {
                     const inner = text[i + 2 .. close];
                     if (inner.len > 0 and inner[0] == '#') s.fragments += 1 else s.wikilinks += 1;
                     const shown = if (std.mem.findScalar(u8, inner, '|')) |bar| inner[bar + 1 ..] else inner;
-                    s.text_chars += alnum(shown);
+                    s.text_chars += formatcheck.alnum(shown);
                     return close + 2;
                 }
                 if (std.mem.startsWith(u8, rest, "[^")) {
                     const close = std.mem.findScalarPos(u8, text, i + 2, ']') orelse return null;
                     const id = text[i + 2 .. close];
-                    if (id.len == 0 or std.mem.findAny(u8, id, " \t") != null) return null;
-                    try addNote(s.alloc, &s.refs, id);
+                    if (!formatcheck.validFootnoteId(id)) return null;
+                    try s.refs.put(s.alloc, id, {});
                     return close + 1;
                 }
                 const l = linkAt(text, i) orelse return null;
                 // Any destination with a fragment is a deep link: `#anchor`,
                 // `page#anchor`, or a `#:~:text=` citation (k4o `fragment_link`).
                 if (std.mem.findScalar(u8, l.dest, '#') != null) s.fragments += 1 else s.links += 1;
-                try s.inlines(l.label, depth);
+                {
+                    const saved = s.no_raw_urls;
+                    defer s.no_raw_urls = saved;
+                    s.no_raw_urls = true;
+                    try s.inlines(l.label, depth);
+                }
                 return l.end;
             },
             '^' => {
                 if (!std.mem.startsWith(u8, rest, "^[")) return null;
-                const close = matchBracket(text, i + 1) orelse return null;
+                const close = formatcheck.matchBracket(text, i + 1) orelse return null;
                 s.inline_notes += 1;
                 try s.inlines(text[i + 2 .. close], depth);
                 return close + 1;
@@ -596,11 +636,11 @@ const Scan = struct {
                 return null;
             },
             'h' => {
-                if (i > 0 and std.ascii.isAlphanumeric(text[i - 1])) return null;
+                if (i > 0 and formatcheck.wordByte(text[i - 1])) return null;
                 if (!std.mem.startsWith(u8, rest, "http://") and !std.mem.startsWith(u8, rest, "https://")) return null;
                 var end = i;
                 while (end < text.len and !std.ascii.isWhitespace(text[end]) and text[end] != '<' and text[end] != ')') end += 1;
-                s.raw_urls += 1;
+                if (!s.no_raw_urls) s.raw_urls += 1;
                 return end;
             },
             '*', '_', '~', '=' => return s.styledRun(text, i, depth),
@@ -635,31 +675,24 @@ const Scan = struct {
     fn mark(s: *Scan, style: Style, body: []const u8, depth: u8) void {
         s.runs += 1;
         s.styles.insert(style);
-        if (depth == 0) s.styled_chars += alnum(body);
+        if (depth == 0) s.styled_chars += formatcheck.alnum(body);
     }
 
     fn resolvedNotes(s: *const Scan) usize {
         var n = s.inline_notes;
-        for (s.refs.items) |r| {
-            for (s.defs.items) |d| {
-                if (std.mem.eql(u8, r, d)) {
-                    n += 1;
-                    break;
-                }
-            }
+        var it = s.refs.keyIterator();
+        while (it.next()) |r| {
+            if (s.defs.contains(r.*)) n += 1;
         }
         return n;
     }
 };
 
-fn addNote(alloc: std.mem.Allocator, notes: *std.ArrayList([]const u8), id: []const u8) Error!void {
-    for (notes.items) |x| {
-        if (std.mem.eql(u8, x, id)) return;
-    }
-    try notes.append(alloc, id);
-}
-
 // --- Block helpers -----------------------------------------------------------
+//
+// The line predicates (headings, fences, rules, list items, footnote and
+// link defs, table delimiters, words) are shared with formatcheck.zig so
+// the scorer and the linter can't drift apart.
 
 fn trim(t: []const u8) []const u8 {
     return std.mem.trim(u8, t, " \t");
@@ -669,93 +702,26 @@ fn isIndented(line: []const u8) bool {
     return std.mem.startsWith(u8, line, "  ") or std.mem.startsWith(u8, line, "\t");
 }
 
-fn headingLevel(t: []const u8) usize {
-    var n: usize = 0;
-    while (n < t.len and t[n] == '#') n += 1;
-    if (n == 0 or n > 6) return 0;
-    if (t.len > n and t[n] != ' ' and t[n] != '\t') return 0;
-    return n;
-}
-
-const Fence = struct { ch: u8, len: usize };
-
-fn fenceOpen(line: []const u8) ?Fence {
-    const t = std.mem.trimStart(u8, line, " ");
-    if (line.len - t.len > 3 or t.len < 3) return null;
-    const ch = t[0];
-    if (ch != '`' and ch != '~') return null;
-    const n = runLen(t, 0, ch);
-    if (n < 3) return null;
-    // A backtick fence's info string can't itself contain backticks.
-    if (ch == '`' and std.mem.findScalar(u8, t[n..], '`') != null) return null;
-    return .{ .ch = ch, .len = n };
-}
-
-fn isFenceClose(line: []const u8, f: Fence) bool {
-    const t = trim(line);
-    if (t.len < f.len) return false;
-    for (t) |c| {
-        if (c != f.ch) return false;
-    }
-    return true;
-}
-
-fn isRule(t: []const u8) bool {
-    if (t.len < 3) return false;
-    const ch = t[0];
-    if (ch != '-' and ch != '*' and ch != '_') return false;
-    var n: usize = 0;
-    for (t) |c| {
-        if (c == ch) n += 1 else if (c != ' ' and c != '\t') return false;
-    }
-    return n >= 3;
-}
-
-/// A row with a `|` followed by a delimiter row (`| --- | :-: |`).
+/// A row with a `|` followed by a delimiter row (`| --- | :-: |`) with the
+/// same number of cells — mismatched "tables" render as prose in GFM.
 fn pipeTableAt(ls: []const []const u8, i: usize) bool {
     if (i + 1 >= ls.len or std.mem.findScalar(u8, ls[i], '|') == null) return false;
     const d = trim(ls[i + 1]);
-    if (std.mem.findScalar(u8, d, '|') == null or std.mem.findScalar(u8, d, '-') == null) return false;
-    for (d) |c| {
-        switch (c) {
-            '|', '-', ':', ' ', '\t' => {},
-            else => return false,
-        }
+    if (!formatcheck.tableDelimiter(d)) return false;
+    return cellCount(ls[i]) == cellCount(d);
+}
+
+/// Cells of a pipe row, ignoring the optional leading/trailing pipes.
+fn cellCount(row: []const u8) usize {
+    var t = trim(row);
+    if (t.len > 0 and t[0] == '|') t = t[1..];
+    if (t.len > 0 and t[t.len - 1] == '|') t = t[0 .. t.len - 1];
+    if (t.len == 0) return 0;
+    var n: usize = 1;
+    for (t) |c| {
+        if (c == '|') n += 1;
     }
-    return true;
-}
-
-/// `- x`, `* x`, `+ x`, `1. x`, `1) x` (any indent): returns the item text.
-fn listItem(line: []const u8) ?[]const u8 {
-    const t = std.mem.trimStart(u8, line, " \t");
-    if (t.len == 0) return null;
-    if (t[0] == '-' or t[0] == '*' or t[0] == '+') {
-        if (t.len == 1) return "";
-        if (t[1] == ' ' or t[1] == '\t') return trim(t[2..]);
-        return null;
-    }
-    var n: usize = 0;
-    while (n < t.len and n < 9 and std.ascii.isDigit(t[n])) n += 1;
-    if (n == 0 or n >= t.len or (t[n] != '.' and t[n] != ')')) return null;
-    if (n + 1 == t.len) return "";
-    if (t[n + 1] != ' ' and t[n + 1] != '\t') return null;
-    return trim(t[n + 2 ..]);
-}
-
-/// `[^id]: text` at the start of a line: returns `id`.
-fn footnoteDefId(t: []const u8) ?[]const u8 {
-    if (!std.mem.startsWith(u8, t, "[^")) return null;
-    const close = std.mem.findScalar(u8, t, ']') orelse return null;
-    if (close <= 2 or close + 1 >= t.len or t[close + 1] != ':') return null;
-    return t[2..close];
-}
-
-/// `[label]: url` reference definitions: plumbing, not prose. The links
-/// that use them are counted where they appear.
-fn isLinkDef(t: []const u8) bool {
-    if (t.len < 4 or t[0] != '[' or t[1] == '^' or t[1] == '[') return false;
-    const close = std.mem.findScalar(u8, t, ']') orelse return false;
-    return close > 1 and close + 2 < t.len and t[close + 1] == ':' and t[close + 2] == ' ';
+    return n;
 }
 
 fn isProperty(line: []const u8) bool {
@@ -778,59 +744,27 @@ fn quoteText(line: []const u8) []const u8 {
 fn startsBlock(ls: []const []const u8, i: usize) bool {
     const line = ls[i];
     const t = trim(line);
-    return fenceOpen(line) != null or headingLevel(t) > 0 or t[0] == '>' or isRule(t) or
-        std.ascii.startsWithIgnoreCase(t, "<table") or footnoteDefId(t) != null or
-        listItem(line) != null or pipeTableAt(ls, i);
+    return formatcheck.fenceOpen(line) != null or formatcheck.headingLevel(t) > 0 or t[0] == '>' or formatcheck.isRule(t) or
+        std.ascii.startsWithIgnoreCase(t, "<table") or formatcheck.footnoteDefId(t) != null or
+        formatcheck.listItem(line) != null or pipeTableAt(ls, i);
 }
 
 // --- Inline helpers ----------------------------------------------------------
 
-/// Whitespace-separated tokens holding at least one letter or digit; HTML
-/// tags are word boundaries, not words.
-fn countWords(t: []const u8) usize {
-    var n: usize = 0;
-    var word = false;
-    var i: usize = 0;
-    while (i < t.len) : (i += 1) {
-        const c = t[i];
-        if (c == '<' and i + 1 < t.len and (std.ascii.isAlphabetic(t[i + 1]) or t[i + 1] == '/')) {
-            if (std.mem.findScalarPos(u8, t, i, '>')) |close| {
-                if (word) n += 1;
-                word = false;
-                i = close;
-                continue;
-            }
-        }
-        if (std.ascii.isWhitespace(c)) {
-            if (word) n += 1;
-            word = false;
-        } else if (std.ascii.isAlphanumeric(c)) {
-            word = true;
-        }
-    }
-    if (word) n += 1;
-    return n;
-}
-
-fn alnum(t: []const u8) usize {
-    var n: usize = 0;
-    for (t) |c| {
-        if (std.ascii.isAlphanumeric(c)) n += 1;
-    }
-    return n;
-}
-
-fn runLen(t: []const u8, i: usize, ch: u8) usize {
-    var n: usize = 0;
-    while (i + n < t.len and t[i + n] == ch) n += 1;
-    return n;
+/// Chars that may start an inline construct and so can spend up to
+/// max_span on a failed match — what the inlines() scan budget charges.
+fn isScanMarker(c: u8) bool {
+    return switch (c) {
+        '`', '!', '[', '^', '<', '*', '_', '~', '=' => true,
+        else => false,
+    };
 }
 
 /// A closing backtick run of exactly `n`.
 fn closeBackticks(t: []const u8, from: usize, n: usize) ?usize {
     var p = from;
     while (std.mem.findScalarPos(u8, t, p, '`')) |at| {
-        const len = runLen(t, at, '`');
+        const len = formatcheck.runLen(t, at, '`');
         if (len == n) return at;
         p = at + len;
     }
@@ -844,7 +778,7 @@ fn closeBackticks(t: []const u8, from: usize, n: usize) ?usize {
 fn closeRun(t: []const u8, from: usize, ch: u8, n: usize) ?usize {
     var p = from;
     while (std.mem.findScalarPos(u8, t, p, ch)) |at| {
-        const len = runLen(t, at, ch);
+        const len = formatcheck.runLen(t, at, ch);
         p = at + len;
         if (at == from or std.ascii.isWhitespace(t[at - 1])) continue;
         if (if (n == 1) len % 2 == 0 else len < n) continue;
@@ -854,30 +788,11 @@ fn closeRun(t: []const u8, from: usize, ch: u8, n: usize) ?usize {
     return null;
 }
 
-/// Index of the `]` matching the `[` at `open`, honoring nesting and
-/// backslash escapes.
-fn matchBracket(t: []const u8, open: usize) ?usize {
-    var depth: usize = 0;
-    var i = open;
-    while (i < t.len) : (i += 1) {
-        switch (t[i]) {
-            '\\' => i += 1,
-            '[' => depth += 1,
-            ']' => {
-                depth -= 1;
-                if (depth == 0) return i;
-            },
-            else => {},
-        }
-    }
-    return null;
-}
-
 const Link = struct { label: []const u8, dest: []const u8, end: usize };
 
 /// `[label](dest "title")` or `[label][ref]` with `[` at `i`.
 fn linkAt(t: []const u8, i: usize) ?Link {
-    const close = matchBracket(t, i) orelse return null;
+    const close = formatcheck.matchBracket(t, i) orelse return null;
     const label = t[i + 1 .. close];
     if (close + 1 >= t.len) return null;
     switch (t[close + 1]) {
@@ -1033,10 +948,83 @@ test "unmatched markers stay cheap" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const brackets = try repeat(a, "[", 16 * 1024);
-    const stars = try repeat(a, "**a ", 4 * 1024);
+    const brackets = try repeat(a, "[", 512 * 1024);
+    const stars = try repeat(a, "**a ", 64 * 1024);
     const sc = try score(a, try std.mem.concat(a, u8, &.{ brackets, " ", stars }));
     try testing.expect(sc.total >= 0 and sc.total <= 100);
+}
+
+test "a URL in a link label is not a raw URL" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const sc = try score(arena.allocator(), "[https://x.com/page](https://x.com) and [a https://y.com tag](https://y.com)\n");
+    try testing.expectEqual(@as(usize, 2), rawOf(sc, "links"));
+    try testing.expectEqual(@as(usize, 0), rawOf(sc, "raw_urls"));
+    try testing.expectEqual(@as(usize, 0), rawOf(sc, "format_check.raw-url-count"));
+}
+
+test "CJK characters count as words and text" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const jp = try score(a, "これはテストです"); // 8 script characters
+    try testing.expectEqual(@as(usize, 8), jp.words);
+    const mixed = try score(a, "café — 世界"); // em-dash isn't a word
+    try testing.expectEqual(@as(usize, 3), mixed.words);
+    const latin = try score(a, "hello world");
+    try testing.expectEqual(@as(usize, 2), latin.words);
+}
+
+test "setext headings count like ATX headings" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const sc = try score(arena.allocator(), "Title\n===\n\nbody text\n\nSub\n---\n\nmore\n");
+    try testing.expectEqual(@as(usize, 2), rawOf(sc, "heading_density"));
+    try testing.expectEqual(@as(usize, 2), rawOf(sc, "heading_levels"));
+}
+
+test "pipe tables need matching columns" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bad = try score(a, "| a | b |\n| --- |\n| 1 | 2 |\n");
+    try testing.expectEqual(@as(usize, 0), rawOf(bad, "tables"));
+    const good = try score(a, "a | b\n--- | ---\n1 | 2\n");
+    try testing.expectEqual(@as(usize, 1), rawOf(good, "tables"));
+}
+
+test "short docs can't saturate positive signals" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // One of every apparatus token in a 30-word stub scored 100 under
+    // density/1; the length factor keeps it far below real dense docs.
+    const doc = try loadFixture(a, "verdict.md");
+    const salad =
+        "---\ntitle: \"T\"\nsubject: \"S\"\nverdict: \"V\"\ngaf: \"high\"\ntags: \"x\"\n---\n# T\n## S\n### U\n\n" ++
+        "Claim[^a] and [[L]] and ![[E]] and [x](https://e.com#:~:text=x) and ![i](https://e.com/i.png) and <https://e.com>\n\n" ++
+        "> [!note] N\n> body\n\n> quote\n\n| C | D |\n| --- | --- |\n| 1 | 2 |\n\n- item\n\n" ++
+        "`code` and **bold** and *em* and ~~strike~~\n\n```zig\nx\n```\n\n[^a]: note\n";
+    const sc = try score(a, salad);
+    try testing.expect(sc.words < 50);
+    try testing.expect(sc.total < 40);
+    try testing.expect(sc.total < (try score(a, doc)).total);
+    // At and above the word floor nothing is scaled.
+    const prose = try repeat(a, "word ", 300);
+    const full = try score(a, try std.mem.concat(a, u8, &.{ prose, "\n\n> [!note]\n> body\n" }));
+    try testing.expectEqual(@as(f64, 1), signal(full, "callouts").normalized);
+}
+
+test "footnote bookkeeping scales with count" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var doc: std.ArrayList(u8) = .empty;
+    for (0..2000) |i| try doc.print(a, "ref[^n{d}] ", .{i});
+    try doc.appendSlice(a, "\n");
+    for (0..2000) |i| try doc.print(a, "[^n{d}]: def {d}\n", .{ i, i });
+    const sc = try score(a, doc.items);
+    try testing.expectEqual(@as(usize, 2000), rawOf(sc, "footnotes"));
 }
 
 test "curve ramps, plateaus, and decays" {
