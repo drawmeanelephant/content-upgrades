@@ -33,6 +33,14 @@ pub const Ctx = struct {
     /// The cache-stable system prefix: recorded, not summed.
     prefix_bytes: usize = 0,
 
+    /// Token counters summed from `completeReply(...).usage`, alongside
+    /// the byte counters. Fields a provider omits contribute nothing, so
+    /// they stay 0 on unmetered backends like mock — never estimated.
+    prompt_tokens: u64 = 0,
+    completion_tokens: u64 = 0,
+    total_tokens: u64 = 0,
+    reasoning_tokens: u64 = 0,
+
     /// One model call carrying `slice` bytes under a `prefix`-byte system
     /// prompt. Mock paths pass the slice they would have sent so eval
     /// numbers measure the real context economy.
@@ -43,9 +51,25 @@ pub const Ctx = struct {
         ctx.prefix_bytes = prefix.len;
     }
 
+    /// One reply's metered tokens; null fields are skipped, matching
+    /// `backend.Usage`.
+    pub fn countUsage(ctx: *Ctx, u: backend.Usage) void {
+        if (u.prompt_tokens) |t| ctx.prompt_tokens += t;
+        if (u.completion_tokens) |t| ctx.completion_tokens += t;
+        if (u.total_tokens) |t| ctx.total_tokens += t;
+        if (u.reasoning_tokens) |t| ctx.reasoning_tokens += t;
+    }
+
     /// Mean slice bytes per counted call; 0 before the first.
     pub fn meanSlice(ctx: *const Ctx) usize {
         return if (ctx.calls == 0) 0 else ctx.slice_bytes_total / ctx.calls;
+    }
+
+    /// The token segment of the numbers card, in the `calls:` line's style.
+    pub fn writeTokens(ctx: *const Ctx, w: *std.Io.Writer) !void {
+        try w.print("tokens: prompt {d}  completion {d}  total {d}  reasoning {d}\n", .{
+            ctx.prompt_tokens, ctx.completion_tokens, ctx.total_tokens, ctx.reasoning_tokens,
+        });
     }
 
     pub fn init(p: std.process.Init) !Ctx {
@@ -126,4 +150,19 @@ test "countCall totals slice bytes, keeps the max, records the prefix once" {
     try std.testing.expectEqual(@as(usize, 5), ctx.slice_bytes_max);
     try std.testing.expectEqual(@as(usize, 3), ctx.meanSlice());
     try std.testing.expectEqual(@as(usize, 13), ctx.prefix_bytes);
+}
+
+test "countUsage sums metered fields, leaves unmetered at 0" {
+    var ctx: Ctx = undefined;
+    ctx.prompt_tokens = 0;
+    ctx.completion_tokens = 0;
+    ctx.total_tokens = 0;
+    ctx.reasoning_tokens = 0;
+    ctx.countUsage(.{ .prompt_tokens = 412, .completion_tokens = 9, .total_tokens = 421 });
+    ctx.countUsage(.{ .prompt_tokens = 50, .completion_tokens = 256, .reasoning_tokens = 256 });
+    ctx.countUsage(.{}); // mock-shaped reply: nothing metered
+    try std.testing.expectEqual(@as(u64, 462), ctx.prompt_tokens);
+    try std.testing.expectEqual(@as(u64, 265), ctx.completion_tokens);
+    try std.testing.expectEqual(@as(u64, 421), ctx.total_tokens);
+    try std.testing.expectEqual(@as(u64, 256), ctx.reasoning_tokens);
 }
