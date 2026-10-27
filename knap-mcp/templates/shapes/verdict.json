@@ -14,7 +14,7 @@
       "text": {"type": "string", "role": "verbatim quote copied from the page at `url`, one line. Rendered with a #:~:text= deep link, so it must match the source text exactly; no unbalanced parentheses"},
       "url":  {"type": "string", "role": "deep link target (http/https, no #fragment; fragment_link adds the fragment)"}
     }},
-    "blockers":   {"type": "array<string>", "role": "dealbreakers, bulleted inside the 'Dealbreakers' danger callout", "optional": true, "voice": true},
+    "blockers":   {"type": "array<string>", "role": "dealbreakers, bulleted inside the 'Dealbreakers' danger callout", "optional": true},
     "receipts":   {"type": "array<object>", "role": "claim/evidence rows of the 'Receipts' pipe table; header row is fixed in the template", "optional": true, "fields": {
       "claim":      {"type": "string", "role": "the claim, one line", "voice": true},
       "evidence":   {"type": "string", "role": "what backs it, one line", "voice": true},
@@ -23,7 +23,7 @@
       "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the evidence cell. Must match a `footnotes` key exactly", "optional": true}
     }},
     "bottom_line": {"type": "string", "role": "closing verdict, 1-2 sentences, under the 'Verdict' heading", "voice": true},
-    "caveats":    {"type": "array<string>", "role": "fine print, bulleted inside the collapsed 'Fine print' warning callout", "optional": true, "voice": true},
+    "caveats":    {"type": "array<string>", "role": "fine print, bulleted inside the collapsed 'Fine print' warning callout", "optional": true},
     "sources":    {"type": "array<object>", "role": "cited sources, names rendered as [[wikilinks]]; also the data behind apparatus.knap", "optional": true, "fields": {
       "name":        {"type": "string", "role": "target name for [[wikilink]]; name only pages that exist, an invented name is a dangling wikilink"},
       "url":         {"type": "string", "role": "deep link target (http/https, no #fragment)"},

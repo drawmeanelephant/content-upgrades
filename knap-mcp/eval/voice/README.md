@@ -16,12 +16,19 @@ For each template (verdict, apparatus, release-notes, reading-note):
 2. **Render and hash.** For each target (markdown via k4o, html via dogbed), it renders the original and the three voiced files and hashes each with `knap-mcp structhash`.
 3. **Row verdict.** A row passes when all four hashes are equal and each voiced doc differs from the original byte for byte. A template with no mock lines shows `no mock coverage` and does not fail; partial coverage (some tones only) or mock lines that no longer match the sample data (`stale mock`) do fail. `fields changed` counts the string values each tone rewrote (mild/spicy/feral).
 
-Then two negative controls on verdict's `take`, which must change the hash in both targets:
+Then three negative controls, which must change the hash in both targets:
 
-- `markup`: the value gains `**boring**`.
-- `newline-list`: the value gains a line break followed by `- `, which starts a list.
+- `markup`: verdict's `take` gains `**boring**`.
+- `newline-list`: verdict's `take` gains a line break followed by `- `, which starts a list.
+- `strip-markup`: verdict's `summary` drops `**durable**` relative to a source that carries it. Removal drifts the hash as surely as injection.
 
-They show the hash catches layout drift and isn't just equal for everything.
+They show the hash catches layout drift in both directions and isn't just equal for everything.
+
+Then three guard controls run `knap-mcp voice --backend mock` with a private `KNAP_PROMPTS_DIR` holding replies that must be rejected, original kept:
+
+- `strip-markup`: the reply drops the input's `**`.
+- `meta-prose-wrap`: the reply is `Sure! Here is the take: ` plus the input verbatim.
+- `footnote-bang`: the reply for release-notes `breaking[0].fix` — a `footnote_abutting` field on an element with a `note` — ends with `!` (`![^n]` renders as image syntax).
 
 ## The structure hash
 
@@ -33,4 +40,4 @@ They show the hash catches layout drift and isn't just equal for everything.
 
 ## Coverage
 
-Mock replies exist for verdict and apparatus only today, so release-notes and reading-note show `no mock coverage`. Lane C1 adds their mock lines; those rows then start to count with no change here. Hashes depend on the engine pins, so a pin bump can change every hash; the eval only compares hashes within one run.
+Mock replies cover the 32 `voice: true` sample values across all four templates (verdict 5, apparatus 1, release-notes 14, reading-note 12), so every row counts. A template whose mock lines go missing shows `no mock coverage` and does not fail — new voice fields need mock lines to exercise the proof. Hashes depend on the engine pins, so a pin bump can change every hash; the eval only compares hashes within one run.

@@ -17,3 +17,5 @@
 {"tone": "mild", "template": "verdict", "field": "blockers[0]", "field_role": "dealbreakers, bulleted (one item)", "input": "no CSV export", "output": "no CSV export, damn it", "expect": "mild: 1 profanity words"}
 {"tone": "mild", "template": "verdict", "field": "blockers[0]", "field_role": "dealbreakers, bulleted (one item)", "input": "no CSV export", "output": "no CSV export, SADLY", "expect": "mild: 1 new all-caps words"}
 {"tone": "spicy", "template": "verdict", "field": "blockers[0]", "field_role": "dealbreakers, bulleted (one item)", "input": "no CSV export", "output": "no CSV export, what the fuck", "expect": "spicy: f-word"}
+{"tone": "mild", "template": "verdict", "field": "take", "field_role": "one-line hot take", "input": "the **boring** database that actually ships", "output": "the boring database that actually ships", "expect": "drops markup character *"}
+{"tone": "spicy", "template": "verdict", "field": "take", "field_role": "one-line hot take", "input": "run `vacuum` after every deploy", "output": "run vacuum after every deploy", "expect": "drops markup character `"}

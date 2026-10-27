@@ -26,7 +26,7 @@
       "confidence": {"type": "string", "role": "high|medium|low; falls back to unrated via ??", "optional": true},
       "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the claim. Must match a `footnotes` key exactly", "optional": true}
     }},
-    "caveats":  {"type": "array<string>", "role": "open questions, bulleted inside the collapsed 'Open questions' warning callout", "optional": true, "voice": true},
+    "caveats":  {"type": "array<string>", "role": "open questions, bulleted inside the collapsed 'Open questions' warning callout", "optional": true},
     "footnotes": {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key should be referenced by some receipt `note`, and every `note` must be a key here; format_check flags strays", "optional": true}
   }
 }
