@@ -27,7 +27,7 @@ One JSON object per line: UTF-8, LF line endings, no blank lines, no comments. E
 | Key | Meaning |
 |---|---|
 | `template` | Template id: `verdict`, `apparatus`, `release-notes` or `reading-note`. |
-| `field` | JSON path inside the data, without the template id: `take`, `blockers[0]`, `receipts[1][0]`, `subtitle`. A dot separates object keys; `[n]` is an array index. |
+| `field` | JSON path inside the data, without the template id: `take`, `blockers[0]`, `receipts[1][0]`, `subtitle`, `sources[0].quotes[0].used_for`. A dot separates object keys; `[n]` is an array index. |
 | `field_role` | The shape descriptor's `role` for the field, verbatim. An element of an `array<string>` adds ` (one item)`. |
 | `input` | The value before the voice pass. |
 | `output` | The value in this file's tone. |
@@ -40,8 +40,8 @@ The shape descriptors in `templates/shapes/*.json` are the source of truth. A fi
 
 | Template | Voice fields | Notes |
 |---|---|---|
-| verdict | `title`, `verdict`, `take`, `summary`, `bottom_line` | `verdict` is direction-locked (a yes stays a yes) and four words at most. `summary` may carry footnote markers like `[^1]`, which must survive. `frontmatter.title` is never rewritten, so it diverges from `title` after a voice pass. |
-| apparatus | `subtitle` | |
+| verdict | `title`, `verdict`, `take`, `summary`, `bottom_line`, `sources[i].quotes[j].used_for` | `verdict` is direction-locked (a yes stays a yes) and four words at most. `summary` may carry footnote markers like `[^1]`, which must survive. `frontmatter.title` is never rewritten, so it diverges from `title` after a voice pass. `quotes[j].text` stays verbatim; only the `used_for` annotation is rewritten. |
+| apparatus | `subtitle`, `sources[i].quotes[j].used_for` | `quotes[j].text` stays verbatim; only the `used_for` annotation is rewritten. |
 | release-notes | `verdict`, `take`, `screenshot_alt`, `tldr`, `breaking_warning`, `breaking[i].change`, `breaking[i].fix`, `highlights[i].what`, `known_issues[i]`, `bottom_line` | `title` is not flagged: its kebab-case form becomes the frontmatter `slug`, so rewriting it would move the page URL invisibly to the structure hash. |
 | reading-note | `verdict`, `take`, `summary`, `quotes[i].why`, `thoughts[i]`, `spoilers`, `bottom_line` | `title` is not flagged: it is the work's title. |
 
@@ -141,7 +141,7 @@ The guard can't see everything. When examples change, a person checks the verdic
 
 ## Mock replies
 
-`mock/<tone>.jsonl` holds hand-written replies for the 32 `voice: true` values in `data/*.sample.json` (verdict 5, apparatus 1, release-notes 14, reading-note 12). A mock backend looks up `(template, field, input)` and returns `output`. On a miss it returns the input unchanged, and the field counts as unchanged. These lines are never sent to a model. `check.sh` warns when a mock input no longer matches the sample data.
+`mock/<tone>.jsonl` holds hand-written replies for the 38 `voice: true` values in `data/*.sample.json` (verdict 8, apparatus 4, release-notes 14, reading-note 12). A mock backend looks up `(template, field, input)` and returns `output`. On a miss it returns the input unchanged, and the field counts as unchanged. These lines are never sent to a model. `check.sh` warns when a mock input no longer matches the sample data.
 
 ## Why the examples use other subjects
 
@@ -156,7 +156,7 @@ sh knap-mcp/prompts/voice/check.sh
 It needs only POSIX sh and awk, and it was tested with macOS `/usr/bin/awk` and gawk. It prints one line per problem, then a summary, and exits non-zero on any failure:
 
 ```
-voice check: 33 examples, 96 mock replies, 21/21 selftest breaks caught, 0 warnings, 0 failures
+voice check: 33 examples, 114 mock replies, 21/21 selftest breaks caught, 0 warnings, 0 failures
 ```
 
 It checks that every line parses with the right keys, that every example and mock reply passes the guard, that each tone has at least 6 examples, that all three tones share the same `template`, `field`, `field_role` and `input` sequence, that no example input is copied from the sample data, and that every line in `testdata/bad.jsonl` is caught with the expected reason.
