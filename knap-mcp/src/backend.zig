@@ -568,6 +568,7 @@ pub fn completeReply(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user
     const ep = try endpoint(ctx, kind);
     ctx.countCall(system, user);
     const reply = try chatCompletion(ctx, ep, key, system, user);
+    ctx.countUsage(reply.usage);
     if (ctx.environ.get("KNAP_DEBUG") != null) {
         const u = reply.usage;
         std.debug.print("knap-mcp: {s}/{s} model={s} finish={s} usage prompt={?d} completion={?d} total={?d} reasoning={?d}\n", .{
