@@ -1,0 +1,9 @@
+profile: droid-deepseek
+label:   DeepSeek V4.1 Flash via ACP (droid)
+backend: acp   model: deepseek-v4.1-flash   effort: high
+smoke:   6/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   3/3 layout-identical
+

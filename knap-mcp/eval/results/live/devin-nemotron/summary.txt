@@ -1,0 +1,9 @@
+profile: devin-nemotron
+label:   Nemotron 3 Ultra via ACP (devin)
+backend: acp   model: nemotron-3-ultra-high   effort: high
+smoke:   6/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   3/3 layout-identical
+

@@ -1,0 +1,14 @@
+backend: acp   model: nemotron-3-ultra-high   effort: high   served: n/a
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | yes | 1506 | end_turn | 17 | 0 | 14549 | 51 | 14600 | - | exact |  |
+| voice | yes | 1376 | end_turn | 16 | 0 | 14548 | 61 | 14609 | - | exact |  |
+| verify | yes | 1356 | end_turn | 17 | 0 | 14548 | 43 | 14591 | - | exact |  |
+| judge | yes | 1470 | end_turn | 16 | 0 | 14549 | 62 | 14611 | - | exact |  |
+| enrich | yes | 1560 | end_turn | 17 | 0 | 14549 | 44 | 14593 | - | exact |  |
+| repair-patch | yes | 1645 | - | 49 | - | 14626 | 132 | 14758 | - | exact |  |
+
+smoke: 6/6 ok   wall 8913 ms   mean 1485 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 87369  completion 393  total 87762  reasoning 0

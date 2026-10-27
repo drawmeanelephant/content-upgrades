@@ -1,0 +1,9 @@
+profile: droid-nemotron
+label:   Nemotron 3.5 Super via ACP (droid)
+backend: acp   model: nemotron-3.5-super   effort: high
+smoke:   6/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   3/3 layout-identical
+
