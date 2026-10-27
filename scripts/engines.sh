@@ -10,6 +10,10 @@
 # `git archive` export of $KNAP_ENGINES_SRC/<name> in a temp dir and are
 # moved into place when done, so the source working trees are never touched
 # and an existing pin dir is never rebuilt or overwritten.
+#
+# -Dcpu=baseline: the cache dir is shared across machines (and copied
+# between CI runners), so a native-CPU build restored onto older hardware
+# SIGILLs on exec. Baseline keeps pins portable.
 set -eu
 
 K4O_SHA=aeba16352a7b6c7fd8d54db53cb506bdf5ead994
@@ -52,14 +56,14 @@ build() {
     mkdir "$tmp/src" "$tmp/out"
     if ! {
         git -C "$repo" archive --format=tar "$sha" | tar -x -C "$tmp/src" &&
-            (cd "$tmp/src" && zig build -Doptimize=ReleaseSafe) &&
+            (cd "$tmp/src" && zig build -Doptimize=ReleaseSafe -Dcpu=baseline) &&
             cp "$tmp/src/zig-out/bin/$name" "$tmp/out/$name"
     }; then
         rm -rf "$tmp"
         echo "engines: $name build failed" >&2
         return 1
     fi
-    echo "$name built from git archive $sha -Doptimize=ReleaseSafe" >"$tmp/out/PROVENANCE"
+    echo "$name built from git archive $sha -Doptimize=ReleaseSafe -Dcpu=baseline" >"$tmp/out/PROVENANCE"
     if [ -e "$dest" ]; then
         echo "engines: $dest appeared during the build; keeping it"
     else

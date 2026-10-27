@@ -45,7 +45,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/knap-engines
-          key: knap-engines-${{ runner.os }}-${{ steps.pins.outputs.hash }}
+          key: knap-engines-v2-${{ runner.os }}-${{ steps.pins.outputs.hash }}
 
       # scripts/engines.sh builds each pin from `git archive` of a source repo
       # that contains the pinned commit, so a shallow fetch of just that SHA
