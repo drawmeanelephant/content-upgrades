@@ -121,7 +121,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/knap-boris
-          key: knap-boris-${{ runner.os }}-v0.8.2-zig0.16.0
+          key: knap-boris-v2-${{ runner.os }}-v0.8.2-zig0.16.0
 
       - name: Install boris v0.8.2
         run: scripts/install-boris.sh

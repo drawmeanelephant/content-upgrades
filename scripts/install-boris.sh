@@ -69,8 +69,8 @@ ZIG=$WORK/zig/zig
 echo "install-boris: fetching drawmeanelephant/boris $TAG"
 git clone -q --depth 1 --branch "$TAG" https://github.com/drawmeanelephant/boris "$WORK/src"
 
-echo "install-boris: building boris $TAG with zig $ZIGV (-Doptimize=ReleaseSafe)"
-(cd "$WORK/src" && "$ZIG" build -Doptimize=ReleaseSafe)
+echo "install-boris: building boris $TAG with zig $ZIGV (-Doptimize=ReleaseSafe -Dcpu=baseline)"
+(cd "$WORK/src" && "$ZIG" build -Doptimize=ReleaseSafe -Dcpu=baseline)
 [ -x "$WORK/src/zig-out/bin/boris" ] || die "build produced no zig-out/bin/boris"
 
 mkdir -p "$(dirname "$DEST")"
