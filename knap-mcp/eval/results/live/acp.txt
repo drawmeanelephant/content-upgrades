@@ -1,0 +1,19 @@
+backend: acp   corpus: eval/ratchet.live.json   scorer: density/2   eps: 1.0   top_k: 2   max_calls: 10
+
+| case | start | final | gain | ceiling | iters | cap | calls | accepted | parse | schema | inert | render | verifier | no-gain | warn | declined | renders | ms | stop | check |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|---|
+| release-notes-min | 39.2 | 39.2 | 0.0 | 82.8 | 1 | 6 | 2 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | 0 | 1 | 62 | 7015 | stalled | FAIL: gain 0.0 < 15.0 |
+| reading-note-min | 31.9 | 31.9 | 0.0 | 84.0 | 1 | 6 | 2 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 66 | 13350 | stalled | FAIL: gain 0.0 < 15.0 |
+| verdict-min | 24.2 | 34.7 | 10.5 | 62.0 | 2 | 6 | 3 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 48 | 11146 | stalled | FAIL: gain 10.5 < 15.0 |
+| apparatus-min | 34.9 | 40.6 | 5.7 | 61.1 | 2 | 6 | 3 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 23 | 9972 | stalled | FAIL: gain 5.7 < 10.0 |
+| release-notes-sample | 82.8 | 82.8 | 0.0 | 82.8 | 0 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 5 | 18 | ceiling | ok |
+| reading-note-sample | 71.0 | 71.0 | 0.0 | 71.0 | 0 | 6 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4 | 15 | ceiling | ok |
+| fixture-callouts | 0.9 | 7.6 | 6.8 | 9.6 | 3 | 6 | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 16 | 12609 | plateau | ok |
+| fixture-footnotes | 2.5 | 2.5 | 0.0 | 12.3 | 1 | 6 | 2 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 10 | 7850 | stalled | FAIL: gain 0.0 < 1.0 |
+| iteration-cap | 31.9 | 44.6 | 12.7 | 58.2 | 2 | 2 | 3 | 1 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 42 | 14627 | stalled | FAIL: stop stalled, want max_iterations |
+
+probe cost: 276 renders in 9 runs (30.7 renders/run), 8511 ms/run mean wall
+calls: 18  mean slice: 1029 B  max: 2196 B  prefix: 372 B
+FAIL: a case missed its expectations
+report: knap://docs/doc-1793072643218514000-277
+exit=1
