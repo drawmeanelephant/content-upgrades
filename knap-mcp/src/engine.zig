@@ -82,17 +82,27 @@ pub fn lint(ctx: *Ctx, template_path: []const u8) Error!LintResult {
 /// surfaces as a normal tool error, never a hung server.
 fn runEngine(ctx: *Ctx, argv: []const []const u8, stdout_limit: std.Io.Limit) Error!std.process.RunResult {
     const secs = ctx.envSecs("KNAP_ENGINE_TIMEOUT", 60);
-    return std.process.run(ctx.arena, ctx.io, .{
-        .argv = argv,
-        .stdout_limit = stdout_limit,
-        .stderr_limit = .limited(4 * 1024 * 1024),
-        .timeout = ctx.deadline(secs),
-    }) catch |e| switch (e) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.Timeout => return ctx.fail("engine '{s}' timed out after {d}s", .{ argv[0], secs }),
-        else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ argv[0], @errorName(e) }),
-    };
+    // A spawn-time signal kill is transient (CI runners reap children
+    // spuriously); a nonzero exit is a real diagnostic and is not retried.
+    var attempt: usize = 0;
+    while (true) {
+        const result = std.process.run(ctx.arena, ctx.io, .{
+            .argv = argv,
+            .stdout_limit = stdout_limit,
+            .stderr_limit = .limited(4 * 1024 * 1024),
+            .timeout = ctx.deadline(secs),
+        }) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.Timeout => return ctx.fail("engine '{s}' timed out after {d}s", .{ argv[0], secs }),
+            else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ argv[0], @errorName(e) }),
+        };
+        if (result.term == .exited or attempt == max_engine_attempts - 1) return result;
+        attempt += 1;
+    }
 }
+
+/// One retry after the first abnormal termination, then fail.
+const max_engine_attempts = 2;
 
 fn finishRun(ctx: *Ctx, result: std.process.RunResult) Error!Outcome {
     switch (result.term) {
@@ -103,7 +113,11 @@ fn finishRun(ctx: *Ctx, result: std.process.RunResult) Error!Outcome {
                 return ctx.fail("engine exited {d} with no diagnostics", .{code});
             return .{ .diags = diags };
         },
-        else => return ctx.fail("engine terminated abnormally", .{}),
+        else => return ctx.fail("engine terminated abnormally ({s}){s}{s}", .{
+            @tagName(result.term),
+            if (result.stderr.len > 0) ": " else "",
+            result.stderr[0..@min(result.stderr.len, 300)],
+        }),
     }
 }
 
