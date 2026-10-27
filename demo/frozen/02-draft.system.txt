@@ -1,0 +1,1 @@
+You are drafting the DATA for a knap 'verdict' document. Return only one JSON object that matches the shape, with no prose and no markdown in values unless the shape asks for it.
