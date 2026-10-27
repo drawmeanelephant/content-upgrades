@@ -121,10 +121,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/knap-boris
-          key: knap-boris-${{ runner.os }}-v0.8.2-zig0.16.0
+          key: knap-boris-v2-${{ runner.os }}-v0.8.2-zig0.16.0
 
       - name: Install boris v0.8.2
         run: scripts/install-boris.sh
+
+      # TEMP for #112 verification — remove before merge.
+      - name: Boris baseline CPU check
+        run: |
+          zmm=$(objdump -d "$HOME/.cache/knap-boris/v0.8.2/boris" | grep -c zmm || true)
+          echo "zmm instruction count: $zmm"
+          test "$zmm" -eq 0
 
       # KNAP_BORIS_PATH makes beat 5 (publish-check) run instead of skipping.
       - name: Demo
