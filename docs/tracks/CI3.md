@@ -54,28 +54,23 @@ equally, so the two sides still match. The comparison surface is
 `apply-mock.jq` (reference transform) plus the render/hash/negative-control
 checks computed live.
 
-## Found while wiring: ratchet-eval is red on main TODAY
+## Correction: ratchet-eval is green on main
 
-The issue's premise ("both pass on main today, 2026-10-26") is stale for
-`ratchet-eval` — `plateau-dilution` fails deterministically:
+An earlier draft of this note claimed `plateau-dilution` was red on main —
+that measurement was taken on a stale checkout (a local `main` several
+commits behind origin, still on the 13-case corpus). On the current
+20-case corpus the case passes:
 
 ```
-| plateau-dilution | 0.3 | 43.6 | 43.3 | 44.1 | 4 | 15 | 4 | 4 | ... | ceiling | FAIL: stop ceiling, want plateau |
+| plateau-dilution | 8.0 | 45.6 | 37.6 | 54.8 | 6 | 15 | 6 | 6 | ... | plateau | ok |
+all expectations met   (20 runs, calls: 84, mean slice 828 B)
 ```
 
-Bisected with identical cached engines (k4o `aeba163`, dogbed `d96b125`):
-
-- `1cf992d` (#71, scorer density/1): PASS — 7/9 slots, 54.4 vs ceiling 56.5 → `plateau`
-- `2051311` (dogbed pin → d96b125): PASS, identical
-- `172fd74` (#72, density/2): FAIL — 4/9 slots, 43.6 vs ceiling 44.1 → `ceiling`
-
-density/2's word-count saturation means any ~300-word fill still gains ≥
-eps (swapping the `box` wall for pure filler changed nothing: 4 accepts,
-43.6), so this scenario structurally converges to `ceiling` before
-candidates exhaust. `plateau-dilution` is the only case covering
-`stop: plateau`; the fix is corpus/scorer judgment, out of this lane's
-files. Filed as #149.
-
-This PR's CI will show `Ratchet eval (mock)` red until that lands — the
-gate doing its job on a pre-existing regression, not breakage from this
-change.
+The stale-tree failure was still real history worth recording: between
+`172fd74` (#72, density/2 — whose commit message claimed "ratchet-eval
+passes unchanged") and the corpus growth in `b609a06`/`d0363af` (#117/#125
+footnote + verdict/apparatus ratchet slots, which raised the ladder's stub
+ceiling 44.1 → 54.8), `plateau-dilution` genuinely could not plateau —
+every ~300-word fill gained ≥ eps under density/2's word-count saturation,
+so the run converged to `ceiling` before candidates exhausted. This gate
+exists to catch exactly that drift window; it just arrived a few days late.
