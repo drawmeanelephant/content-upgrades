@@ -1,0 +1,79 @@
+{
+  "template_id": "ladder",
+  "description": "Ratchet eval fixture: one slot per apparatus so the corpus can steer which slot the model is asked for and exercise the budget and plateau stops. `box` is first so its callout probe gain leads the candidate list.",
+  "fields": {
+    "title": {
+      "type": "string",
+      "role": "page heading"
+    },
+    "intro": {
+      "type": "string",
+      "role": "one paragraph of prose",
+      "voice": true
+    },
+    "box": {
+      "type": "string",
+      "role": "body of the 'Watch out' warning callout, one or two sentences",
+      "optional": true,
+      "apparatus": "callout",
+      "max_words": 200
+    },
+    "matrix": {
+      "type": "array<array<string>>",
+      "role": "rows of the upgrade-effort table, two cells each",
+      "optional": true,
+      "apparatus": "table",
+      "max_items": 4,
+      "cells": 2
+    },
+    "pull": {
+      "type": "string",
+      "role": "a line rendered as a blockquote",
+      "optional": true,
+      "apparatus": "quote",
+      "max_words": 200
+    },
+    "see_also": {
+      "type": "string",
+      "role": "name of an existing site page, rendered as a wikilink",
+      "optional": true,
+      "apparatus": "wikilink",
+      "words": 4
+    },
+    "docs": {
+      "type": "string",
+      "role": "documentation URL (http/https)",
+      "optional": true,
+      "apparatus": "link"
+    },
+    "guide": {
+      "type": "string",
+      "role": "name of an existing site page, embedded",
+      "optional": true,
+      "apparatus": "embed",
+      "words": 4
+    },
+    "shot": {
+      "type": "string",
+      "role": "image URL (http/https)",
+      "optional": true,
+      "apparatus": "image"
+    },
+    "terms": {
+      "type": "array<string>",
+      "role": "frontmatter keywords, lowercase kebab-case",
+      "optional": true,
+      "apparatus": "frontmatter",
+      "max_items": 3,
+      "words": 1
+    },
+    "items": {
+      "type": "array<string>",
+      "role": "bullet items",
+      "optional": true,
+      "apparatus": "list",
+      "max_items": 3,
+      "words": 4
+    }
+  }
+}

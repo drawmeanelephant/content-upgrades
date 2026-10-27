@@ -85,6 +85,34 @@
       "data": "@../data/reading-note.min.json",
       "max_iterations": 2,
       "expect": {"stop": "max_iterations", "min_accepted": 2}
+    },
+    {
+      "id": "budget-burn",
+      "template_path": "ratchet/ladder.knap",
+      "shape_path": "ratchet/ladder.shape.json",
+      "data": "@ratchet/ladder.data.json",
+      "max_iterations": 8,
+      "mock": {"box": ["", "", "", "", "", "", "", "", "", ""]},
+      "expect": {"stop": "budget", "reject": {"schema": 5}}
+    },
+    {
+      "id": "plateau-dilution",
+      "template_path": "ratchet/ladder.knap",
+      "shape_path": "ratchet/ladder.shape.json",
+      "data": "@ratchet/ladder.data.json",
+      "max_iterations": 15,
+      "mock": {
+        "box": ["Snapshots exist now and they are real ones: online, point-in-time, restorable without a support ticket, which was the dealbreaker in the last verdict. and the notes go on to explain the same operational detail at some length, covering the rollout order, the rollback plan, the monitoring checklist, and the exact command sequence the on-call should run before declaring victory and the notes go on to explain the same operational detail at some length, covering the rollout order, the rollback plan, the monitoring checklist, and the exact command sequence the on-call should run before declaring victory and the notes go on to explain the same operational detail at some length, covering the rollout order, the rollback plan, the monitoring checklist, and the exact command sequence the on-call should run before declaring victory and the notes go on to explain the same operational detail at some length, covering the rollout order, the rollback plan, the monitoring checklist, and the exact command sequence the on-call should run before declaring victory"],
+        "matrix[+]": [
+          ["1.9.x through 1.9.latest, the most common starting point", "rename one config key and restart the server once"],
+          ["1.8.x, still supported but aging fast", "config key plus a driver bump before the server"],
+          ["anything on the 1.7 line or close to it", "dump and reload into a fresh datadir, plan a window"],
+          ["1.6 and older, long out of support", "start over; nothing migrates cleanly from this far back"]
+        ],
+        "pull": ["Cold starts on old databases drop from minutes to seconds."],
+        "items[+]": ["Snapshots of databases over two terabytes take hours."]
+      },
+      "expect": {"stop": "plateau"}
     }
   ]
 }
