@@ -62,11 +62,17 @@ fn mockPatch(ctx: *Ctx, region: []const u8, first_line: u32, diag: engine.Diag) 
         }
     }.f;
     if (contains(d, "unclosed if block"))
-        return try std.fmt.allocPrint(ctx.arena, "{s}{{% endif %}}\n", .{region});
+        return if (hasUnclosedBlock(region, "if", "endif"))
+            try std.fmt.allocPrint(ctx.arena, "{s}{{% endif %}}\n", .{region})
+        else
+            null;
     if (contains(d, "unclosed for block"))
-        return try std.fmt.allocPrint(ctx.arena, "{s}{{% endfor %}}\n", .{region});
+        return if (hasUnclosedBlock(region, "for", "endfor"))
+            try std.fmt.allocPrint(ctx.arena, "{s}{{% endfor %}}\n", .{region})
+        else
+            null;
     if (contains(d, "no filter named") or contains(diag.kind, "unknown filter"))
-        return stripUnknownFilter(ctx, region, d);
+        return stripUnknownFilter(ctx, region, first_line, diag);
 
     const at = offsetOf(region, first_line, diag.line, diag.col) orelse return null;
     // `{{ x | }}`: the column is the token after the bare pipe.
@@ -212,16 +218,50 @@ fn replaceTag(ctx: *Ctx, region: []const u8, at: usize, keyword: []const u8, wit
     return try splice(ctx, region, open, end, with);
 }
 
+/// True while `region` holds more `{% open_kw %}` tags than `{% close_kw %}`
+/// ones — the unclosed-block fix only applies when an opener is genuinely
+/// unmatched; a substring in text must not append a closer.
+fn hasUnclosedBlock(region: []const u8, comptime open_kw: []const u8, comptime close_kw: []const u8) bool {
+    var depth: i64 = 0;
+    var pos: usize = 0;
+    while (std.mem.indexOfPos(u8, region, pos, "{%")) |t| {
+        const end = std.mem.indexOfPos(u8, region, t + 2, "%}") orelse break;
+        const body = std.mem.trim(u8, region[t + 2 .. end], " \t");
+        if (startsKw(body, open_kw)) {
+            depth += 1;
+        } else if (startsKw(body, close_kw)) {
+            depth -= 1;
+        }
+        pos = end + 2;
+    }
+    return depth > 0;
+}
+
+/// `body` leads with the `{%` keyword `kw` (`"if a"` / `"endif"`, never
+/// `"ifdef"` or `"endifx"`).
+fn startsKw(body: []const u8, kw: []const u8) bool {
+    return std.mem.startsWith(u8, body, kw) and
+        (body.len == kw.len or !isIdent(body[kw.len]));
+}
+
 /// `no filter named "head2"` → drop `| head2` (and its `:arg`, if any)
-/// from the region. The conservative mock fix is removing the bad filter,
-/// not inventing one.
-fn stripUnknownFilter(ctx: *Ctx, region: []const u8, detail: []const u8) !?[]const u8 {
+/// from the `{{ }}` tag the diagnostic points at — an earlier tag may
+/// legitimately use the same name. The conservative mock fix is removing
+/// the bad filter, not inventing one.
+fn stripUnknownFilter(ctx: *Ctx, region: []const u8, first_line: u32, diag: engine.Diag) !?[]const u8 {
+    const detail = diag.detail;
     const q1 = std.mem.indexOfScalar(u8, detail, '"') orelse return null;
     const rest = detail[q1 + 1 ..];
     const q2 = std.mem.indexOfScalar(u8, rest, '"') orelse return null;
     const name = rest[0..q2];
-    var pos: usize = 0;
+    const at = offsetOf(region, first_line, diag.line, diag.col) orelse return null;
+    // The filter lives in the `{{` tag still open at `at`.
+    const open = std.mem.lastIndexOf(u8, region[0..@min(at, region.len)], "{{") orelse return null;
+    if (std.mem.indexOf(u8, region[open..at], "}}") != null) return null;
+    const limit = std.mem.indexOfPos(u8, region, open, "}}") orelse region.len;
+    var pos = open;
     while (std.mem.indexOfScalarPos(u8, region, pos, '|')) |pipe| : (pos = pipe + 1) {
+        if (pipe >= limit) return null;
         var i = pipe + 1;
         while (i < region.len and region[i] == ' ') i += 1;
         if (!std.mem.startsWith(u8, region[i..], name)) continue;
@@ -260,7 +300,30 @@ fn remotePatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, diag:
     );
 
     const body = try complete(ctx, kind, .repair, repair_prefix, user.written());
-    return if (body.len == 0) null else body;
+    const patch = sanitizePatch(body) orelse return null;
+    // The model trims the region's final newline about half the time;
+    // without it the splice glues the next template line onto this one.
+    if (std.mem.endsWith(u8, region, "\n") and !std.mem.endsWith(u8, patch, "\n"))
+        return try std.fmt.allocPrint(ctx.arena, "{s}\n", .{patch});
+    return patch;
+}
+
+/// A live model wraps its answer in fences, prose, or a whole-document
+/// rewrite about as often as it obeys "region only". Strip one
+/// surrounding code fence and reject a reply that still looks fenced or
+/// echoes the prompt — the loop degrades to non-convergence instead of
+/// splicing garbage into the template.
+fn sanitizePatch(body: []const u8) ?[]const u8 {
+    var s = std.mem.trim(u8, body, " \t\r\n");
+    if (std.mem.startsWith(u8, s, "```")) {
+        const nl = std.mem.indexOfScalar(u8, s, '\n') orelse return null;
+        s = std.mem.trim(u8, s[nl + 1 ..], " \t\r\n");
+        if (std.mem.endsWith(u8, s, "```")) s = std.mem.trimEnd(u8, s[0 .. s.len - 3], " \t\r\n");
+    }
+    if (s.len == 0) return null;
+    if (std.mem.indexOf(u8, s, "```") != null) return null;
+    if (std.mem.indexOf(u8, s, "region (starts at line") != null) return null;
+    return s;
 }
 
 /// One chat completion on a live backend: resolves the endpoint and model
@@ -269,7 +332,8 @@ fn remotePatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, diag:
 pub fn complete(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user: []const u8) Error![]const u8 {
     if (kind == .mock)
         return ctx.fail("backend 'mock' has no live completion (task '{s}')", .{@tagName(task)});
-    const key = ctx.environ.get("MODEL_API_KEY") orelse
+    const key = ctx.environ.get("MODEL_API_KEY") orelse "";
+    if (key.len == 0)
         return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
     const url = switch (kind) {
         .baseten => ctx.environ.get("KNAP_BASETEN_URL") orelse
@@ -296,6 +360,7 @@ fn chatCompletion(
     system: []const u8,
     user_msg: []const u8,
 ) Error![]const u8 {
+    warnProjectTreeStore(ctx);
     var payload: std.Io.Writer.Allocating = .init(ctx.arena);
     try payload.writer.print("{{\"model\":", .{});
     try std.json.Stringify.value(model, .{}, &payload.writer);
@@ -305,42 +370,57 @@ fn chatCompletion(
     try std.json.Stringify.value(user_msg, .{}, &payload.writer);
     try payload.writer.print("}}],\"temperature\":0}}", .{});
 
-    // Body and auth header go through owner-only scratch files, not argv,
-    // so neither the prompt nor the key shows up in `ps`.
+    // The request body goes through an owner-only scratch file, not argv,
+    // so the prompt doesn't show up in `ps`. The API key never touches
+    // disk: curl reads it as a `-K -` config stream on stdin.
     const body_path = try store.scratchFile(ctx, "json");
-    const auth_path = try store.scratchFile(ctx, "header");
-    defer for ([_][]const u8{ body_path, auth_path }) |p|
-        std.Io.Dir.deleteFile(.cwd(), ctx.io, p) catch {};
+    defer std.Io.Dir.deleteFile(.cwd(), ctx.io, body_path) catch {};
     const Permissions = std.Io.File.Permissions;
     const private: std.Io.Dir.CreateFileOptions = .{
         .permissions = if (@hasDecl(Permissions, "fromMode")) Permissions.fromMode(0o600) else .default_file,
     };
-    const auth = try std.fmt.allocPrint(ctx.arena, "Authorization: Bearer {s}\n", .{key});
-    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = auth_path, .data = auth, .flags = private }) catch
-        return ctx.fail("cannot stage backend auth header", .{});
     std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = body_path, .data = payload.written(), .flags = private }) catch
         return ctx.fail("cannot stage backend request body", .{});
-    const auth_arg = try std.fmt.allocPrint(ctx.arena, "@{s}", .{auth_path});
     const body_arg = try std.fmt.allocPrint(ctx.arena, "@{s}", .{body_path});
 
-    const result = std.process.run(ctx.arena, ctx.io, .{
-        .argv = &.{
-            "curl",          "-sS", "-f", "-X", "POST", url,
-            "-H",            auth_arg,
-            "-H",            "Content-Type: application/json",
-            "--data-binary", body_arg,
-        },
-        .stdout_limit = .limited(8 * 1024 * 1024),
-        .stderr_limit = .limited(1024 * 1024),
-    }) catch |e| return ctx.fail("curl failed: {s}", .{@errorName(e)});
+    // `-m`/`--connect-timeout` bound the call curl-side (`KNAP_CURL_TIMEOUT`
+    // default 60s, `KNAP_CURL_CONNECT_TIMEOUT` default 10s); the process
+    // deadline adds 15s of slack as a backstop in case curl itself wedges.
+    // `-w` appends the HTTP status after the body so `--fail-with-body`
+    // can keep the provider's error payload.
+    const total_secs = ctx.envSecs("KNAP_CURL_TIMEOUT", 60);
+    const config = try std.fmt.allocPrint(ctx.arena, "header = \"Authorization: Bearer {s}\"\n", .{key});
+    const result = try runCurl(ctx, &.{
+        "curl",               "-sS", "--fail-with-body", "-X", "POST", url,
+        "-m",                 try std.fmt.allocPrint(ctx.arena, "{d}", .{total_secs}),
+        "--connect-timeout",  try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.envSecs("KNAP_CURL_CONNECT_TIMEOUT", 10)}),
+        "-K",                 "-",
+        "-H",                 "Content-Type: application/json",
+        "--data-binary",      body_arg,
+        "-w",                 "\n%{http_code}",
+    }, config, if (total_secs == 0) .none else ctx.deadline(total_secs + 15));
+
+    // `-w` appends "\n<status>" after the body; split them back apart.
+    var body: []const u8 = result.stdout;
+    var status: u32 = 0;
+    if (std.mem.lastIndexOfScalar(u8, body, '\n')) |i| {
+        const s = std.fmt.parseInt(u32, std.mem.trim(u8, body[i + 1 ..], " \r"), 10) catch 0;
+        if (s > 0) {
+            status = s;
+            body = body[0..i];
+        }
+    }
 
     switch (result.term) {
-        .exited => |code| if (code != 0)
-            return ctx.fail("backend http {d}: {s}", .{ code, result.stderr }),
+        .exited => |code| if (code != 0) {
+            if (status >= 400)
+                return ctx.fail("backend http {d}: {s}", .{ status, brief(if (body.len > 0) body else result.stderr) });
+            return ctx.fail("backend request failed (curl exit {d}): {s}", .{ code, brief(result.stderr) });
+        },
         else => return ctx.fail("curl terminated abnormally", .{}),
     }
 
-    const parsed = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, result.stdout, .{}) catch
+    const parsed = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, body, .{}) catch
         return ctx.fail("backend returned non-JSON", .{});
     const choices = getPath(parsed, &.{ "choices" }) orelse
         return ctx.fail("backend reply has no choices", .{});
@@ -356,6 +436,78 @@ fn chatCompletion(
         },
         else => return ctx.fail("backend choices is not an array", .{}),
     }
+}
+
+/// `std.process.run` plus a stdin payload (the curl `-K -` config stream)
+/// and an absolute-deadline timeout; on timeout the child is killed and a
+/// ToolFailed surfaces instead of a hung server.
+fn runCurl(
+    ctx: *Ctx,
+    argv: []const []const u8,
+    stdin_data: []const u8,
+    timeout: std.Io.Timeout,
+) Error!std.process.RunResult {
+    var child = std.process.spawn(ctx.io, .{
+        .argv = argv,
+        .stdin = .pipe,
+        .stdout = .pipe,
+        .stderr = .pipe,
+    }) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return ctx.fail("curl failed: {s}", .{@errorName(e)}),
+    };
+    defer child.kill(ctx.io);
+
+    if (child.stdin) |stdin| {
+        stdin.writeStreamingAll(ctx.io, stdin_data) catch {};
+        stdin.close(ctx.io);
+        child.stdin = null;
+    }
+
+    var buffer: std.Io.File.MultiReader.Buffer(2) = undefined;
+    var multi: std.Io.File.MultiReader = undefined;
+    multi.init(ctx.arena, ctx.io, buffer.toStreams(), &.{ child.stdout.?, child.stderr.? });
+    defer multi.deinit();
+    const stdout_reader = multi.reader(0);
+    const stderr_reader = multi.reader(1);
+    while (multi.fill(64, timeout)) |_| {
+        if (stdout_reader.buffered().len > 8 * 1024 * 1024 or
+            stderr_reader.buffered().len > 64 * 1024)
+            return ctx.fail("curl output exceeded limit", .{});
+    } else |err| switch (err) {
+        error.EndOfStream => {},
+        error.Timeout => return ctx.fail("curl timed out; the backend is unreachable or hung", .{}),
+        else => |e| return ctx.fail("curl read failed: {s}", .{@errorName(e)}),
+    }
+    multi.checkAnyError() catch |e| return ctx.fail("curl read failed: {s}", .{@errorName(e)});
+    const term = child.wait(ctx.io) catch |e| return ctx.fail("curl wait failed: {s}", .{@errorName(e)});
+    return .{
+        .term = term,
+        .stdout = try multi.toOwnedSlice(0),
+        .stderr = try multi.toOwnedSlice(1),
+    };
+}
+
+/// Tool errors carry a bounded slice of provider/curl output — a hostile
+/// endpoint can't bloat every response it trips. The cut never splits a
+/// UTF-8 codepoint.
+fn brief(s: []const u8) []const u8 {
+    const t = std.mem.trim(u8, s, " \t\r\n");
+    var end = @min(t.len, 300);
+    while (end > 0 and end < t.len and (t[end] & 0xC0) == 0x80) end -= 1;
+    return t[0..end];
+}
+
+/// Live calls stage non-secret scratch files under store_dir; warn once
+/// when that's the project tree (KNAP_MCP_HOME unset or relative) so a
+/// file stranded by a crash can't be committed by accident.
+fn warnProjectTreeStore(ctx: *Ctx) void {
+    if (ctx.store_warned or std.fs.path.isAbsolute(ctx.store_dir)) return;
+    ctx.store_warned = true;
+    std.debug.print(
+        "knap-mcp: warning: store dir '{s}' is inside the project tree; set KNAP_MCP_HOME to a private dir for live backends\n",
+        .{ctx.store_dir},
+    );
 }
 
 fn getPath(v: std.json.Value, comptime keys: []const []const u8) ?std.json.Value {
@@ -430,6 +582,49 @@ test "mock strips an unknown filter with its argument" {
     ctx.arena = arena.allocator();
     const d: engine.Diag = .{ .kind = "unknown filter", .line = 1, .col = 10, .detail = "no filter named \"url\"" };
     try testing.expectEqualStrings("See {{ name }} now", (try mockPatch(&ctx, "See {{ name | url:\"https://e.com/\" }} now", 1, d)).?);
-    const d2: engine.Diag = .{ .kind = "unknown filter", .line = 1, .col = 10, .detail = "no filter named \"head2\"" };
+    const d2: engine.Diag = .{ .kind = "unknown filter", .line = 1, .col = 24, .detail = "no filter named \"head2\"" };
     try testing.expectEqualStrings("{{ t | head22 }}{{ t }}", (try mockPatch(&ctx, "{{ t | head22 }}{{ t | head2 }}", 1, d2)).?);
+}
+
+test "mock strips the unknown filter at the diagnostic position, not the first match" {
+    // The same name in an earlier tag stays put; only the tag holding the
+    // diagnostic column loses its filter.
+    try expectMock("{{ a | bad }}{{ b | bad }}", 1, 22, "no filter named \"bad\"", "{{ a | bad }}{{ b }}");
+    try expectMock("{{ a | bad }}{{ b | bad }}", 1, 8, "no filter named \"bad\"", "{{ a }}{{ b | bad }}");
+    // A column outside every output tag gets no patch.
+    try expectMock("{{ a | bad }}", 1, 1, "no filter named \"bad\"", null);
+}
+
+test "mock only closes an if/for when the region has an unmatched opener" {
+    try expectMock("{% if a %}\nA\n", 1, 1, "unclosed if block", "{% if a %}\nA\n{% endif %}\n");
+    try expectMock("{% for x in ys %}\n", 1, 1, "unclosed for block", "{% for x in ys %}\n{% endfor %}\n");
+    // A closer for a different block leaves the if unmatched.
+    try expectMock("{% if a %}\n{% endfor %}\n", 1, 1, "unclosed if block", "{% if a %}\n{% endfor %}\n{% endif %}\n");
+    // Substring-in-detail drift alone must not append a closer.
+    try expectMock("A\nB\n", 1, 1, "unclosed if block", null);
+    try expectMock("{% if a %}\n{% endif %}\n", 1, 1, "unclosed if block", null);
+    try expectMock("A\n", 1, 1, "unclosed for block", null);
+}
+
+test "sanitizePatch strips fences and rejects prose or echoed prompts" {
+    try testing.expectEqualStrings("{{ x }}", sanitizePatch("```\n{{ x }}\n```").?);
+    try testing.expectEqualStrings("{{ x }}", sanitizePatch("```knap\n{{ x }}\n```").?);
+    try testing.expectEqualStrings("{{ x }}", sanitizePatch("  {{ x }}  \n\n").?);
+    try testing.expectEqual(@as(?[]const u8, null), sanitizePatch(""));
+    try testing.expectEqual(@as(?[]const u8, null), sanitizePatch("prose\n```\n{{ x }}\n```\nmore"));
+    try testing.expectEqual(@as(?[]const u8, null), sanitizePatch("region (starts at line 4):\n{{ x }}"));
+}
+
+test "brief trims and caps provider noise on a codepoint boundary" {
+    var long: [400]u8 = undefined;
+    @memset(&long, 'x');
+    try testing.expectEqual(@as(usize, 300), brief(&long).len);
+    try testing.expectEqualStrings("hi", brief("  hi\n"));
+    // 2 + 110*3 bytes; the 300-byte cap would split an em dash, so the
+    // cut backs off to 299.
+    var em: std.ArrayList(u8) = .empty;
+    defer em.deinit(testing.allocator);
+    try em.appendSlice(testing.allocator, "ab");
+    for (0..110) |_| try em.appendSlice(testing.allocator, "—");
+    try testing.expectEqual(@as(usize, 299), brief(em.items).len);
 }

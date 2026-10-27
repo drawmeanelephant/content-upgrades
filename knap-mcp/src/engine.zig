@@ -50,27 +50,13 @@ pub fn render(ctx: *Ctx, target: Target, template_path: []const u8, data_path: [
             ctx.engines.k4o, "render", template_path, "--data", data_path, "--format", @tagName(target),
         },
     };
-    const result = std.process.run(ctx.arena, ctx.io, .{
-        .argv = argv,
-        .stdout_limit = .limited(64 * 1024 * 1024),
-        .stderr_limit = .limited(4 * 1024 * 1024),
-    }) catch |e| switch (e) {
-        error.OutOfMemory => return error.OutOfMemory,
-        else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ argv[0], @errorName(e) }),
-    };
+    const result = try runEngine(ctx, argv, .limited(64 * 1024 * 1024));
     return finishRun(ctx, result);
 }
 
 /// `k4o lint <tpl>` — exit 0 and "clean" output means no findings.
 pub fn lint(ctx: *Ctx, template_path: []const u8) Error!Outcome {
-    const result = std.process.run(ctx.arena, ctx.io, .{
-        .argv = &.{ ctx.engines.k4o, "lint", template_path },
-        .stdout_limit = .limited(16 * 1024 * 1024),
-        .stderr_limit = .limited(4 * 1024 * 1024),
-    }) catch |e| switch (e) {
-        error.OutOfMemory => return error.OutOfMemory,
-        else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ ctx.engines.k4o, @errorName(e) }),
-    };
+    const result = try runEngine(ctx, &.{ ctx.engines.k4o, "lint", template_path }, .limited(16 * 1024 * 1024));
     switch (result.term) {
         .exited => |code| if (code == 0) return .{ .ok = result.stdout },
         else => {},
@@ -78,6 +64,23 @@ pub fn lint(ctx: *Ctx, template_path: []const u8) Error!Outcome {
     // Lint findings go to stdout on exit 1; real failures go to stderr.
     if (result.stdout.len > 0) return .{ .ok = result.stdout };
     return .{ .diags = try parseDiags(ctx, result.stderr) };
+}
+
+/// `std.process.run` under a hard deadline — `KNAP_ENGINE_TIMEOUT`
+/// seconds, default 60, 0 disables. A timed-out engine is killed and
+/// surfaces as a normal tool error, never a hung server.
+fn runEngine(ctx: *Ctx, argv: []const []const u8, stdout_limit: std.Io.Limit) Error!std.process.RunResult {
+    const secs = ctx.envSecs("KNAP_ENGINE_TIMEOUT", 60);
+    return std.process.run(ctx.arena, ctx.io, .{
+        .argv = argv,
+        .stdout_limit = stdout_limit,
+        .stderr_limit = .limited(4 * 1024 * 1024),
+        .timeout = ctx.deadline(secs),
+    }) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.Timeout => return ctx.fail("engine '{s}' timed out after {d}s", .{ argv[0], secs }),
+        else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ argv[0], @errorName(e) }),
+    };
 }
 
 fn finishRun(ctx: *Ctx, result: std.process.RunResult) Error!Outcome {
