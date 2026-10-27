@@ -215,30 +215,37 @@ knap-mcp publish-check "$doc" | jq -c '{ok, pages, links, diagnostics}'
 CMD
   fi
 
-  beat 6 "same template, mild vs spicy vs feral"
-  say "voice rewrites the voice: true values only, one backend call per value"
+  beat 6 "same template, mild vs feral"
+  say "frozen live voice takes: Muse Wonder 1.0 via ACP (devin, low thinking), one take each 2026-10-27"
   run <<'CMD'
-for t in mild spicy feral; do knap-mcp voice verdict -d data/verdict.sample.json --tone $t --backend mock | tee out/voice.$t.json | jq -c '{tone, changed, kept: [.fields[] | select(.status != "rewritten") | .field]}' || exit 1; done
+jq -c '{tone, changed}' "$ROOT/demo/frozen/06-voice-mild.json" "$ROOT/demo/frozen/06-voice-feral.json"
+CMD
+  say "the words the model actually wrote (feral)"
+  run <<'CMD'
+jq -r '.fields[] | select(.status == "rewritten") | "\(.field): \(.after)"' "$ROOT/demo/frozen/06-voice-feral.json" | fold -s -w 118
 CMD
   run <<'CMD'
-jq -r '.fields[] | select(.status == "rewritten") | "\(.field): \(.after)"' out/voice.feral.json
+for t in mild feral; do jq .data "$ROOT/demo/frozen/06-voice-$t.json" > out/verdict.$t.json || exit 1; done
 CMD
+  say "offline renders: the curated sample plus both frozen takes"
   run <<'CMD'
-for t in mild spicy feral; do jq .data out/voice.$t.json > out/verdict.$t.json || exit 1; done
-CMD
-  run <<'CMD'
-for t in mild spicy feral; do for tg in markdown html; do knap-mcp render verdict -d out/verdict.$t.json --target $tg --out out/verdict.$t.${tg/markdown/md} | jq -c "{tone: \"$t\", ok, target, bytes}" || exit 1; done; done
-CMD
-  run <<'CMD'
-knap-mcp render verdict -d data/verdict.sample.json --target html --out out/verdict.html | jq -c '{ok, target, bytes}'
+for t in orig mild feral; do d=data/verdict.sample.json; [ "$t" = orig ] || d=out/verdict.$t.json; knap-mcp render verdict -d "$d" --target markdown --out out/verdict.$t.md | jq -c "{tone: \"$t\", ok, bytes}" || exit 1; done
 CMD
   say "the falsifiable proof: the layout skeleton hash, text dropped"
   run <<'CMD'
-knap-mcp structhash out/verdict.md out/verdict.mild.md out/verdict.spicy.md out/verdict.feral.md | tee out/structhash.md.txt
+knap-mcp structhash out/verdict.orig.md out/verdict.mild.md out/verdict.feral.md | tee out/structhash.md.txt
 CMD
   same_hash out/structhash.md.txt
+  say "and it is the frozen record's hash"
   run <<'CMD'
-knap-mcp structhash out/verdict.html out/verdict.mild.html out/verdict.spicy.html out/verdict.feral.html | tee out/structhash.html.txt
+cut -d' ' -f1 out/structhash.md.txt | sort -u | grep -Fxf <(cut -d' ' -f1 "$ROOT/demo/frozen/06-structhash.txt" | sort -u)
+CMD
+  say "same proof through dogbed: html renders share one layout hash too"
+  run <<'CMD'
+for t in orig mild feral; do d=data/verdict.sample.json; [ "$t" = orig ] || d=out/verdict.$t.json; knap-mcp render verdict -d "$d" --target html --out out/verdict.$t.html | jq -c "{tone: \"$t\", ok, bytes}" || exit 1; done
+CMD
+  run <<'CMD'
+knap-mcp structhash out/verdict.orig.html out/verdict.mild.html out/verdict.feral.html | tee out/structhash.html.txt
 CMD
   same_hash out/structhash.html.txt
   run 1 <<'CMD'

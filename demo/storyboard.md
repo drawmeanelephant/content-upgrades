@@ -35,7 +35,7 @@ Status key:
 | 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
-| 6 | Same template, mild vs feral | 20s | 21.8s | `06-voice.tape` | C3 (mock replies), `knap_voice`: C1; structure hash: C2 | ready (mock) |
+| 6 | Same template, mild vs feral | 20s | 19.7s | `06-voice.tape` | frozen live voice takes (I5); structure hash: C2 | ready |
 | 7 | One source -> md + html + apparatus | 15s | 15.2s | `07-one-source.tape` | main; oliver target: P1; one shared data file: cut (T2/I5 deferred) | ready |
 | 8 | Numbers card, measured only | 10s | 12.0s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
 
@@ -198,27 +198,30 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   in `boris-site/`. Needs `boris` on `PATH` (the tape `Require`s it).
 - **Missing:** nothing for the mock take.
 
-### 6. Same template, mild vs feral (20s): ready (mock)
+### 6. Same template, mild vs feral (20s): ready
 
-- **On screen:** two real `knap-mcp voice` passes (`--tone mild`, `--tone feral`,
-  mock backend), the two renders, `structhash` printing the same hash for both —
-  the falsifiable proof that voice touched only values — then `diff` showing six
-  changed lines: title + verdict in frontmatter and body, the summary, and the
-  bottom line. Everything else (table, sources, footnotes) is identical; both
-  docs are 69 lines (wc stays off screen — the hash is the stronger claim).
+- **On screen:** the two frozen live `knap_voice` results labeled
+  `Muse Wonder 1.0 via ACP (devin, low thinking)` (`{tone,changed}` — 8 fields
+  rewritten per take, 0 rejected), then three offline renders — the curated
+  sample plus both frozen takes — `structhash` printing `6a738a8906ac2273`
+  for all three, and `diff` showing six hunks: title + verdict in frontmatter
+  and body, the summary, and the bottom line. Everything else (table, sources,
+  footnotes) is identical; all three docs are 70 lines.
 - **Commands:**
   ```sh
-  knap-mcp voice verdict -d v0.json --tone mild --backend mock | tee mild.json | jq -c '{tone,changed}'
-  knap-mcp voice verdict -d v0.json --tone feral --backend mock | tee feral.json | jq -c '{tone,changed}'
-  for t in mild feral; do jq .data $t.json | knap-mcp render verdict -d - --out $t.md | jq -c '{ok,bytes}'; done
-  knap-mcp structhash mild.md feral.md
-  diff mild.md feral.md
+  echo '# voice: Muse Wonder 1.0 via ACP (devin, low thinking)'; jq -c '{tone,changed}' v.{mild,feral}.json
+  for t in orig mild feral; do knap-mcp render verdict -d d.$t.json --out $t.md | jq -c '{ok,bytes}'; done
+  knap-mcp structhash orig.md mild.md feral.md
+  diff mild.md feral.md | fold -s -w 118
   ```
-  `v0.json` is a copy of `data/verdict.sample.json` made in the hidden preamble
-  to keep the typed lines under the frame width. The mock backend returns C3's
-  canned replies (`prompts/voice/mock/<tone>.jsonl`), the same data
-  `demo_seed_voice` used to apply, so the take is fixed.
-- **Missing:** only a live-backend voice pass (M1).
+  `v.<tone>.json` are copies of `demo/frozen/06-voice-<tone>.json` (the recorded
+  `knap_voice` results) and `d.<tone>.json` their `.data`; `d.orig.json` is a
+  copy of `data/verdict.sample.json`. All made in the hidden preamble to keep
+  the typed lines under the frame width. `fold` wraps the feral summary line
+  (215 columns) inside the 121-column frame. Nothing on tape calls a live
+  model; the structhash line must print the frozen record's hash or the take
+  stops (demo/frozen/06-structhash.txt).
+- **Missing:** nothing for this take.
 
 ### 7. One source -> several views (15s): ready
 
