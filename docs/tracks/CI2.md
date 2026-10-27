@@ -54,6 +54,49 @@ If the boris build ever breaks on the runner, dropping the two boris steps
 still leaves a useful job: `make demo` passes with beat 5 printed as
 SKIPPED (demo/run.sh exits 0).
 
+## Root cause: "engine terminated abnormally" (#74)
+
+`make demo` beat 2 (and, intermittently, `make eval`) died with
+`knap-mcp: engine terminated abnormally` on ubuntu-latest while passing on
+macOS. It was a **SIGILL from AVX-512 instructions in a cached engine
+build**. It was not a timeout, an env difference or a crash on the input.
+
+- Before #73, `scripts/engines.sh` built pins with `zig build
+  -Doptimize=ReleaseSafe`, which targets the *build machine's* CPU. The
+  result was saved under one `actions/cache` key (`knap-engines-Linux-<pin
+  hash>`) and restored by every later job, on whatever hardware it got.
+- GitHub's ubuntu-latest pool mixes CPUs. A pin built on an AVX-512 host
+  (Intel Xeon 8370C, AMD EPYC 9V45) SIGILLs on exec on an AMD EPYC 7763
+  (Zen 3, no AVX-512). Whether a job failed depended on which CPU built
+  the cache and which CPU restored it, so it looked like a coin-flip flake.
+  It also explains why `build + test + eval` could pass while `demo` failed
+  in the same run: they ran on different machines.
+- Evidence (PR #109, run 40436053673): a temporary matrix job (6 runners)
+  restored the old v1 cache and the current v2 cache side by side.
+  - v1 `k4o`/`dogbed`: 2338/2807 `zmm` instructions. On all 3 EPYC 7763
+    runners, `--help` exited 132 (128+SIGILL) and `knap-mcp validate` printed
+    `engine 'k4o' killed by signal 4 (SIGILL)`. They passed on the 3 AVX-512
+    runners.
+  - v2 (`-Dcpu=baseline`): 0 `zmm`/`ymm` instructions, passed on all 6.
+- A retry cannot fix this, because the same machine SIGILLs again. Run
+  40433036659 failed even with #73's retry in place.
+
+Fix: #73 already landed `-Dcpu=baseline` plus the `knap-engines-v2-` cache
+key. Both jobs have been green since. #74 adds the following:
+
+- `engine.zig` now names the termination:
+  - `engine 'k4o' killed by signal 4 (SIGILL): <stderr head>`;
+  - `stopped by signal N`, or `terminated abnormally (wait status N)`;
+  - timeouts stay `timed out after Ns`.
+  `knap_lint` fails the same way instead of returning empty diags.
+- It removes #73's retry-on-signal. Its premise ("runners reap children
+  spuriously") was wrong, and retrying a real crash only hides it and
+  doubles its cost.
+
+Rule for any future cached native build (engines, boris, anything shared
+between runners or machines): build with `-Dcpu=baseline` and bump the
+cache key when the build flags change.
+
 ## For other lanes
 
 - `scripts/install-boris.sh` is generic (tag/zig-version/dest args) — any
