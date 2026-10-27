@@ -117,6 +117,11 @@ const usage_tail =
     \\  KNAP_BASETEN_URL                   baseten endpoint override
     \\  KNAP_BORIS_SITE                    boris site dir (default <templates>/../../boris-site)
     \\  KNAP_BORIS_PATH                    boris binary for publish-check (default: PATH)
+    \\  KNAP_ENGINE_TIMEOUT                engine subprocess cap, seconds (default 60, 0 off)
+    \\  KNAP_CURL_TIMEOUT                  live-backend curl cap, seconds (default 60)
+    \\  KNAP_CURL_CONNECT_TIMEOUT          live-backend connect cap, seconds (default 10)
+    \\  KNAP_BORIS_TIMEOUT                 boris subprocess cap, seconds (default 60)
+    \\  KNAP_STORE_MAX_ARTIFACTS           artifact retention cap (default 256, 0 unbounded)
     \\
 ;
 
@@ -264,7 +269,9 @@ fn readData(ctx: *Ctx, path: []const u8) !std.json.Value {
     } else std.Io.Dir.readFileAlloc(.cwd(), ctx.io, path, ctx.arena, .limited(max_input)) catch
         return ctx.fail("cannot read data file '{s}'", .{path});
 
-    const v = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, bytes, .{}) catch
+    const v = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, bytes, .{
+        .parse_numbers = false,
+    }) catch
         return ctx.fail("'{s}' is not valid JSON", .{path});
     switch (v) {
         .object => return v,
