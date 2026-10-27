@@ -81,6 +81,10 @@ for t in $templates; do
                 jq -S . "$work/$t.$tone.json" | cmp -s - "$work/voice.data"; then
                 voice_checked=$((voice_checked + 1))
                 grep '^calls: ' "$work/voice.err" | sed "s/^/  $t $tone: /" >>"$work/counters"
+                # unchanged on the mock backend <=> a flagged field with no
+                # mock line; warn, it means the coverage table misses it.
+                unmocked=$(jq -r '[.fields[] | select(.status == "unchanged") | .field] | unique | join(", ")' "$work/voice.json")
+                [ -z "$unmocked" ] || note "warning: $t $tone: voice fields with no mock line (status unchanged): $unmocked"
             else
                 note "FAIL: knap-mcp voice $t --tone $tone differs from the jq reference: $(head -c 400 "$work/voice.err")"
                 failed=1

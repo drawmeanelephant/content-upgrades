@@ -40,4 +40,4 @@ Then three guard controls run `knap-mcp voice --backend mock` with a private `KN
 
 ## Coverage
 
-Mock replies cover the 32 `voice: true` sample values across all four templates (verdict 5, apparatus 1, release-notes 14, reading-note 12), so every row counts. A template whose mock lines go missing shows `no mock coverage` and does not fail — new voice fields need mock lines to exercise the proof. Hashes depend on the engine pins, so a pin bump can change every hash; the eval only compares hashes within one run.
+Mock replies cover the 38 `voice: true` sample values across all four templates (verdict 8, apparatus 4, release-notes 14, reading-note 12), so every row counts. A template whose mock lines go missing shows `no mock coverage` and does not fail — new voice fields need mock lines to exercise the proof. A flagged field with no matching mock line stays `unchanged` under `knap-mcp voice --backend mock`, and the script warns on it — that warning is the signal a new voice field needs mock lines. Hashes depend on the engine pins, so a pin bump can change every hash; the eval only compares hashes within one run.
