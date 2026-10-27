@@ -20,8 +20,8 @@
       }}
     }},
     "receipts": {"type": "array<object>", "role": "the claim map: one pipe-table row per claim; header row is fixed in the template", "optional": true, "apparatus": "table", "max_items": 3, "words": 8, "fields": {
-      "claim":      {"type": "string", "role": "the claim, one line", "voice": true},
-      "evidence":   {"type": "string", "role": "what backs it (verdict page only)", "optional": true, "voice": true},
+      "claim":      {"type": "string", "role": "the claim, one line"},
+      "evidence":   {"type": "string", "role": "what backs it (verdict page only)", "optional": true},
       "source":     {"type": "string", "role": "name of a page in `sources`, rendered as a [[wikilink]]; omit for 'nothing yet'", "optional": true},
       "confidence": {"type": "string", "role": "high|medium|low; falls back to unrated via ??", "optional": true},
       "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the claim. Must match a `footnotes` key exactly", "optional": true, "ref": "footnotes"}
