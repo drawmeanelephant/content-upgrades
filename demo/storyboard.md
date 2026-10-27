@@ -13,11 +13,11 @@ demo/build.sh smoke          # toolchain smoke test -> demo/out/smoke.mp4
 ```
 
 `make demo` (`demo/run.sh`) runs every beat below as one scripted terminal run on
-the mock backend, with no vhs and no network. It uses the shipped commands the
-tapes still mark as TODO (`voice`, `structhash`, `publish-check`, `density`,
-`ratchet`) and writes a normalized transcript and the beat artifacts to
-`demo/out/demo/` (see `docs/tracks/I1.md`). Use it as the per-beat reference
-text when re-recording a tape.
+the mock backend, with no vhs and no network. It uses the same shipped commands
+the tapes now run (`voice`, `structhash`, `publish-check`, `density`, `ratchet`)
+and writes a normalized transcript and the beat artifacts to `demo/out/demo/`
+(see `docs/tracks/I1.md`). Use it as the per-beat reference text when
+re-recording a tape.
 
 Status key:
 
@@ -33,14 +33,14 @@ Status key:
 | 2 | Ask for a verdict: model drafts data only | 20s | 20.8s | `02-verdict-data.tape` | main; `boris_ask`: B3 (B1's `ask.sh` works now); live drafting: M1 + MCP client | partial |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.2s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
 | 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
-| 4b | *(optional)* Density ratchet | 15s | 14.6s | `04b-density-ratchet.tape` | D1 + D2 | placeholder |
-| 5 | The boris catch | 15s | 14.4s | `05-boris-catch.tape` | B1 (`stage-check.sh`, now); `knap_publish_check`: B2 | partial |
-| 6 | Same template, mild vs feral | 20s | 18.4s | `06-voice.tape` | C3 (mock replies, now); `knap_voice`: C1; structure hash: C2 | partial |
+| 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
+| 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
+| 6 | Same template, mild vs feral | 20s | 21.8s | `06-voice.tape` | C3 (mock replies), `knap_voice`: C1; structure hash: C2 | ready (mock) |
 | 7 | One source -> md + html + apparatus | 15s | 18.6s | `07-one-source.tape` | main; oliver target: P1; one shared data file: T2/I5 | partial |
 | 8 | Numbers card, measured only | 10s | 12.0s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
 
 **Runtime.** SPEC calls the demo "~2 min", but its per-beat targets add up to 2:20
-(2:35 with beat 4b). The current rough cut of all 9 tapes runs 2:36 (2:22 without
+(2:35 with beat 4b). The current rough cut of all 9 tapes runs 2:43 (2:27 without
 4b); beat 7 is the one tape well over its target (18.6s vs 15s). If the submission
 cap turns out to be 2:00, drop 4b and cut beat 4 (30s to 20s), beat 2 (20s to 15s),
 and beat 6 (20s to 15s): that brings the rendered beats to about 2:03, and trimming
@@ -144,56 +144,71 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   footnotes have no in-text references, and `format-check` flags them plus 2 bare URLs
   (T2). Keep `format-check` off screen until those are fixed.
 
-### 4b. Density ratchet (15s, optional): placeholder
+### 4b. Density ratchet (15s, optional): ready (mock)
 
 - **Why it exists:** the README pitch is the density ratchet, and SPEC's 8 beats
   predate it. Whether it gets a slot is the captain's call.
-- **Intended:** `knap-mcp ratchet verdict -d <required fields only> --backend mock`,
-  showing each step's slot, gain, and accepted/rejected reason, then the score's start,
-  final, and ceiling. The CLI and output shapes come from `docs/next-phase-plan.md`
-  and are proposals; match whatever D1/D2 ship.
-
-### 5. The boris catch (15s): partial
-
-- **On screen:** a verdict with one invented source renders with `ok: true`. Staged
-  into a copy of the frozen boris site, it fails:
-  `v1.md:37:3: error: EREFERENCEMISSING: wiki-link target "acmedb-soc-2-audit-report" not found in the page graph`,
-  then `[[AcmeDB SOC 2 audit report]] -> acmedb-soc-2-audit-report` and a FAIL line
-  (exit 1). Re-rendered from the real sample data, the same check passes with "2
-  wiki-link(s) resolve against the frozen site (13 pages)".
+- **On screen:** the required-fields-only doc renders, then one `ratchet` call,
+  then the accepted steps (slot + gain per iteration) and the score summary:
+  start 44.5 -> final 71.3 against a 71.2 ceiling, 4/8 slots filled, stop
+  reason `ceiling`. Deterministic on the mock backend.
 - **Commands:**
   ```sh
-  knap-mcp render verdict -d seeded/verdict.hallucinated.json --out v1.md | jq -c '{ok, bytes}'
-  boris-site/stage-check.sh v1.md
-  knap-mcp render verdict -d data/verdict.sample.json --out v2.md >/dev/null && boris-site/stage-check.sh v2.md
+  knap-mcp ratchet release-notes -d r0.json --backend mock | tee ratchet.json | jq -c '{ok,stop}'
+  jq -c '.steps[] | {slot, gain, accepted}' ratchet.json
+  jq -c '{score, slot_fill, stop}' ratchet.json
   ```
-  `seeded/verdict.hallucinated.json` is derived at take time by
-  `demo_seed_hallucinated_source` in `demo/lib/env.sh`: the sample data plus the same
-  invented source that `boris-site/selftest.sh` injects. Each check takes under half
-  a second (about 0.05s warm).
-- **Missing:** `knap_publish_check` (B2). Until it lands, B1's `stage-check.sh`, the
-  reference behavior for that tool, runs on screen. Swap in the knap-mcp command
-  when B2 ships. Note that SPEC's `boris check --fail-on-unlinked` flag does not exist;
-  the next-phase plan has B2 run `boris validate` for references. Needs `boris` on
-  `PATH` (the tape `Require`s it).
+  `r0.json` is a copy of `data/release-notes.min.json` made in the hidden
+  preamble to keep the typed line under the frame width. The plan proposed
+  `verdict`, but verdict ships no `.min.json`; the README's ratchet example is
+  `release-notes` + `data/release-notes.min.json`, which is what the tape runs.
+- **Missing:** only a live-backend run (M1).
 
-### 6. Same template, mild vs feral (20s): partial
+### 5. The boris catch (15s): ready
 
-- **On screen:** the verdict rendered in two tones, `wc -l` showing 43 lines each, and
-  `diff` showing exactly four changed lines: the heading, verdict + take, the summary,
-  and the bottom line. Everything else (table, sources, footnotes) is identical.
+- **On screen:** a verdict with one invented source renders with `ok: true`.
+  `knap-mcp publish-check` stages the doc into a copy of the frozen site and runs
+  `boris validate`: it fails (exit 1) with
+  `EREFERENCEMISSING: wiki-link target "acmedb-soc-2-audit-report" not found in the page graph`
+  naming `[[AcmeDB SOC 2 audit report]]`. Re-rendered from the real sample data,
+  the same check returns `{"ok":true,...}` with all links resolved (exit 0).
 - **Commands:**
   ```sh
-  for t in mild feral; do knap-mcp render verdict -d seeded/verdict.$t.json --out $t.md | jq -c '{ok, bytes}'; done
-  wc -l mild.md feral.md
+  knap-mcp render verdict -d bad.json | tee v1.json | jq -c '{ok,bytes}'
+  knap-mcp publish-check $(jq -r .doc_id v1.json) | jq -c '.diagnostics[]'
+  v2=$(knap-mcp render verdict -d good.json | jq -r .doc_id)
+  knap-mcp publish-check $v2 | jq -c '{ok,links,pages}'
+  ```
+  `bad.json` / `good.json` are copies made in the hidden preamble to keep the
+  typed lines short. `bad.json` is `seeded/verdict.hallucinated.json`, derived
+  at take time by `demo_seed_hallucinated_source` in `demo/lib/env.sh`: the
+  sample data plus the same invented source that `boris-site/selftest.sh`
+  injects. `good.json` is `data/verdict.sample.json`. `knap_publish_check` (B2)
+  is the shipped tool; B1's `stage-check.sh` remains as the reference behavior
+  in `boris-site/`. Needs `boris` on `PATH` (the tape `Require`s it).
+- **Missing:** nothing for the mock take.
+
+### 6. Same template, mild vs feral (20s): ready (mock)
+
+- **On screen:** two real `knap-mcp voice` passes (`--tone mild`, `--tone feral`,
+  mock backend), the two renders, `structhash` printing the same hash for both —
+  the falsifiable proof that voice touched only values — then `diff` showing six
+  changed lines: title + verdict in frontmatter and body, the summary, and the
+  bottom line. Everything else (table, sources, footnotes) is identical; both
+  docs are 69 lines (wc stays off screen — the hash is the stronger claim).
+- **Commands:**
+  ```sh
+  knap-mcp voice verdict -d v0.json --tone mild --backend mock | tee mild.json | jq -c '{tone,changed}'
+  knap-mcp voice verdict -d v0.json --tone feral --backend mock | tee feral.json | jq -c '{tone,changed}'
+  for t in mild feral; do jq .data $t.json | knap-mcp render verdict -d - --out $t.md | jq -c '{ok,bytes}'; done
+  knap-mcp structhash mild.md feral.md
   diff mild.md feral.md
   ```
-  `seeded/verdict.{mild,feral}.json` are derived at take time by `demo_seed_voice` in
-  `demo/lib/env.sh`, which applies C3's canned replies (`prompts/voice/mock/<tone>.jsonl`)
-  to the sample data. This is GAMEPLAN's fallback (hand-authored tone data), and it is
-  what `knap_voice`'s mock backend should return.
-- **Missing:** `knap-mcp voice` (C1) to produce the tone data on screen, and C2's
-  structure hash, which is the falsifiable proof. Equal line counts are only a hint.
+  `v0.json` is a copy of `data/verdict.sample.json` made in the hidden preamble
+  to keep the typed lines under the frame width. The mock backend returns C3's
+  canned replies (`prompts/voice/mock/<tone>.jsonl`), the same data
+  `demo_seed_voice` used to apply, so the take is fixed.
+- **Missing:** only a live-backend voice pass (M1).
 
 ### 7. One source -> several views (15s): partial
 
