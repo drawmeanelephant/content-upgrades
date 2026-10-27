@@ -1,7 +1,7 @@
 # Beat 4b (optional, proposed): the density ratchet from the README pitch.
 # SPEC's 8 beats predate it; whether it gets a slot is the captain's call.
 # target: 15s
-# status: ready (mock backend); a live ratchet run needs M1
+# status: ready (mock backend); live take: devin-wonder ACP profile
 # depends: D1 (src/density.zig), D2 (knap_density, knap_ratchet) — shipped
 #
 # data/release-notes.min.json is the shipped required-fields-only data file
@@ -35,4 +35,6 @@ Type "jq -c '{score, slot_fill, stop}' ratchet.json"
 Enter
 Sleep 4s
 
-# TODO(M1): swap --backend mock for a live backend once MODEL_API_KEY lands.
+# TODO: swap --backend mock for --backend acp with
+# KNAP_ACP_AGENT='devin acp --model muse-wonder-1-0-low' (the devin-wonder
+# profile in scripts/providers.sh) for a live take.

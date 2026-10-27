@@ -127,7 +127,7 @@ empty slot raises the density score most, ask the backend for one value,
 keep it only if schema, markup and evidence checks pass and the markdown
 score rises. A non-empty value and the template never change. Stops on
 ceiling, plateau, stalled, `--max-iters` (default 6) or the call budget.
-`ratchet-eval` runs the 11-case corpus in `eval/ratchet.json`.
+`ratchet-eval` runs the 20-case corpus in `eval/ratchet.json`.
 
 ## Voice
 

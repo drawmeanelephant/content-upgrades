@@ -30,9 +30,9 @@ Status key:
 | # | Beat | Target | Last render | Tape | Depends on | Status |
 |---|---|---|---|---|---|---|
 | 1 | Cold open: the generic AI doc (density/2 25.7) | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
-| 2 | Ask for a verdict: model drafts data only | 20s | 20.7s | `02-verdict-data.tape` | frozen drafted take (I5); `boris_ask` (B3); MCP-client footage: #88 (human) | ready |
+| 2 | Ask for a verdict: model drafts data only | 20s | 20.7s | `02-verdict-data.tape` | frozen drafted take (I5); `boris_ask` (B3) | ready |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 25.0s | `03-repair.tape` | frozen live take (I5); seed + diag: main | ready |
-| 4 | The doc | 30s | 28.9s | `04-the-doc.tape` | main; hero still: `demo/hero/`; art: Muse Image (human) | ready |
+| 4 | The doc | 30s | 28.9s | `04-the-doc.tape` | main; hero still: `demo/hero/`; art overlay: #102 (human) | ready |
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
 | 6 | Same template, mild vs feral | 20s | 19.7s | `06-voice.tape` | frozen live voice takes (I5); structure hash: C2 | ready |
@@ -40,15 +40,17 @@ Status key:
 | 8 | Numbers card, measured only | 10s | 10.5s | `08-numbers.tape` | main (E1 corpora, K3 results); live takes: I2/I3; card: I4 | ready |
 
 **Runtime.** SPEC calls the demo "~2 min", but its per-beat targets add up to 2:20
-(2:35 with beat 4b). The current rough cut of all 9 tapes runs 2:43 (2:27 without
-4b); beat 7 is the one tape well over its target (18.6s vs 15s). If the submission
-cap turns out to be 2:00, drop 4b and cut beat 4 (30s to 20s), beat 2 (20s to 15s),
-and beat 6 (20s to 15s): that brings the rendered beats to about 2:03, and trimming
-beat 7 to its target gets under 2:00. Typing can also be sped up in Kdenlive. The
-video length limit is still unconfirmed (see `docs/tracks/V0.md`).
+(2:35 with beat 4b). The current render of all 9 tapes runs 2:37 (2:22 without
+4b); beat 5 is the tape furthest over its target (16.7s vs 15s), and beat 7 sits
+on its 15s target at 15.2s. If the submission cap turns out to be 2:00, drop 4b
+and cut beat 4 (30s to 20s), beat 2 (20s to 15s), and beat 6 (20s to 15s): that
+brings the rendered beats to about 2:02, and trimming the three tapes still
+over their targets (5, 7 and 8) lands just under 2:00. Typing can also be sped
+up in Kdenlive. The video length limit is still unconfirmed (see
+`docs/tracks/V0.md`).
 
 **Engines and targets.** Tapes take the engine pins from `scripts/engines.sh`, now k4o
-main `aeba163` and dogbed main `188ccac`. That k4o has no gfm or textile output, so
+main `aeba163` and dogbed main `d96b125`. That k4o has no gfm or textile output, so
 the tapes use only markdown and html. SPEC's beat 7 now names `verdict.oliver`; on
 screen it is verdict.html — oliver renders byte-identical to markdown for this
 template, so html is what makes "several views" visible. The k4o main markdown
@@ -98,9 +100,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   the sources alone; beat 4 renders the curated `data/verdict.sample.json`
   (`"give a shit"`). The beat shows only that the model's draft validates against
   the shape — nothing implies beat 4's doc is rendered from this draft.
-- **Open:** #88 (human-only Muse Code probe) has produced no footage. If OBS
-  MCP-client footage lands, it replaces this tape's frozen-draft portion (the
-  `jq`/`validate` lines on `02-verdict.drafted.json`); don't splice until then.
+- **Open:** none — the frozen-draft portion stays; #88 was closed won't-do.
 
 ### 3. Seeded failure -> repair (25s): ready
 
@@ -156,8 +156,8 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   render wrapped in `demo/hero/style.css` (Catppuccin Mocha, zero JavaScript;
   `demo/hero/build.sh` re-captures it with headless Chrome and refuses to ship a
   page containing any). Callouts, the receipts table and the footnotes sit above
-  the fold; the empty right third is the slot for the Muse Image art overlay
-  (human, placed in Kdenlive).
+  the fold; the empty right third is the slot for the art overlay (#102 —
+  human, placed in Kdenlive).
 
 ### 4b. Density ratchet (15s, optional): ready (mock)
 
@@ -165,7 +165,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   predate it. Whether it gets a slot is the captain's call.
 - **On screen:** the required-fields-only doc renders, then one `ratchet` call,
   then the accepted steps (slot + gain per iteration) and the score summary:
-  start 44.5 -> final 71.3 against a 71.2 ceiling, 4/8 slots filled, stop
+  start 39.2 -> final 82.5 against a 82.8 ceiling, 5/9 slots filled, stop
   reason `ceiling`. Deterministic on the mock backend.
 - **Commands:**
   ```sh
@@ -177,8 +177,10 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   preamble to keep the typed line under the frame width. The plan proposed
   `verdict` and `data/verdict.min.json` ships now, but the README's ratchet
   example is `release-notes` + `data/release-notes.min.json`, which is what
-  the tape runs — and verdict's shape carries no ratchet slots yet.
-- **Missing:** only a live-backend run (M1).
+  the tape runs.
+- **Missing:** only a live take — the `devin-wonder` ACP profile
+  (`--backend acp`, `KNAP_ACP_AGENT='devin acp --model muse-wonder-1-0-low'`;
+  `scripts/providers.sh`).
 
 ### 5. The boris catch (15s): ready
 
@@ -282,7 +284,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   prompt per call, LIVE.md finding 3).
 - **Values on this render (pinned k4o aeba163, dogbed d96b125):** repair
   converged — mock 12/22 + 120/167, summarizer 22/22 + 166/167, Wonder
-  22/22 + 167/167. Ratchet cases ok — mock 9/9, summarizer 3/9, Wonder 2/9
+  22/22 + 167/167. Ratchet cases ok — mock 9/9, summarizer 3/9, Wonder 3/9
   (the misses are measured model shortfall against the mock-tuned bar, not
   harness breakage). Conformance 187/188 (the one accepted
   `diagnostics/unknown-filter` buffered-output diff, 0 unsupported). Server
@@ -290,6 +292,6 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
 
 ## Not on tape
 
-- Title card and section slates: Muse Image stills, placed in Kdenlive.
+- Title card and section slates: hand-made or pipeline-rendered stills
+  (#102), placed in Kdenlive.
 - Voiceover: recorded by the human (see V0.md).
-- MCP-client footage (Muse Code driving the server): OBS, if the probe works.

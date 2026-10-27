@@ -117,17 +117,24 @@ pub const Ctx = struct {
     }
 };
 
-/// KNAP_TEMPLATES_DIR wins; then ./templates; then the dir two levels up
-/// from the executable (covers zig-out/bin/knap-mcp -> <root>/templates).
+/// KNAP_TEMPLATES_DIR wins; then the dir two levels up from the
+/// executable (covers zig-out/bin/knap-mcp -> <root>/templates); then
+/// ./templates. The shipped set outranks a stray cwd ./templates, which
+/// is only the fallback for a binary moved out of its tree.
 fn resolveTemplatesDir(p: std.process.Init) ![]const u8 {
     const arena = p.arena.allocator();
     if (p.environ_map.get("KNAP_TEMPLATES_DIR")) |dir| return dir;
+    const exe_dir = std.process.executableDirPathAlloc(p.io, arena) catch null;
+    return defaultTemplatesDir(p.io, arena, exe_dir);
+}
 
-    if (dirExists(p.io, "templates")) return "templates";
-
-    const exe_dir = std.process.executableDirPathAlloc(p.io, arena) catch return "templates";
-    const candidate = try std.fmt.allocPrint(arena, "{s}/../../templates", .{exe_dir});
-    if (dirExists(p.io, candidate)) return candidate;
+/// <exe>/../../templates when that dir exists, else ./templates — split
+/// from resolveTemplatesDir so tests can pass a fake exe location.
+fn defaultTemplatesDir(io: std.Io, arena: std.mem.Allocator, exe_dir: ?[]const u8) ![]const u8 {
+    if (exe_dir) |d| {
+        const candidate = try std.fmt.allocPrint(arena, "{s}/../../templates", .{d});
+        if (dirExists(io, candidate)) return candidate;
+    }
     return "templates";
 }
 
@@ -165,4 +172,39 @@ test "countUsage sums metered fields, leaves unmetered at 0" {
     try std.testing.expectEqual(@as(u64, 265), ctx.completion_tokens);
     try std.testing.expectEqual(@as(u64, 421), ctx.total_tokens);
     try std.testing.expectEqual(@as(u64, 256), ctx.reasoning_tokens);
+}
+
+test "KNAP_TEMPLATES_DIR is an explicit override" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    try env.put("KNAP_TEMPLATES_DIR", "/custom/templates");
+    const p: std.process.Init = .{
+        .minimal = undefined,
+        .arena = &arena,
+        .gpa = std.testing.allocator,
+        .io = std.testing.io,
+        .environ_map = &env,
+        .preopens = .empty,
+    };
+    try std.testing.expectEqualStrings("/custom/templates", try resolveTemplatesDir(p));
+}
+
+test "a stray ./templates in cwd cannot shadow the exe-relative shipped set" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    // Shipped layout: <pkg>/zig-out/bin/<exe>, templates at <pkg>/templates.
+    try tmp.dir.createDirPath(std.testing.io, "pkg/zig-out/bin");
+    try tmp.dir.createDirPath(std.testing.io, "pkg/templates");
+    const exe_dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/pkg/zig-out/bin", .{tmp.sub_path});
+    try std.testing.expectEqualStrings(
+        try std.fmt.allocPrint(a, "{s}/../../templates", .{exe_dir}),
+        try defaultTemplatesDir(std.testing.io, a, exe_dir),
+    );
+    // No shipped set beside the exe (relocated binary): ./templates fallback.
+    try std.testing.expectEqualStrings("templates", try defaultTemplatesDir(std.testing.io, a, null));
+    try std.testing.expectEqualStrings("templates", try defaultTemplatesDir(std.testing.io, a, "/nonexistent/bin"));
 }
