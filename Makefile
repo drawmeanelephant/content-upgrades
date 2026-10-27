@@ -1,4 +1,8 @@
-.PHONY: all test eval ratchet-eval voice-eval live demo engines clean
+.PHONY: all test eval ratchet-eval voice-eval live demo engines install clean
+
+# Install location: `make install` -> $(DESTDIR)$(PREFIX)/bin/knap-mcp.
+# Override with `make install PREFIX=/usr/local`; stage with DESTDIR.
+PREFIX ?= $(HOME)/.local
 
 # Pinned engine binaries; the pins live in scripts/engines.sh. Override for
 # one run with `make eval KNAP_K4O_PATH=...`.
@@ -35,6 +39,10 @@ demo: all engines
 
 engines:
 	@scripts/engines.sh
+
+install:
+	cd knap-mcp && zig build install --release=safe --prefix "$(DESTDIR)$(PREFIX)"
+	@echo "installed $(DESTDIR)$(PREFIX)/bin/knap-mcp"
 
 clean:
 	rm -rf knap-mcp/zig-out knap-mcp/.zig-cache knap-mcp/.knap-mcp
