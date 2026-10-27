@@ -129,10 +129,10 @@ fn describeTerm(buf: []u8, term: std.process.Child.Term) []const u8 {
     return switch (term) {
         .exited => |code| std.fmt.bufPrint(buf, "exited {d}", .{code}),
         .signal => |sig| std.fmt.bufPrint(buf, "killed by signal {d} (SIG{s})", .{
-            @intFromEnum(sig), std.enums.tagName(std.posix.SIG, sig) orelse "?",
+            @backingInt(sig), std.enums.tagName(std.posix.SIG, sig) orelse "?",
         }),
         .stopped => |sig| std.fmt.bufPrint(buf, "stopped by signal {d} (SIG{s})", .{
-            @intFromEnum(sig), std.enums.tagName(std.posix.SIG, sig) orelse "?",
+            @backingInt(sig), std.enums.tagName(std.posix.SIG, sig) orelse "?",
         }),
         .unknown => |status| std.fmt.bufPrint(buf, "terminated abnormally (wait status {d})", .{status}),
     } catch "terminated abnormally";
@@ -177,7 +177,7 @@ fn parseDiagLine(line: []const u8) ?Diag {
 pub fn targetFromName(name: []const u8) ?Target {
     const info = @typeInfo(Target).@"enum";
     inline for (info.field_names, 0..) |fname, i| {
-        if (std.mem.eql(u8, name, fname)) return @enumFromInt(info.field_values[i]);
+        if (std.mem.eql(u8, name, fname)) return @fromBackingInt(@intCast(info.field_values[i]));
     }
     return null;
 }

@@ -131,15 +131,14 @@ pub fn voiceData(ctx: *Ctx, template_id: []const u8, data_json: []const u8, tone
             ctx.countCall(system, try userMessage(a, slot.path, slot.role, before));
             break :blk mockReply(a, mock_lines, template_id, slot.path, before) catch
                 return ctx.fail("voice mock/{s}.jsonl has a bad line", .{tone_name});
-        } else
-            backend.complete(ctx, kind, .voice, system, try userMessage(a, slot.path, slot.role, before)) catch |e| switch (e) {
-                error.ToolFailed => {
-                    const why = try std.fmt.allocPrint(a, "backend error: {s}", .{ctx.err_msg});
-                    try fields.append(a, .{ .field = slot.path, .before = before, .after = before, .status = .rejected, .reasons = try a.dupe([]const u8, &.{why}) });
-                    continue;
-                },
-                else => return e,
-            };
+        } else backend.complete(ctx, kind, .voice, system, try userMessage(a, slot.path, slot.role, before)) catch |e| switch (e) {
+            error.ToolFailed => {
+                const why = try std.fmt.allocPrint(a, "backend error: {s}", .{ctx.err_msg});
+                try fields.append(a, .{ .field = slot.path, .before = before, .after = before, .status = .rejected, .reasons = try a.dupe([]const u8, &.{why}) });
+                continue;
+            },
+            else => return e,
+        };
         const reply = if (raw) |r| cleanReply(r, before) else before;
         if (std.mem.eql(u8, reply, before)) {
             try fields.append(a, .{ .field = slot.path, .before = before, .after = before, .status = .unchanged, .reasons = &.{} });
@@ -638,15 +637,15 @@ fn hasSymbol(s: []const u8) bool {
 const verifier = @import("verifier.zig");
 
 const stopwords = [_][]const u8{
-    "a",     "an",    "the",   "and",   "or",    "but",   "of",    "to",    "in",
-    "on",    "at",    "for",   "by",    "with",  "from",  "as",    "is",    "are",
-    "was",   "were",  "be",    "been",  "being", "it",    "its",   "this",  "that",
-    "these", "those", "has",   "have",  "had",   "do",    "does",  "did",   "will",
-    "would", "can",   "could", "should", "may",  "might", "must",  "so",    "than",
-    "then",  "there", "their", "they",  "them",  "we",    "our",   "you",   "your",
-    "he",    "she",   "his",   "her",   "i",     "me",    "my",    "if",    "into",
-    "about", "just",  "also",  "any",   "some",  "each",  "very",  "too",   "which",
-    "who",   "whom",  "what",  "when",  "where", "how",   "why",   "s",     "t",
+    "a",     "an",    "the",   "and",    "or",    "but",   "of",   "to",   "in",
+    "on",    "at",    "for",   "by",     "with",  "from",  "as",   "is",   "are",
+    "was",   "were",  "be",    "been",   "being", "it",    "its",  "this", "that",
+    "these", "those", "has",   "have",   "had",   "do",    "does", "did",  "will",
+    "would", "can",   "could", "should", "may",   "might", "must", "so",   "than",
+    "then",  "there", "their", "they",   "them",  "we",    "our",  "you",  "your",
+    "he",    "she",   "his",   "her",    "i",     "me",    "my",   "if",   "into",
+    "about", "just",  "also",  "any",    "some",  "each",  "very", "too",  "which",
+    "who",   "whom",  "what",  "when",   "where", "how",   "why",  "s",    "t",
 };
 
 const negations = [_][]const u8{
