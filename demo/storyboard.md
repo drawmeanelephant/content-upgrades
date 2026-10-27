@@ -32,7 +32,7 @@ Status key:
 | 1 | Cold open: the generic AI doc (density/2 25.7) | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
 | 2 | Ask for a verdict: model drafts data only | 20s | 20.7s | `02-verdict-data.tape` | frozen drafted take (I5); `boris_ask` (B3); MCP-client footage: #88 (human) | ready |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 25.0s | `03-repair.tape` | frozen live take (I5); seed + diag: main | ready |
-| 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
+| 4 | The doc | 30s | 28.9s | `04-the-doc.tape` | main; hero still: `demo/hero/`; art: Muse Image (human) | ready |
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
 | 6 | Same template, mild vs feral | 20s | 19.7s | `06-voice.tape` | frozen live voice takes (I5); structure hash: C2 | ready |
@@ -141,24 +141,23 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
 - **Open:** none — the converging live take the freeze issue captured is what
   SPEC asks for: diagnostic, patch, re-render, all visible.
 
-### 4. The doc (30s): partial
+### 4. The doc (30s): ready
 
 - **On screen:** the verdict rendered to markdown, paged in glow: H1, bold verdict and hot
-  take, blockers list, receipts table, wikilinked sources with deep links, footnotes.
+  take, the quote and danger callouts, receipts table, wikilinked sources with deep
+  links, footnotes, and the folded warning and info callouts on page 2.
   glow hides the YAML frontmatter.
 - **Commands:**
   ```sh
   knap-mcp render verdict -d data/verdict.sample.json --target markdown --out verdict.md | jq -c '{ok, target, bytes}'
   glow -p verdict.md     # Space for page 2
   ```
-- **Missing:** callouts (T2, now that the pinned k4o has `callout`). The Muse Image
-  art is a Kdenlive overlay (human). The better hero shot is dogbed HTML in a browser.
-  The pinned dogbed renders both templates to html now, but nobody has styled or
-  captured it (human, OBS or a headless screenshot).
-- **Visual state, verified on main:** the receipts table renders a real header row
-  (`| Claim | Evidence | Source |`), receipts with a `note` carry in-text footnote
-  refs (`[^benchmark]`, `[^backup-gap]`), and `format-check` returns zero warnings
-  on the sample render — it can go on screen.
+- **Hero still:** `demo/hero/verdict.png` (1920x1080) — the pinned dogbed's html
+  render wrapped in `demo/hero/style.css` (Catppuccin Mocha, zero JavaScript;
+  `demo/hero/build.sh` re-captures it with headless Chrome and refuses to ship a
+  page containing any). Callouts, the receipts table and the footnotes sit above
+  the fold; the empty right third is the slot for the Muse Image art overlay
+  (human, placed in Kdenlive).
 
 ### 4b. Density ratchet (15s, optional): ready (mock)
 
