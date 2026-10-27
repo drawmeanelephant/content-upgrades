@@ -1,0 +1,55 @@
+{
+  "profile": "devin-swe-2",
+  "profile_source": "scripts/providers.sh",
+  "label": "SWE-2 via ACP (devin, free tier)",
+  "backend": "acp",
+  "model": "swe-2-high",
+  "effort": "medium",
+  "expect": "swe-2-*",
+  "note": null,
+  "started": "2026-10-27T13:33:01Z",
+  "finished": "2026-10-27T13:35:45Z",
+  "knap_mcp": {
+    "version": "0.1.0",
+    "git": "6096bd5+dirty"
+  },
+  "engines": {
+    "k4o": "k4o-aeba163",
+    "dogbed": "dogbed-d96b125"
+  },
+  "host": "Darwin arm64",
+  "runs": [
+    {
+      "suite": "smoke",
+      "command": "knap-mcp smoke --backend acp",
+      "exit": 0,
+      "seconds": 11,
+      "out": "smoke.out",
+      "err": "smoke.err"
+    },
+    {
+      "suite": "repair",
+      "command": "knap-mcp eval --corpus eval/seeds.json --backend acp",
+      "exit": 0,
+      "seconds": 63,
+      "out": "repair-seeds.out",
+      "err": "repair-seeds.err"
+    },
+    {
+      "suite": "ratchet",
+      "command": "knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend acp",
+      "exit": 1,
+      "seconds": 46,
+      "out": "ratchet.out",
+      "err": "ratchet.err"
+    },
+    {
+      "suite": "voice",
+      "command": "knap-mcpvoice_suite",
+      "exit": 0,
+      "seconds": 44,
+      "out": "voice.out",
+      "err": "voice.err"
+    }
+  ]
+}

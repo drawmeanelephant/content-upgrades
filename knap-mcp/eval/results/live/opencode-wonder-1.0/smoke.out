@@ -1,0 +1,14 @@
+backend: acp   model: opencode/muse-wonder-1.0   effort: default   served: n/a
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | NO | 524 | - | - | - | - | - | - | - | none | acp agent 'env' failed session/prompt: Internal error: Upstream request failed: Insufficient account funds |
+| voice | NO | 304 | - | - | - | - | - | - | - | none | acp agent 'env' failed session/prompt: Internal error: Upstream request failed: Insufficient account funds |
+| verify | NO | 341 | - | - | - | - | - | - | - | none | acp agent 'env' failed session/prompt: Internal error: Upstream request failed: Insufficient account funds |
+| judge | NO | 183 | - | - | - | - | - | - | - | none | acp agent 'env' failed session/prompt: Internal error: Upstream request failed: Insufficient account funds |
+| enrich | NO | 436 | - | - | - | - | - | - | - | none | acp agent 'env' failed session/prompt: Internal error: Upstream request failed: Insufficient account funds |
+| repair-patch | NO | 152 | - | - | - | - | - | - | - | none | acp agent 'env' failed session/prompt: Internal error: Upstream request failed: Insufficient account funds |
+
+smoke: 0/6 ok   wall 1940 ms   mean 323 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 0  completion 0  total 0  reasoning 0
