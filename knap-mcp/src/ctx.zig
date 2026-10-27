@@ -24,6 +24,30 @@ pub const Ctx = struct {
     /// warning — a repair loop must not repeat it on every call.
     store_warned: bool = false,
 
+    /// Slice-economy counters for the numbers card ("disseminate, don't
+    /// stuff"). `backend.complete` counts live calls; the mock paths count
+    /// the slice they would have sent, via `countCall`.
+    calls: usize = 0,
+    slice_bytes_total: usize = 0,
+    slice_bytes_max: usize = 0,
+    /// The cache-stable system prefix: recorded, not summed.
+    prefix_bytes: usize = 0,
+
+    /// One model call carrying `slice` bytes under a `prefix`-byte system
+    /// prompt. Mock paths pass the slice they would have sent so eval
+    /// numbers measure the real context economy.
+    pub fn countCall(ctx: *Ctx, prefix: []const u8, slice: []const u8) void {
+        ctx.calls += 1;
+        ctx.slice_bytes_total += slice.len;
+        ctx.slice_bytes_max = @max(ctx.slice_bytes_max, slice.len);
+        ctx.prefix_bytes = prefix.len;
+    }
+
+    /// Mean slice bytes per counted call; 0 before the first.
+    pub fn meanSlice(ctx: *const Ctx) usize {
+        return if (ctx.calls == 0) 0 else ctx.slice_bytes_total / ctx.calls;
+    }
+
     pub fn init(p: std.process.Init) !Ctx {
         const arena = p.arena.allocator();
         const env = p.environ_map;
@@ -87,4 +111,19 @@ fn dirExists(io: std.Io, path: []const u8) bool {
     var d = std.Io.Dir.openDir(.cwd(), io, path, .{}) catch return false;
     d.close(io);
     return true;
+}
+
+test "countCall totals slice bytes, keeps the max, records the prefix once" {
+    var ctx: Ctx = undefined;
+    ctx.calls = 0;
+    ctx.slice_bytes_total = 0;
+    ctx.slice_bytes_max = 0;
+    ctx.prefix_bytes = 0;
+    ctx.countCall("system prompt", "12345");
+    ctx.countCall("system prompt", "12");
+    try std.testing.expectEqual(@as(usize, 2), ctx.calls);
+    try std.testing.expectEqual(@as(usize, 7), ctx.slice_bytes_total);
+    try std.testing.expectEqual(@as(usize, 5), ctx.slice_bytes_max);
+    try std.testing.expectEqual(@as(usize, 3), ctx.meanSlice());
+    try std.testing.expectEqual(@as(usize, 13), ctx.prefix_bytes);
 }
