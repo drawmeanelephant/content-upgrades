@@ -187,8 +187,18 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
         // the evidence flag would gate the slot but verify nothing.
         if (f.evidence and f.kind != .string and f.kind != .strings and f.kind != .keyed) return error.BadShape;
         // The slice carries ROLE on its own line; keep it out of SCHEMA.
+        // SCHEMA describes the single value expected for one step, not the
+        // container array/map around it.
         var schema = try spec.object.clone(arena);
         _ = schema.orderedRemove("role");
+        _ = schema.orderedRemove("max_items");
+        try schema.put(arena, "type", .{ .string = switch (f.kind) {
+            .string, .strings, .keyed => "string",
+            .number => "number",
+            .objects => "object",
+            .rows => "array<string>",
+            .other => unreachable,
+        } });
         var slot: Slot = .{
             .field = f,
             .apparatus = apparatus,
@@ -503,29 +513,7 @@ pub fn checkSchema(arena: std.mem.Allocator, s: Slot, value: Value, data: Object
             .integer, .float => null,
             else => "expected a number",
         },
-        .objects => {
-            if (value != .object) return "expected an object";
-            var it = value.object.iterator();
-            while (it.next()) |e| {
-                for (s.field.sub) |f| {
-                    if (std.mem.eql(u8, f.name, e.key_ptr.*)) break;
-                } else return try std.fmt.allocPrint(arena, "unknown field '{s}'", .{e.key_ptr.*});
-            }
-            for (s.field.sub) |f| {
-                const v = value.object.get(f.name) orelse {
-                    if (f.optional) continue;
-                    return try std.fmt.allocPrint(arena, "missing field '{s}'", .{f.name});
-                };
-                if (try checkString(arena, f, v)) |why|
-                    return try std.fmt.allocPrint(arena, "{s}: {s}", .{ f.name, why });
-                if (f.ref) |ref| {
-                    const keys = data.get(ref);
-                    const ok = keys != null and keys.? == .object and keys.?.object.get(v.string) != null;
-                    if (!ok) return try std.fmt.allocPrint(arena, "ref: {s} '{s}' is not a key in '{s}'", .{ f.name, v.string, ref });
-                }
-            }
-            return null;
-        },
+        .objects => return checkObject(arena, s.field.sub, value, data),
         .rows => {
             if (value != .array) return "expected a row (array of strings)";
             const want = rowWidth(data, s);
@@ -540,6 +528,53 @@ pub fn checkSchema(arena: std.mem.Allocator, s: Slot, value: Value, data: Object
         },
         .other => return "slot type not fillable",
     }
+}
+
+fn checkObject(arena: std.mem.Allocator, sub: []const Field, value: Value, data: ObjectMap) error{OutOfMemory}!?[]const u8 {
+    if (value != .object) return "expected an object";
+    var it = value.object.iterator();
+    while (it.next()) |e| {
+        for (sub) |f| {
+            if (std.mem.eql(u8, f.name, e.key_ptr.*)) break;
+        } else return try std.fmt.allocPrint(arena, "unknown field '{s}'", .{e.key_ptr.*});
+    }
+    for (sub) |f| {
+        const v = value.object.get(f.name) orelse {
+            if (f.optional) continue;
+            return try std.fmt.allocPrint(arena, "missing field '{s}'", .{f.name});
+        };
+        switch (f.kind) {
+            .string => {
+                if (try checkString(arena, f, v)) |why|
+                    return try std.fmt.allocPrint(arena, "{s}: {s}", .{ f.name, why });
+                if (f.ref) |ref| {
+                    const keys = data.get(ref);
+                    const ok = keys != null and keys.? == .object and keys.?.object.get(v.string) != null;
+                    if (!ok) return try std.fmt.allocPrint(arena, "ref: {s} '{s}' is not a key in '{s}'", .{ f.name, v.string, ref });
+                }
+            },
+            .number => switch (v) {
+                .integer, .float => {},
+                else => return try std.fmt.allocPrint(arena, "{s}: expected a number", .{f.name}),
+            },
+            .strings => {
+                if (v != .array) return try std.fmt.allocPrint(arena, "{s}: expected an array", .{f.name});
+                for (v.array.items) |item| {
+                    if (try checkString(arena, f, item)) |why|
+                        return try std.fmt.allocPrint(arena, "{s}: {s}", .{ f.name, why });
+                }
+            },
+            .objects => {
+                if (v != .array) return try std.fmt.allocPrint(arena, "{s}: expected an array", .{f.name});
+                for (v.array.items) |item| {
+                    if (try checkObject(arena, f.sub, item, data)) |why|
+                        return try std.fmt.allocPrint(arena, "{s}: {s}", .{ f.name, why });
+                }
+            },
+            else => return try std.fmt.allocPrint(arena, "{s}: unsupported field type", .{f.name}),
+        }
+    }
+    return null;
 }
 
 fn checkString(arena: std.mem.Allocator, f: Field, v: Value) !?[]const u8 {
@@ -1032,7 +1067,12 @@ pub fn run(
                     step.reason = .parse;
                     step.detail = why;
                 },
-                .value => |v| {
+                .value => |raw_v| {
+                    const v = switch (s.field.kind) {
+                        .strings, .objects => if (raw_v == .array and raw_v.array.items.len == 1) raw_v.array.items[0] else raw_v,
+                        .rows => if (raw_v == .array and raw_v.array.items.len == 1 and raw_v.array.items[0] == .array) raw_v.array.items[0] else raw_v,
+                        else => raw_v,
+                    };
                     if (try checkSchema(a, s, v, best.data)) |why| {
                         step.reason = .schema;
                         step.detail = why;
@@ -1134,7 +1174,7 @@ pub fn buildSlice(
     var head: ObjectMap = .empty;
     for (shape.headline) |k| {
         const v = data.get(k) orelse continue;
-        if (v == .string and v.string.len <= 160) try head.put(arena, k, v);
+        if (v == .string and v.string.len <= 400) try head.put(arena, k, v);
     }
     try w.writeAll("HEADLINE: ");
     try std.json.Stringify.value(Value{ .object = head }, .{}, w);

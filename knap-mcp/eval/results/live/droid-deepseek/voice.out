@@ -1,0 +1,7 @@
+| template | tone | changed | rejected | fields | structhash |
+|---|---|--:|--:|--:|---|
+| verdict | mild | 8 | 0 | 8 | same |
+| verdict | spicy | 8 | 0 | 8 | same |
+| verdict | feral | 4 | 4 | 8 | same |
+
+voice: 3/3 layout-identical

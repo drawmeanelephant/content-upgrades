@@ -1,0 +1,14 @@
+backend: acp   model: glm-5.3-flash   effort: high   served: n/a
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | yes | 4384 | end_turn | 17 | 0 | - | - | - | - | exact |  |
+| voice | yes | 1518 | end_turn | 16 | 0 | - | - | - | - | exact |  |
+| verify | yes | 1580 | end_turn | 17 | 0 | - | - | - | - | exact |  |
+| judge | yes | 2993 | end_turn | 16 | 0 | - | - | - | - | exact |  |
+| enrich | yes | 21178 | end_turn | 17 | 0 | - | - | - | - | exact |  |
+| repair-patch | yes | 2283 | - | 49 | - | - | - | - | - | exact |  |
+
+smoke: 6/6 ok   wall 33936 ms   mean 5656 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 0  completion 0  total 0  reasoning 0

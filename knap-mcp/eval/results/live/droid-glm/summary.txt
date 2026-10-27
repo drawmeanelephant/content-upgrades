@@ -1,0 +1,9 @@
+profile: droid-glm
+label:   GLM 5.3 Flash via ACP (droid)
+backend: acp   model: glm-5.3-flash   effort: high
+smoke:   6/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   3/3 layout-identical
+
