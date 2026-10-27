@@ -3,9 +3,11 @@
 //! plus the template region around it, never the whole template.
 //!
 //! `mock` returns canned patches so the whole loop is testable with zero
-//! API access. `spark`/`wonder`/`baseten` hit OpenAI-compatible endpoints
-//! via curl (CLI contracts only, no HTTP client dependency). `acp` drives
-//! a local Agent Client Protocol agent over stdio (`acp.zig`).
+//! API access. `spark`/`wonder`/`baseten`/`compat` hit OpenAI-compatible
+//! endpoints via curl (CLI contracts only, no HTTP client dependency) —
+//! `compat` is the generic one: `KNAP_COMPAT_URL`/`_MODEL` required,
+//! `KNAP_COMPAT_KEY` optional. `acp` drives a local Agent Client Protocol
+//! agent over stdio (`acp.zig`).
 
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
@@ -13,7 +15,7 @@ const engine = @import("engine.zig");
 const store = @import("store.zig");
 const acp = @import("acp.zig");
 
-pub const Kind = enum { mock, spark, wonder, baseten, acp };
+pub const Kind = enum { mock, spark, wonder, baseten, acp, compat };
 
 /// What a model call is for. Every task uses the same endpoint and model
 /// per backend today; callers pass it so routing can split per task later
@@ -48,15 +50,16 @@ pub fn repairPatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, d
     if (kind == .mock) ctx.countCall(repair_prefix, try repairUser(ctx, region, first_line, diag));
     return switch (kind) {
         .mock => mockPatch(ctx, region, first_line, diag),
-        .spark, .wonder, .baseten, .acp => remotePatch(ctx, kind, region, first_line, diag),
+        .spark, .wonder, .baseten, .compat, .acp => remotePatch(ctx, kind, region, first_line, diag),
     };
 }
 
 /// Whether `kind` needs MODEL_API_KEY in the environment. `mock` is
-/// canned and `acp` runs a local agent subprocess — neither sees the key.
+/// canned, `acp` runs a local agent subprocess, and `compat` takes an
+/// optional KNAP_COMPAT_KEY instead — none of them see MODEL_API_KEY.
 pub fn needsKey(kind: Kind) bool {
     return switch (kind) {
-        .mock, .acp => false,
+        .mock, .acp, .compat => false,
         .spark, .wonder, .baseten => true,
     };
 }
@@ -74,6 +77,14 @@ pub fn statusLine(ctx: *Ctx, kind: Kind) []const u8 {
             std.fmt.allocPrint(ctx.arena, "KNAP_ACP_AGENT set — live calls via '{s}'", .{name}) catch "KNAP_ACP_AGENT set"
         else
             "needs KNAP_ACP_AGENT (e.g. `devin acp --agent-type summarizer`)",
+        .compat => compat: {
+            if (envFor(ctx, kind, "URL") == null) break :compat "needs KNAP_COMPAT_URL (any OpenAI-compatible endpoint)";
+            if (envFor(ctx, kind, "MODEL") == null) break :compat "needs KNAP_COMPAT_MODEL";
+            break :compat if (envFor(ctx, kind, "KEY") != null)
+                "KNAP_COMPAT_KEY set — live calls enabled"
+            else
+                "no KNAP_COMPAT_KEY — unauthenticated calls";
+        },
     };
 }
 
@@ -468,8 +479,9 @@ fn sanitizePatch(body: []const u8) ?[]const u8 {
 ///   KNAP_<KIND>_TEMPERATURE  number in [0, 2], or `omit`; falls back to
 ///                            KNAP_TEMPERATURE, then 0
 ///
-/// `<KIND>` is SPARK, WONDER or BASETEN. KNAP_BASETEN_URL predates the
-/// scheme and keeps its meaning.
+/// `<KIND>` is SPARK, WONDER, BASETEN or COMPAT. KNAP_BASETEN_URL predates
+/// the scheme and keeps its meaning. For `compat` there is no built-in:
+/// KNAP_COMPAT_URL and KNAP_COMPAT_MODEL are required.
 pub const Endpoint = struct {
     url: []const u8,
     model: []const u8,
@@ -485,7 +497,7 @@ fn defaultEndpoint(kind: Kind) struct { url: []const u8, model: []const u8 } {
         .spark => .{ .url = "https://api.meta.ai/v1/chat/completions", .model = "muse-spark-1.3" },
         .wonder => .{ .url = "https://api.meta.ai/v1/chat/completions", .model = "muse-wonder-1.0" },
         .baseten => .{ .url = "https://api.baseten.co/v1/chat/completions", .model = "meta-models/muse-spark-open-1026" },
-        .mock, .acp => .{ .url = "", .model = "" },
+        .mock, .acp, .compat => .{ .url = "", .model = "" },
     };
 }
 
@@ -514,9 +526,14 @@ pub fn endpoint(ctx: *Ctx, kind: Kind) error{ToolFailed}!Endpoint {
     if (kind == .mock or kind == .acp) return ctx.fail("backend '{s}' has no endpoint", .{@tagName(kind)});
     const d = defaultEndpoint(kind);
     const url = envFor(ctx, kind, "URL") orelse d.url;
+    const model = envFor(ctx, kind, "MODEL") orelse d.model;
+    if (kind == .compat) {
+        if (url.len == 0) return ctx.fail("backend 'compat' needs KNAP_COMPAT_URL", .{});
+        if (model.len == 0) return ctx.fail("backend 'compat' needs KNAP_COMPAT_MODEL", .{});
+    }
     return .{
         .url = url,
-        .model = envFor(ctx, kind, "MODEL") orelse d.model,
+        .model = model,
         .models_url = envFor(ctx, kind, "MODELS_URL") orelse modelsUrlFrom(ctx.arena, url),
         .temperature = try temperatureFor(ctx, kind),
     };
@@ -633,7 +650,12 @@ fn acpReply(ctx: *Ctx, task: Task, system: []const u8, user: []const u8) Error!R
     return reply;
 }
 
+/// The bearer token for `kind`. `compat` reads only KNAP_COMPAT_KEY and
+/// treats it as optional: "" means no Authorization header is sent, which
+/// is what local proxies (CLIProxyAPI, ollama, llama.cpp) expect.
+/// MODEL_API_KEY is never consulted for compat.
 fn apiKey(ctx: *Ctx, kind: Kind) error{ToolFailed}![]const u8 {
+    if (kind == .compat) return envFor(ctx, kind, "KEY") orelse "";
     const key = ctx.environ.get("MODEL_API_KEY") orelse "";
     if (key.len == 0) return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
     return key;
@@ -762,7 +784,7 @@ fn curl(ctx: *Ctx, url: []const u8, key: []const u8, payload: ?[]const u8) Error
         });
     }
 
-    const config = try std.fmt.allocPrint(ctx.arena, "header = \"Authorization: Bearer {s}\"\n", .{key});
+    const config = try authConfig(ctx.arena, key);
     const result = try runCurl(ctx, argv.items, config, if (total_secs == 0) .none else ctx.deadline(total_secs + 15));
     const exit = switch (result.term) {
         .exited => |code| code,
@@ -770,6 +792,14 @@ fn curl(ctx: *Ctx, url: []const u8, key: []const u8, payload: ?[]const u8) Error
     };
     const body, const status = splitStatus(result.stdout);
     return .{ .exit = exit, .status = status, .body = body, .stderr = result.stderr };
+}
+
+/// The curl `-K -` config stream: just the Authorization header, or empty
+/// when `key` is "" — an empty `Bearer ` token is worse than no header
+/// (some proxies reject it outright).
+fn authConfig(arena: std.mem.Allocator, key: []const u8) ![]const u8 {
+    if (key.len == 0) return "";
+    return std.fmt.allocPrint(arena, "header = \"Authorization: Bearer {s}\"\n", .{key});
 }
 
 /// `-w` appends "\n<status>" after the body; split them back apart.
@@ -1395,6 +1425,53 @@ test "live entry points stay compiled without a key" {
     try testing.expectEqualStrings("backend 'spark' needs MODEL_API_KEY", ctx.err_msg);
     try testing.expectError(error.ToolFailed, listModels(&ctx, .wonder));
     try testing.expectEqualStrings("backend 'wonder' needs MODEL_API_KEY", ctx.err_msg);
+}
+
+// --- compat -------------------------------------------------------------------
+
+test "compat: required vars, optional key, and MODEL_API_KEY is never read" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+
+    try testing.expectEqual(Kind.compat, parseKind("compat").?);
+    try testing.expect(!needsKey(.compat));
+
+    // No defaults: URL first, then MODEL.
+    try testing.expectError(error.ToolFailed, endpoint(&ctx, .compat));
+    try testing.expectEqualStrings("backend 'compat' needs KNAP_COMPAT_URL", ctx.err_msg);
+    // Port 1 is never listening, so the live-path checks below fail fast.
+    try env.put("KNAP_COMPAT_URL", "http://127.0.0.1:1/v1/chat/completions");
+    try testing.expectError(error.ToolFailed, endpoint(&ctx, .compat));
+    try testing.expectEqualStrings("backend 'compat' needs KNAP_COMPAT_MODEL", ctx.err_msg);
+    try testing.expect(std.mem.startsWith(u8, statusLine(&ctx, .compat), "needs KNAP_COMPAT_MODEL"));
+
+    // MODEL_API_KEY must not satisfy or leak into compat: the bearer stays
+    // empty and authConfig emits no header for it.
+    try env.put("MODEL_API_KEY", "sponsor-key");
+    try env.put("KNAP_COMPAT_MODEL", "muse-spark-1.3");
+    const ep = try endpoint(&ctx, .compat);
+    try testing.expectEqualStrings("http://127.0.0.1:1/v1/chat/completions", ep.url);
+    try testing.expectEqualStrings("muse-spark-1.3", ep.model);
+    try testing.expectEqualStrings("http://127.0.0.1:1/v1/models", ep.models_url.?);
+    try testing.expectEqualStrings("", try apiKey(&ctx, .compat));
+    try testing.expectEqualStrings("", try authConfig(a, ""));
+    try testing.expectEqualStrings("no KNAP_COMPAT_KEY — unauthenticated calls", statusLine(&ctx, .compat));
+
+    // KNAP_COMPAT_KEY is picked up as the bearer when set.
+    try env.put("KNAP_COMPAT_KEY", " proxy-key ");
+    try testing.expectEqualStrings("proxy-key", try apiKey(&ctx, .compat));
+    try testing.expectEqualStrings("header = \"Authorization: Bearer proxy-key\"\n", try authConfig(a, "proxy-key"));
+    try testing.expectEqualStrings("KNAP_COMPAT_KEY set — live calls enabled", statusLine(&ctx, .compat));
+
+    // compat reaches the live paths without any key: the failure mode is
+    // the HTTP call (port 1 refuses), not a missing-key gate.
+    ctx.io = testing.io;
+    ctx.store_dir = "/tmp";
+    ctx.store_warned = true;
+    try testing.expectError(error.ToolFailed, listModels(&ctx, .compat));
 }
 
 // --- acp ---------------------------------------------------------------------
