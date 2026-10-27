@@ -21,7 +21,7 @@ Give-a-shit level: **high** · status: read
 ## Receipts
 
 > [!quote] Receipt
-> Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee.
+> Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee. [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=Imagine%2C%20if%20you%20can%2C%20a%20small%20room%2C%20hexagonal%20in%20shape%2C%20like%20the%20cell%20of%20a%20bee.)
 
 The opening line. Swap hexagonal for open-plan and it is a co-working listing.
 
