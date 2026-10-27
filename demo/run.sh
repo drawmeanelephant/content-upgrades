@@ -100,7 +100,7 @@ beats() {
     "$(basename "$(dirname "$KNAP_K4O_PATH")")" "$(basename "$(dirname "$KNAP_DOGBED_PATH")")"
 
   beat 1 "cold open: the generic AI doc"
-  say "flat model-style markdown: no callouts, footnotes, deep links or table"
+  say "flat model output, verbatim (gpt-5-5-none via ACP): no callouts, footnotes, deep links or table"
   run <<'CMD'
 head -12 fixtures/generic-ai-doc.md
 CMD

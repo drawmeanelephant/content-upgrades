@@ -29,7 +29,7 @@ Status key:
 
 | # | Beat | Target | Last render | Tape | Depends on | Status |
 |---|---|---|---|---|---|---|
-| 1 | Cold open: the generic AI doc | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
+| 1 | Cold open: the generic AI doc (density/2 25.7) | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
 | 2 | Ask for a verdict: model drafts data only | 20s | 20.8s | `02-verdict-data.tape` | main; `boris_ask`: B3 (B1's `ask.sh` works now); live drafting: M1 + MCP client | partial |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.2s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
 | 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
@@ -61,15 +61,16 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 
 ### 1. Cold open (5s): ready
 
-- **On screen:** a flat AI-style review of AcmeDB rendered by glow. It is clean
-  markdown with no callouts, footnotes, deep links, or table, and the voice is ironed
-  out. No typing; the doc is already up when the clip starts.
-- **Commands (hidden):** `glow fixtures/generic-ai-doc.md`
-- **Depends on:** `demo/fixtures/generic-ai-doc.md`, a hand-written stand-in for flat model output.
-- **Open:** once M1 lands, replace the fixture with a real flat output from a model,
-  freeze it (I5), and label it as model output. The density score overlay is no
-  longer blocked: `knap-mcp density <file>` takes a file path, and the fixture
-  scores 3.7 on density/1 — an overlay could go on screen now (human, Kdenlive).
+- **On screen:** the frozen real flat doc — a verbatim model reply
+  (`gpt-5-5-none` via ACP (devin), provenance in
+  `demo/fixtures/generic-ai-doc.provenance.json`) rendered by glow, with a dim
+  caption row labeling it as model output. It is clean markdown with no callouts,
+  footnotes, deep links, or table, and the voice is ironed out. No typing; the doc
+  and its label are already up when the clip starts.
+- **Commands (hidden):** `glow fixtures/generic-ai-doc.md` with a dim `printf`
+  caption row chained on the same line: `model output: gpt-5-5-none via ACP (devin)`.
+- **Depends on:** `demo/fixtures/generic-ai-doc.md`, the frozen real flat output
+  (I5/#140; density/2 25.7, 479 words — the number for the Kdenlive overlay).
 
 ### 2. Ask for a verdict (20s): partial
 
