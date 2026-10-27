@@ -103,8 +103,11 @@ ceiling, plateau, stalled, `--max-iters` (default 6) or the call budget.
 
 `knap_voice` rewrites the `voice: true` string values of a data object in
 one tone (`--tone mild|spicy|feral`), one backend call per value; a
-rewrite that fails the fact guard keeps the original, so the structure —
-and the structure hash — is identical across tones. The contract
+rewrite that fails the guard keeps the original, so the structure —
+and the structure hash — is identical across tones. The guard keeps
+protected tokens verbatim, requires the reply's markup counts and inline
+skeleton to match the input's, and rejects meta prose, invalid UTF-8 and
+a trailing `!` on `footnote_abutting` fields. The contract
 (eligibility walk, the never-rewritten list, the guard) is
 `prompts/voice/README.md`. Prompts load from `KNAP_PROMPTS_DIR`, default
 `../prompts` next to the templates dir.

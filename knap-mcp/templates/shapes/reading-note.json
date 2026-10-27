@@ -15,7 +15,7 @@
     "summary":     {"type": "string", "role": "the pitch, 2-4 sentences, single paragraph, body of 'The pitch' abstract callout. No spoilers", "voice": true},
     "quotes":      {"type": "array<object>", "role": "receipts, one quote callout each", "apparatus": "quote", "max_items": 5, "fields": {
       "text": {"type": "string", "role": "verbatim quote copied from the page at `source_url`, one line. Rendered with a #:~:text= deep link, so it must match the source text exactly; avoid curly quotes", "evidence": true},
-      "why":  {"type": "string", "role": "why this quote matters, 1-2 sentences", "voice": true},
+      "why":  {"type": "string", "role": "why this quote matters, 1-2 sentences", "voice": true, "footnote_abutting": true},
       "note": {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref. Must match a `notes` key exactly", "optional": true, "ref": "notes"}
     }},
     "aged":        {"type": "array<object>", "role": "rows of the 'How it aged' pipe table, one per prediction; the header (<author surname>, <year> | us, now | called it?) is fixed in the template. `then` is what the book predicted, `now` the modern equivalent, `called_it` the verdict on it. No | or newlines in values", "optional": true, "apparatus": "table", "max_items": 5, "words": 3, "fields": {

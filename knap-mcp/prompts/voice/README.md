@@ -42,7 +42,7 @@ The shape descriptors in `templates/shapes/*.json` are the source of truth. A fi
 |---|---|---|
 | verdict | `title`, `verdict`, `take`, `summary`, `bottom_line` | `verdict` is direction-locked (a yes stays a yes) and four words at most. `summary` may carry footnote markers like `[^1]`, which must survive. `frontmatter.title` is never rewritten, so it diverges from `title` after a voice pass. |
 | apparatus | `subtitle` | |
-| release-notes | `title`, `verdict`, `take`, `screenshot_alt`, `tldr`, `breaking_warning`, `breaking[i].change`, `breaking[i].fix`, `highlights[i].what`, `known_issues[i]`, `bottom_line` | Caution: the shape says `title`'s kebab-case form becomes the frontmatter `slug`, so rewriting it changes the page's slug. |
+| release-notes | `verdict`, `take`, `screenshot_alt`, `tldr`, `breaking_warning`, `breaking[i].change`, `breaking[i].fix`, `highlights[i].what`, `known_issues[i]`, `bottom_line` | `title` is not flagged: its kebab-case form becomes the frontmatter `slug`, so rewriting it would move the page URL invisibly to the structure hash. |
 | reading-note | `verdict`, `take`, `summary`, `quotes[i].why`, `thoughts[i]`, `spoilers`, `bottom_line` | `title` is not flagged: it is the work's title. |
 
 The few-shot examples come from verdict and apparatus roles. The other templates' roles are close enough (verdict, take, summary, bottom line, bullets) that the same examples carry over.
@@ -69,7 +69,7 @@ C1 must never send these to the model, whatever a future shape says:
 - Verbatim quotes: `sources[*].quotes[*]` (apparatus) and `quotes[*].text` (SPEC sketch). A quote is evidence.
 - `frontmatter`, the whole object. It is YAML metadata that the site graph reads.
 - Table structure: `receipts[0]` (the header row) and `receipts[r][1]` (the evidence column).
-- `apparatus.title` and `reading-note.title`. They are not flagged, and they are page identities in the site.
+- `apparatus.title`, `reading-note.title` and `release-notes.title`. They are page identities in the site, and the release-notes title's kebab-case form is the frontmatter `slug`. The same slug hazard makes `verdict.title` never-rewritten whenever `subject` is absent: `subject`'s kebab-case is the slug, and it falls back to `title` via `??`.
 - release-notes and reading-note: `product`, `version`, `date`, `codename`, `highlights[*].name`, the verbatim `highlights[*].claim` and `quotes[*].text` (both deep-linked with `#:~:text=`, so a reworded quote breaks the link), page-name fields (`related`, `connections`, `migration_guide`, `up_next`), URL fields (`screenshot`, `cover`, `source_url`, `changelog_url`, `docs_url`), `note` keys, `notes`, `tags`, `gaf`, `status`, and the `upgrade_matrix` and `aged` tables.
 
 ## Call assembly
@@ -122,9 +122,9 @@ Hard rules. A failure keeps the original value.
 
    Number tokens and names must match as whole words, with no letter or digit on either side. The other tokens match as substrings.
 2. The reply adds no new URL, wikilink, footnote marker, quoted span, number token, or mixed-case name like `QuuxQueue`. New all-caps words and new capitalized words are allowed, because that is how shouting and title case look.
-3. The reply adds no markup. It may contain ``* _ ` | # < > [ ] { } ~ ^ @ \ "`` only where the input does, and `!!` or `??` only where the input does. It may not start with `- `, `+ `, `* `, `= `, `> `, `# `, `1. `, `1) `, `---`, or a textile block tag (`h1. `, `p. `, `bq. `, `bc. `, `pre. `, `fn1. `).
-4. No control characters, no line breaks, no emoji (no 4-byte UTF-8 sequences and nothing from U+2600 to U+27BF).
-5. The length is between ceil(L/2) and max(2L, L + 40) bytes, where L is the input length. A role containing "one-word" or "four word" (as in "two-to-four word upgrade verdict") allows four words at most.
+3. The reply keeps the input's markup exactly. Each of ``* _ ` | # < > [ ] { } ~ ^ @ \ "`` occurs at most as often as in the input and at least as often — dropped markup changes the rendered structure hash as surely as added markup. `!!` or `??` only where the input has them. It may not start with `- `, `+ `, `* `, `= `, `> `, `# `, `1. `, `1) `, `---`, or a textile block tag (`h1. `, `p. `, `bq. `, `bc. `, `pre. `, `fn1. `). The Zig guard also compares the inline structure skeletons of input and reply directly (`structhash.zig`), which catches re-paired or moved markup the character counts miss. Where a field's descriptor marks `footnote_abutting` and the element carries a `note`, the template emits `[^note]` right after the value, so a reply may not end in `!` (`![^n]` reads as image syntax).
+4. No control characters, no line breaks, valid UTF-8, no emoji (no 4-byte UTF-8 sequences and nothing from U+2600 to U+27BF).
+5. The length is between ceil(L/2) and max(2L, L + 40) bytes, where L is the input length. A role containing "one-word" or "four word" (as in "two-to-four word upgrade verdict") allows four words at most. The reply must keep at least half of the input's content words (stopword-free, stemmed — verifier.zig's tokenizing), and a reply that contains the input verbatim may not lead with two or more content words the input lacks: `Sure! Here is the take: <value>` is meta prose, not a rewrite.
 6. The reply is not empty.
 
 Tone budgets. `check.sh` enforces them on the examples. At runtime they are advisory and only logged, except that a mild reply containing profanity (the brand phrase included) should be rejected.
@@ -141,7 +141,7 @@ The guard can't see everything. When examples change, a person checks the verdic
 
 ## Mock replies
 
-`mock/<tone>.jsonl` holds hand-written replies for the 33 `voice: true` values in `data/*.sample.json` (verdict 5, apparatus 1, release-notes 15, reading-note 12). A mock backend looks up `(template, field, input)` and returns `output`. On a miss it returns the input unchanged, and the field counts as unchanged. These lines are never sent to a model. `check.sh` warns when a mock input no longer matches the sample data.
+`mock/<tone>.jsonl` holds hand-written replies for the 32 `voice: true` values in `data/*.sample.json` (verdict 5, apparatus 1, release-notes 14, reading-note 12). A mock backend looks up `(template, field, input)` and returns `output`. On a miss it returns the input unchanged, and the field counts as unchanged. These lines are never sent to a model. `check.sh` warns when a mock input no longer matches the sample data.
 
 ## Why the examples use other subjects
 
@@ -156,7 +156,7 @@ sh knap-mcp/prompts/voice/check.sh
 It needs only POSIX sh and awk, and it was tested with macOS `/usr/bin/awk` and gawk. It prints one line per problem, then a summary, and exits non-zero on any failure:
 
 ```
-voice check: 33 examples, 99 mock replies, 19/19 selftest breaks caught, 0 warnings, 0 failures
+voice check: 33 examples, 96 mock replies, 21/21 selftest breaks caught, 0 warnings, 0 failures
 ```
 
 It checks that every line parses with the right keys, that every example and mock reply passes the guard, that each tone has at least 6 examples, that all three tones share the same `template`, `field`, `field_role` and `input` sequence, that no example input is copied from the sample data, and that every line in `testdata/bad.jsonl` is caught with the expected reason.
