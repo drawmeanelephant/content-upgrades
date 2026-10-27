@@ -31,6 +31,14 @@ Owner files: `demo/fixtures/generic-ai-doc.md`,
   and rules (density 56.4) — closer to knap's own apparatus than to the
   flat pattern — so the GPT reply (density 25.7, wall paragraph / header /
   wall paragraph) was picked. Neither was edited.
+- 2026-10-27 re-run on Muse Wonder 1.0 via `devin acp --model
+  muse-wonder-1-0-low` (probe reported `muse-wonder-1-0-high`, effort
+  low). Two sessions, same prompt: both replies came back apparatus-rich
+  — receipts tables/subsections, footnotes, blockquote citations, sources
+  sections — scoring 52.5 and 35.2 on density/2. Neither is a fair flat
+  example, so the fixture stays `gpt-5-5-none` (25.7, 479 words) and the
+  Wonder replies are recorded in the provenance `selection` block with
+  `why_not`. Beat 1's on-screen density number is unchanged.
 
 ## How it was produced
 
@@ -42,8 +50,11 @@ committed; the compiled binary lived outside the tree.
 
 ## Left for later
 
-- Sponsor-model re-render (Spark/Wonder) if `MODEL_API_KEY` lands — same
-  prompt, update the fixture and provenance, then this issue can close.
-- Beat 1 tape overlay: the density number on screen is now 25.7
-  (`density/2`), not the old stand-in's score — see `demo/run.sh` and the
-  Kdenlive overlay note in `demo/storyboard.md`.
+- Muse Spark re-run once the opencode account has funds (`scripts/live.sh
+  --suite <suite> opencode-spark-1.3`, or `KNAP_ACP_AGENT` on a funded
+  opencode). Same prompt, same selection rule. That is the last piece of
+  #92.
+- Beat 1 tape overlay: the density number on screen is still 25.7
+  (`density/2`) — the Wonder re-run did not change the fixture, so no
+  overlay change is needed — see `demo/run.sh` and the Kdenlive overlay
+  note in `demo/storyboard.md`.
