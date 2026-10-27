@@ -25,7 +25,7 @@ pub const Error = error{ ToolFailed, OutOfMemory, WriteFailed } || std.process.R
 pub fn parseKind(name: []const u8) ?Kind {
     const info = @typeInfo(Kind).@"enum";
     inline for (info.field_names, 0..) |fname, i| {
-        if (std.mem.eql(u8, name, fname)) return @enumFromInt(info.field_values[i]);
+        if (std.mem.eql(u8, name, fname)) return @fromBackingInt(@intCast(info.field_values[i]));
     }
     return null;
 }
@@ -280,29 +280,26 @@ fn startsKw(body: []const u8, kw: []const u8) bool {
 /// (`html_to_json`, `remove_html`) are left out: renaming a typo to one
 /// of those only swaps the diagnostic for an unfixable one.
 const known_filters = [_][]const u8{
-    "h1",        "h2",           "h3",         "h4",
-    "h5",        "h6",           "bold",       "italic",
-    "code",      "code_block",   "blockquote", "list",
-    "link",      "image",        "hr",         "hard_break",
-    "escape_md", "fragment_link", "embed",
-    "camel",     "capitalize",   "kebab",      "lower",
-    "pascal",    "snake",        "title",      "uncamel",
-    "upper",     "trim",         "truncate",   "truncatewords",
-    "indent",    "unescape",     "safe_name",  "encode_uri",
-    "decode_uri",
-    "calc",      "number_format", "round",
-    "date",      "date_modify",  "duration",
-    "compact",   "first",        "join",       "last",
-    "length",    "merge",        "nth",        "object",
-    "parse_json", "reverse",     "slice",      "sort",
-    "split",     "sum",          "unique",     "where",
-    "callout",   "wikilink",     "footnote",   "strike",
-    "table",     "table_pretty", "highlight",  "math",
-    "math_block", "comment",
-    "map",       "template",     "replace",    "yaml",
-    "yaml_property",
-    "remove_attr", "strip_attr", "remove_tags", "replace_tags",
-    "strip_tags",  "strip_md",   "stripmd",
+    "h1",            "h2",            "h3",            "h4",
+    "h5",            "h6",            "bold",          "italic",
+    "code",          "code_block",    "blockquote",    "list",
+    "link",          "image",         "hr",            "hard_break",
+    "escape_md",     "fragment_link", "embed",         "camel",
+    "capitalize",    "kebab",         "lower",         "pascal",
+    "snake",         "title",         "uncamel",       "upper",
+    "trim",          "truncate",      "truncatewords", "indent",
+    "unescape",      "safe_name",     "encode_uri",    "decode_uri",
+    "calc",          "number_format", "round",         "date",
+    "date_modify",   "duration",      "compact",       "first",
+    "join",          "last",          "length",        "merge",
+    "nth",           "object",        "parse_json",    "reverse",
+    "slice",         "sort",          "split",         "sum",
+    "unique",        "where",         "callout",       "wikilink",
+    "footnote",      "strike",        "table",         "table_pretty",
+    "highlight",     "math",          "math_block",    "comment",
+    "map",           "template",      "replace",       "yaml",
+    "yaml_property", "remove_attr",   "strip_attr",    "remove_tags",
+    "replace_tags",  "strip_tags",    "strip_md",      "stripmd",
 };
 
 /// The registered filter `name` most plausibly mistyped, or null when no
@@ -600,7 +597,7 @@ pub fn completeReply(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user
     if (ctx.environ.get("KNAP_DEBUG") != null) {
         const u = reply.usage;
         std.debug.print("knap-mcp: {s}/{s} model={s} finish={s} usage prompt={?d} completion={?d} total={?d} reasoning={?d}\n", .{
-            @tagName(kind), @tagName(task), ep.model, reply.finish_reason orelse "-",
+            @tagName(kind),  @tagName(task),      ep.model,       reply.finish_reason orelse "-",
             u.prompt_tokens, u.completion_tokens, u.total_tokens, u.reasoning_tokens,
         });
     }
@@ -740,11 +737,9 @@ fn curl(ctx: *Ctx, url: []const u8, key: []const u8, payload: ?[]const u8) Error
     // `-w` appends the HTTP status after the body so `--fail-with-body`
     // can keep the provider's error payload.
     try argv.appendSlice(ctx.arena, &.{
-        "curl",              "-sS", "--fail-with-body", "-X", if (payload != null) "POST" else "GET", url,
-        "-m",                try std.fmt.allocPrint(ctx.arena, "{d}", .{total_secs}),
-        "--connect-timeout", try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.envSecs("KNAP_CURL_CONNECT_TIMEOUT", 10)}),
-        "-K",                "-",
-        "-w",                "\n%{http_code}",
+        "curl", "-sS",                                                   "--fail-with-body",  "-X",                                                                                      if (payload != null) "POST" else "GET", url,
+        "-m",   try std.fmt.allocPrint(ctx.arena, "{d}", .{total_secs}), "--connect-timeout", try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.envSecs("KNAP_CURL_CONNECT_TIMEOUT", 10)}), "-K",                                   "-",
+        "-w",   "\n%{http_code}",
     });
 
     // The request body goes through an owner-only scratch file, not argv,

@@ -33,6 +33,11 @@ jobs:
       - name: zig version
         run: zig version
 
+      # Fail fast before the engine build: keeps src/ under zig fmt so the
+      # fmt pass stays a no-op instead of a recurring chore.
+      - name: zig fmt --check
+        run: cd knap-mcp && zig fmt --check src
+
       # The cache key is a hash of the two pin lines in scripts/engines.sh, so
       # a pin bump rebuilds the engines and nothing else invalidates the cache.
       - name: Read engine pins

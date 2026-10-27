@@ -247,15 +247,15 @@ const Tokens = struct {
 };
 
 const stopwords = [_][]const u8{
-    "a",     "an",    "the",   "and",   "or",    "but",   "of",    "to",    "in",
-    "on",    "at",    "for",   "by",    "with",  "from",  "as",    "is",    "are",
-    "was",   "were",  "be",    "been",  "being", "it",    "its",   "this",  "that",
-    "these", "those", "has",   "have",  "had",   "do",    "does",  "did",   "will",
-    "would", "can",   "could", "should", "may",  "might", "must",  "so",    "than",
-    "then",  "there", "their", "they",  "them",  "we",    "our",   "you",   "your",
-    "he",    "she",   "his",   "her",   "i",     "me",    "my",    "if",    "into",
-    "about", "just",  "also",  "any",   "some",  "each",  "very",  "too",   "which",
-    "who",   "whom",  "what",  "when",  "where", "how",   "why",   "s",     "t",
+    "a",     "an",    "the",   "and",    "or",    "but",   "of",   "to",   "in",
+    "on",    "at",    "for",   "by",     "with",  "from",  "as",   "is",   "are",
+    "was",   "were",  "be",    "been",   "being", "it",    "its",  "this", "that",
+    "these", "those", "has",   "have",   "had",   "do",    "does", "did",  "will",
+    "would", "can",   "could", "should", "may",   "might", "must", "so",   "than",
+    "then",  "there", "their", "they",   "them",  "we",    "our",  "you",  "your",
+    "he",    "she",   "his",   "her",    "i",     "me",    "my",   "if",   "into",
+    "about", "just",  "also",  "any",    "some",  "each",  "very", "too",  "which",
+    "who",   "whom",  "what",  "when",   "where", "how",   "why",  "s",    "t",
 };
 
 /// The brief's list (no, not, never, without, n't) plus close kin.
@@ -415,7 +415,7 @@ pub fn judgeStep(kind: Kind, before: Step, after: Step) StepVerdict {
     const fallback = @intFromBool(kind == .decision);
     return .{
         .decision = decision,
-        .reason = reason_text[fallback][@intFromBool(decision == .escalate)][@intFromEnum(r)],
+        .reason = reason_text[fallback][@intFromBool(decision == .escalate)][@backingInt(r)],
         .gain = gain,
         .new_warning = new_warning,
     };
@@ -477,7 +477,7 @@ pub fn runGate(arena: Allocator, json: []const u8) !GateResult {
     var hard: std.ArrayList([]const u8) = .empty;
     for (file.cases) |c| {
         const got = try heuristic(arena, c.claim, c.evidence);
-        confusion[@intFromEnum(c.expected)][@intFromEnum(got.label)] += 1;
+        confusion[@backingInt(c.expected)][@backingInt(got.label)] += 1;
         const pass = got.label == c.expected;
         const t = for (classes.items) |*t| {
             if (std.mem.eql(u8, t.name, c.class)) break t;

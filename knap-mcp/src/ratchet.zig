@@ -1341,10 +1341,10 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
         const rj = r.rejections;
         try w.print("| {s} | {d:.1} | {d:.1} | {d:.1} | {d:.1}", .{ row.id, r.start, r.final, r.final - r.start, r.ceiling });
         try w.print(" | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d:.0} | {s} | {s} |\n", .{
-            r.iterations,    row.max_iterations, r.calls,           r.accepted(),     rj.get(.parse),
-            rj.get(.schema), rj.get(.inert),     rj.get(.render),   rj.get(.verifier), rj.get(.no_gain),
-            rj.get(.new_warnings),               rj.get(.declined), r.renders,        r.ms,
-            @tagName(r.stop),                    row.check,
+            r.iterations,          row.max_iterations, r.calls,         r.accepted(),      rj.get(.parse),
+            rj.get(.schema),       rj.get(.inert),     rj.get(.render), rj.get(.verifier), rj.get(.no_gain),
+            rj.get(.new_warnings), rj.get(.declined),  r.renders,       r.ms,              @tagName(r.stop),
+            row.check,
         });
     }
     if (runs > 0) {
@@ -1781,10 +1781,22 @@ test "checkExpect fails the case on malformed expectation blocks" {
     defer arena.deinit();
     const a = arena.allocator();
     const r: Result = .{
-        .data = .empty, .doc = "", .start = 0, .final = 0, .ceiling = 0,
-        .iterations = 0, .calls = 0, .renders = 0, .ceiling_renders = 0,
-        .ms = 0, .stop = .plateau, .slots = 0, .fill_start = 0, .fill_final = 0,
-        .steps = &.{}, .rejections = .initFill(0),
+        .data = .empty,
+        .doc = "",
+        .start = 0,
+        .final = 0,
+        .ceiling = 0,
+        .iterations = 0,
+        .calls = 0,
+        .renders = 0,
+        .ceiling_renders = 0,
+        .ms = 0,
+        .stop = .plateau,
+        .slots = 0,
+        .fill_start = 0,
+        .fill_final = 0,
+        .steps = &.{},
+        .rejections = .initFill(0),
     };
     const f = struct {
         fn f(arena2: std.mem.Allocator, json: []const u8) !?Value {
