@@ -7,6 +7,13 @@ We make markdown *maximal* — callouts, footnotes, tables, embeds — because t
 formatting budget lives in the template, not in the model. Maximum formatting,
 zero formatting risk.
 
+> **Re-scoped 2026-10-27 (owner decision, #89):** no paid sponsor accounts.
+> No Meta Model API key, no partner credits, no Muse Image, no Muse Code.
+> The Meta model in the project is **Muse Wonder 1.0 via ACP** (`devin acp`,
+> `devin-wonder` profile), always labeled "via ACP", never "direct API".
+> Measured results are in `docs/tracks/LIVE.md`. Items below that needed a
+> sponsor account are struck through, not deleted.
+
 ## Design principle
 Everything that doesn't need the Meta Model API is built BEFORE kickoff.
 The four pre-kickoff days are worth more than the four mid-hackathon days
@@ -66,20 +73,24 @@ Needs no Meta API. All assets, no waste.
       knap-contest to a public GitHub repo; demo may only show work built
       during the event, so commit boundaries Oct 26 → Nov 4 must make
       new-vs-preexisting obvious.
-- [ ] Claim $150 Meta Model API credits (form → batch → Billing page; needs
-      a card + temp pre-auth; set a spend limit). Deadline Nov 4 9pm ET.
-- [ ] Request Baseten $100 + 2M TPM (capped at 2,000, reviewed by use case —
+- [ ] ~~Claim $150 Meta Model API credits (form → batch → Billing page; needs
+      a card + temp pre-auth; set a spend limit). Deadline Nov 4 9pm ET.~~
+      Dropped: no billing account (#85).
+- [ ] ~~Request Baseten $100 + 2M TPM (capped at 2,000, reviewed by use case —
       submit the verifier-slot use case). Hackathon model id:
-      `meta-models/muse-spark-open-1026`.
-- [ ] Wire real Spark behind the backend interface; smoke metering
-- [ ] **Run seeded-breakage eval against real Spark TODAY** — the repair loop
-      is the one externally-controlled centerpiece; measure convergence
-      before anything else depends on it. Also verify `boris check` command
-      shape + latency on the staged site.
-- [ ] Probe Muse Image (cover/callout art), Muse Wonder (whatever it is),
-      Muse Code (candidate: **the live demo MCP client** — sponsor's own
-      agent driving your server is a dogfood beat judges remember)
-- [ ] Check partner catalogs for an NLI/decision model (verifier slot)
+      `meta-models/muse-spark-open-1026`.~~ Dropped (#86).
+- [x] ~~Wire real Spark behind the backend interface; smoke metering~~ Live
+      model is Muse Wonder 1.0 via ACP; `knap-mcp smoke` meters it (LIVE.md).
+- [x] **Run seeded-breakage eval against a live model TODAY**: the repair loop
+      is the one externally-controlled centerpiece, so measure convergence
+      before anything else depends on it. Done on Muse Wonder via ACP (22/22
+      seeds, 167/167 2nap).
+- [ ] Verify `boris check` command shape + latency on the staged site.
+- [ ] ~~Probe Muse Image (cover/callout art), Muse Wonder (whatever it is),
+      Muse Code (candidate: **the live demo MCP client**; the sponsor's own
+      agent driving your server is a dogfood beat judges remember)~~ Dropped:
+      Muse Image and Muse Code need a paid plan (#88, #102).
+- [ ] ~~Check partner catalogs for an NLI/decision model (verifier slot)~~
 
 ## Phase 2 — Core build (Oct 27–29)
 
@@ -100,8 +111,8 @@ diagnostics), `knap_format_check` (advisory). Full pipeline end-to-end.
 apparatus drops from demo templates.**
 
 ## Phase 3 — Voice + eval (Oct 30) — FREEZE
-- [ ] Real Spark voice pass: tone presets (mild → feral), voice lives in JSON
-      data only. The "same template, two voices" proof runs clean.
+- [ ] Live voice pass (Muse Wonder via ACP): tone presets (mild → feral),
+      voice lives in JSON data only. The "same template, two voices" proof runs clean.
 - [ ] Convergence table final: seeded breaks × iterations → pass rate.
 - [ ] Demo data frozen. **Feature freeze Oct 30 EOD** — Oct 31 is integration
       buffer, not feature time.
@@ -111,12 +122,13 @@ apparatus drops from demo templates.**
 All-OSS pipeline:
 - **vhs** (charmbracelet) — scripted terminal tapes; deterministic, re-recordable
 - **OBS** — any live/pip segments; **Kdenlive** — assembly; **ffmpeg** — glue
-- **Muse Image** — title card / section slates; bonus Meta-tooling touch
+- ~~**Muse Image** — title card / section slates; bonus Meta-tooling touch~~
+  Title card and slates are hand-made or rendered by the pipeline (#102)
 - Optional: submission page built by the pipeline itself (dogfooding)
 
 Shot list (~2 min): see SPEC.md demo script — updated with boris-catch beat,
 verifier escalation, clean-but-generic contrast, measured-only numbers card.
-Demo client: Muse Code if viable, else dual-mode CLI via vhs.
+Demo client: dual-mode CLI via vhs (Muse Code dropped, #88).
 Repair beat: seeded-broken template + REAL repair loop — deterministic input,
 honest process, retake-able.
 
@@ -131,7 +143,7 @@ honest process, retake-able.
 
 | Variable | Decision point | Fallback |
 |---|---|---|
-| Meta Model API shape/metering | Oct 26 | `llama-baseten` backend (pre-wired, $100 credits + 2M TPM) |
+| Meta Model API shape/metering | Oct 26 → **resolved Oct 27** | No key, no partner credits. Muse Wonder 1.0 via ACP (`devin-wonder`); other providers plug in through `scripts/providers.sh` |
 | **Repair loop non-convergence** (demo centerpiece, externally controlled) | Oct 26 eval | Ship repair as recording + dual-mode CLI hands-on; live demo carries deterministic beats (validate/render/voice) |
 | Spark voice quality | Oct 30 | Few-shot voice presets or human-authored data JSON; architecture story unchanged |
 | Referential filters slip | Oct 29 cut-line | Apparatus drops from demo templates; demo runs on shipped filters |
@@ -140,7 +152,7 @@ honest process, retake-able.
 | Boris check latency/command | Oct 26–27 | Canned artifact is the floor; publish-check beat is cuttable |
 | format_check reliability | Oct 29 | Advisory-only; cut entirely if it misfires |
 | Greenfield-code rules | Oct 26 | MCP server + filters + corpus + templates are the new code |
-| Muse Wonder unknown | Oct 26 | Optional sizzle only; never on critical path |
+| Muse Wonder unknown | Oct 26 → **resolved Oct 27** | It's the live model now, via ACP (LIVE.md) |
 
 ## The non-negotiables
 1. The MCP server never grows engine logic (dogbed rule).
