@@ -13,6 +13,11 @@
 #   crash   exit mid-turn
 #   auth    session/new fails with an auth error
 #   v2      initialize answers protocolVersion 2
+#   echo    replies with the prompt's last `knap-smoke-<task>` token, or
+#           with a closed `{% if %}` region when there is none
+#
+# session/new reports model `fake-model-1` and effort `low` in
+# configOptions (mode `legacy`: only the older models.currentModelId).
 mode=$1
 sessions=0
 pending=
@@ -31,7 +36,11 @@ while IFS= read -r line; do
     fi
     sessions=$((sessions + 1))
     printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s%s","update":{"sessionUpdate":"available_commands_update","availableCommands":[]}}}\n' "$sessions"
-    printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"s%s"}}\n' "$id" "$sessions"
+    if [ "$mode" = legacy ]; then
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"s%s","models":{"currentModelId":"fake-legacy","availableModels":[]}}}\n' "$id" "$sessions"
+      continue
+    fi
+    printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"s%s","configOptions":[{"id":"mode","category":"mode","type":"select","currentValue":"ask","options":[]},{"id":"model","name":"Model","category":"model","type":"select","currentValue":"fake-model-1","options":[]},{"id":"effort","category":"thought_level","type":"select","currentValue":"low","options":[]}]}}\n' "$id" "$sessions"
     ;;
   *'"method":"session/prompt"'*)
     s="s$sessions"
@@ -64,6 +73,12 @@ while IFS= read -r line; do
     maxtok)
       printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"%s","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"{%% if a"}}}}\n' "$s"
       printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"max_tokens"}}\n' "$id"
+      ;;
+    echo)
+      tok=$(printf '%s\n' "$line" | sed -n 's/.*\(knap-smoke-[a-z]*\).*/\1/p')
+      text=${tok:-'{%% if items %%}\\n- {{ items | first }}\\n{%% endif %%}\\n'}
+      printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"%s","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"'"$text"'"}}}}\n' "$s"
+      printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"end_turn","usage":{"inputTokens":20,"outputTokens":2,"totalTokens":22}}}\n' "$id"
       ;;
     hang | mute) pending=$id ;;
     crash) exit 3 ;;
