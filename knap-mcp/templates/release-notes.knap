@@ -6,7 +6,9 @@
    Spacing: optional blocks open with a blank line and close flush against
    the next block, and loop separators sit behind "not loop.last", so
    markdown (which trims one trailing newline per loop body) and textile
-   come out with identical single blank lines. #}{% set heading = title ?? product %}
+   come out with identical single blank lines. Engine note: fragment_link
+   links only arrays of two or more items, so each lone claim is padded
+   with merge and unwrapped with first (see verdict.knap). #}{% set heading = title ?? product %}
 {% set slug = heading | kebab %}
 {% set cn = codename ?? "none (too busy shipping)" %}
 {% set bw = breaking_warning ?? "Something in here will break your build. Read it before you upgrade, not after." %}
@@ -53,7 +55,7 @@
 {{ h.what }}{% if h.note %}[^{{ h.note | kebab }}]{% endif %}{% if h.claim %}
 
 
-{{ h.claim | fragment_link:changelog_url | callout:("quote", "Their words, not ours") }}{% endif %}{% if not loop.last %}
+{{ h.claim | merge:"" | fragment_link:changelog_url | first | callout:("quote", "Their words, not ours") }}{% endif %}{% if not loop.last %}
 
 
 {% endif %}{% endfor %}

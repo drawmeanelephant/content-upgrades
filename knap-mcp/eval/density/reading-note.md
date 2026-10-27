@@ -32,27 +32,26 @@ Give-a-shit level: **high** · status: finished
 ## Receipts
 
 > [!quote] Receipt
-> Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee.
+> Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee. [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=Imagine%2C%20if%20you%20can%2C%20a%20small%20room%2C%20hexagonal%20in%20shape%2C%20like%20the%20cell%20of%20a%20bee.)
 
 The opening line. Swap hexagonal for open-plan and it is a co-working listing.[^publication]
 > [!quote] Receipt
-> I see something like you in this plate, but I do not see you.
+> I see something like you in this plate, but I do not see you. [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=I%20see%20something%20like%20you%20in%20this%20plate%2C%20but%20I%20do%20not%20see%20you.)
 
 Kuno on video calls, a century before the webcam. Every remote team's retro in one sentence.
 > [!quote] Receipt
-> Beware of first-hand ideas!
+> Beware of first-hand ideas! [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=Beware%20of%20first-hand%20ideas!)
 
 The lecturers' motto: only trust an idea once it has been through ten other people. Sound like any feed you know?
 > [!quote] Receipt
-> The Machine is much, but it is not everything.
+> The Machine is much, but it is not everything. [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=The%20Machine%20is%20much%2C%20but%20it%20is%20not%20everything.)
 
 Kuno's whole thesis in nine words. Men made it, he reminds his mother. Great men, but men.[^wells]
 
 ## How it aged
 
-|  |  |  |
-| - | - | - |
 | Forster, 1909 | us, now | called it? |
+| --- | --- | --- |
 | talking through glowing plates | video calls | dead on |
 | lectures compiled out of other lectures | content about content | dead on |
 | the Book of the Machine | terms of service nobody reads | close enough |
