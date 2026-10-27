@@ -29,7 +29,13 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
         structhash.formatFromName(t) orelse return ctx.fail("target must be markdown|html", .{})
     else
         try docFormat(ctx, doc_id, doc);
-    const strict = if (args) |a| if (a.get("strict")) |v| v == .bool and v.bool else false else false;
+    const strict = if (args) |a| blk: {
+        const v = a.get("strict") orelse break :blk false;
+        break :blk switch (v) {
+            .bool => |b| b,
+            else => return ctx.fail("strict must be a boolean", .{}),
+        };
+    } else false;
     const tokens = try structhash.skeletonOpts(ctx.arena, doc, format, .{ .strict = strict });
 
     try out.writer.writeAll("{\"ok\":true,\"doc_id\":");
@@ -127,4 +133,31 @@ fn usage(msg: ?[]const u8) u8 {
     if (msg) |m| std.debug.print("knap-mcp: {s}\n", .{m});
     std.debug.print("usage: knap-mcp structhash <doc_id|file>... [--target markdown|html] [--explain] [--strict]\n", .{});
     return 1;
+}
+
+test "run rejects a non-boolean strict" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx: Ctx = .{
+        .arena = a,
+        .gpa = a,
+        .io = std.testing.io,
+        .environ = &env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path[0..]}),
+        .project_root = ".",
+    };
+    const doc_id = try store.put(&ctx, "md", "# T\n");
+    const args = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a,
+        \\{{"doc_id":"{s}","strict":"yes"}}
+    , .{doc_id}), .{});
+    var out: Allocating = .init(a);
+    try std.testing.expectError(error.ToolFailed, run(&ctx, args.object, &out));
+    try std.testing.expectEqualStrings("strict must be a boolean", ctx.err_msg);
 }
