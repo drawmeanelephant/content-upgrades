@@ -957,7 +957,7 @@ pub fn run(
     data0: ObjectMap,
     opts: Options,
 ) Error!Outcome {
-    if (kind != .mock and ctx.environ.get("MODEL_API_KEY") == null)
+    if (backend.needsKey(kind) and ctx.environ.get("MODEL_API_KEY") == null)
         return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
     const a = ctx.arena;
     const t0 = std.Io.Timestamp.now(ctx.io, .awake);

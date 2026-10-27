@@ -4,14 +4,16 @@
 //!
 //! `mock` returns canned patches so the whole loop is testable with zero
 //! API access. `spark`/`wonder`/`baseten` hit OpenAI-compatible endpoints
-//! via curl (CLI contracts only, no HTTP client dependency).
+//! via curl (CLI contracts only, no HTTP client dependency). `acp` drives
+//! a local Agent Client Protocol agent over stdio (`acp.zig`).
 
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
 const engine = @import("engine.zig");
 const store = @import("store.zig");
+const acp = @import("acp.zig");
 
-pub const Kind = enum { mock, spark, wonder, baseten };
+pub const Kind = enum { mock, spark, wonder, baseten, acp };
 
 /// What a model call is for. Every task uses the same endpoint and model
 /// per backend today; callers pass it so routing can split per task later
@@ -46,7 +48,32 @@ pub fn repairPatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, d
     if (kind == .mock) ctx.countCall(repair_prefix, try repairUser(ctx, region, first_line, diag));
     return switch (kind) {
         .mock => mockPatch(ctx, region, first_line, diag),
-        .spark, .wonder, .baseten => remotePatch(ctx, kind, region, first_line, diag),
+        .spark, .wonder, .baseten, .acp => remotePatch(ctx, kind, region, first_line, diag),
+    };
+}
+
+/// Whether `kind` needs MODEL_API_KEY in the environment. `mock` is
+/// canned and `acp` runs a local agent subprocess — neither sees the key.
+pub fn needsKey(kind: Kind) bool {
+    return switch (kind) {
+        .mock, .acp => false,
+        .spark, .wonder, .baseten => true,
+    };
+}
+
+/// One line for `knap-mcp backends`: what `kind` needs, and whether this
+/// environment has it. Nothing is probed.
+pub fn statusLine(ctx: *Ctx, kind: Kind) []const u8 {
+    return switch (kind) {
+        .mock => "always available (canned patches)",
+        .spark, .wonder, .baseten => if (ctx.environ.get("MODEL_API_KEY") != null)
+            "MODEL_API_KEY set — live calls enabled"
+        else
+            "needs MODEL_API_KEY",
+        .acp => if (acp.agentName(ctx)) |name|
+            std.fmt.allocPrint(ctx.arena, "KNAP_ACP_AGENT set — live calls via '{s}'", .{name}) catch "KNAP_ACP_AGENT set"
+        else
+            "needs KNAP_ACP_AGENT (e.g. `devin acp --agent-type summarizer`)",
     };
 }
 
@@ -403,8 +430,11 @@ fn repairUser(ctx: *Ctx, region: []const u8, first_line: u32, diag: engine.Diag)
 }
 
 fn remotePatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, diag: engine.Diag) Error!?[]const u8 {
-    const body = try complete(ctx, kind, .repair, repair_prefix, try repairUser(ctx, region, first_line, diag));
-    const patch = sanitizePatch(body) orelse return null;
+    const reply = try completeReply(ctx, kind, .repair, repair_prefix, try repairUser(ctx, region, first_line, diag));
+    // A region cut off at the token cap can still validate with template
+    // lines silently dropped; treat it as no proposal.
+    if (reply.truncated()) return null;
+    const patch = sanitizePatch(reply.content) orelse return null;
     // The model trims the region's final newline about half the time;
     // without it the splice glues the next template line onto this one.
     if (std.mem.endsWith(u8, region, "\n") and !std.mem.endsWith(u8, patch, "\n"))
@@ -430,117 +460,449 @@ fn sanitizePatch(body: []const u8) ?[]const u8 {
     return s;
 }
 
+/// Where a live backend's calls go. Each field resolves from the
+/// environment before the built-in default, so the real ids `GET
+/// /v1/models` reports are a config change, not a code change:
+///
+///   KNAP_<KIND>_URL          chat-completions endpoint
+///   KNAP_<KIND>_MODEL        model id
+///   KNAP_<KIND>_MODELS_URL   model list (default: URL with
+///                            `/chat/completions` → `/models`)
+///   KNAP_<KIND>_TEMPERATURE  number in [0, 2], or `omit`; falls back to
+///                            KNAP_TEMPERATURE, then 0
+///
+/// `<KIND>` is SPARK, WONDER or BASETEN. KNAP_BASETEN_URL predates the
+/// scheme and keeps its meaning.
+pub const Endpoint = struct {
+    url: []const u8,
+    model: []const u8,
+    models_url: ?[]const u8,
+    /// null: the request carries no `temperature` field at all.
+    temperature: ?f64,
+};
+
+/// The built-in ids are the plan's best guess (next-phase-plan §3) and
+/// are UNCONFIRMED until the live smoke (#89) runs `GET /v1/models`.
+fn defaultEndpoint(kind: Kind) struct { url: []const u8, model: []const u8 } {
+    return switch (kind) {
+        .spark => .{ .url = "https://api.meta.ai/v1/chat/completions", .model = "muse-spark-1.3" },
+        .wonder => .{ .url = "https://api.meta.ai/v1/chat/completions", .model = "muse-wonder-1.0" },
+        .baseten => .{ .url = "https://api.baseten.co/v1/chat/completions", .model = "meta-models/muse-spark-open-1026" },
+        .mock, .acp => .{ .url = "", .model = "" },
+    };
+}
+
+/// `KNAP_<KIND>_<suffix>`, built at compile time.
+fn envName(comptime kind: Kind, comptime suffix: []const u8) []const u8 {
+    comptime {
+        var upper: [@tagName(kind).len]u8 = undefined;
+        _ = std.ascii.upperString(&upper, @tagName(kind));
+        const name = "KNAP_" ++ upper ++ "_" ++ suffix;
+        return name;
+    }
+}
+
+/// The non-empty value of `KNAP_<KIND>_<suffix>`, or null.
+fn envFor(ctx: *Ctx, kind: Kind, comptime suffix: []const u8) ?[]const u8 {
+    const v = switch (kind) {
+        inline else => |k| ctx.environ.get(comptime envName(k, suffix)),
+    } orelse return null;
+    const t = std.mem.trim(u8, v, " \t\r\n");
+    return if (t.len == 0) null else t;
+}
+
+/// Resolve `kind`'s endpoint, model and sampling settings. A malformed
+/// temperature fails here, before any request is staged.
+pub fn endpoint(ctx: *Ctx, kind: Kind) error{ToolFailed}!Endpoint {
+    if (kind == .mock or kind == .acp) return ctx.fail("backend '{s}' has no endpoint", .{@tagName(kind)});
+    const d = defaultEndpoint(kind);
+    const url = envFor(ctx, kind, "URL") orelse d.url;
+    return .{
+        .url = url,
+        .model = envFor(ctx, kind, "MODEL") orelse d.model,
+        .models_url = envFor(ctx, kind, "MODELS_URL") orelse modelsUrlFrom(ctx.arena, url),
+        .temperature = try temperatureFor(ctx, kind),
+    };
+}
+
+/// `…/v1/chat/completions` → `…/v1/models`; null for any other shape.
+fn modelsUrlFrom(arena: std.mem.Allocator, chat_url: []const u8) ?[]const u8 {
+    const tail = "/chat/completions";
+    const u = std.mem.trimEnd(u8, chat_url, "/");
+    if (!std.mem.endsWith(u8, u, tail)) return null;
+    return std.fmt.allocPrint(arena, "{s}/models", .{u[0 .. u.len - tail.len]}) catch null;
+}
+
+/// Reasoning models may reject `temperature: 0`, so it is a setting, not
+/// an assumption: `omit` (or `none`) drops the field. Anything else must
+/// be a finite number in [0, 2]; it is re-printed, never passed through,
+/// so the request body stays valid JSON.
+fn temperatureFor(ctx: *Ctx, kind: Kind) error{ToolFailed}!?f64 {
+    const raw = envFor(ctx, kind, "TEMPERATURE") orelse
+        std.mem.trim(u8, ctx.environ.get("KNAP_TEMPERATURE") orelse "", " \t\r\n");
+    if (raw.len == 0) return 0;
+    if (std.ascii.eqlIgnoreCase(raw, "omit") or std.ascii.eqlIgnoreCase(raw, "none")) return null;
+    const v = std.fmt.parseFloat(f64, raw) catch
+        return ctx.fail("temperature '{s}' is not a number or 'omit'", .{raw});
+    if (!(v >= 0 and v <= 2)) return ctx.fail("temperature '{s}' is outside [0, 2]", .{raw});
+    return v;
+}
+
+/// Token counts from a reply's `usage`, when the provider meters them.
+/// Absent fields stay null: the numbers card shows tokens only when they
+/// were actually reported, never estimated.
+pub const Usage = struct {
+    prompt_tokens: ?u64 = null,
+    completion_tokens: ?u64 = null,
+    total_tokens: ?u64 = null,
+    /// Hidden reasoning tokens, when the provider breaks them out.
+    reasoning_tokens: ?u64 = null,
+
+    pub fn metered(u: Usage) bool {
+        return u.prompt_tokens != null or u.completion_tokens != null or u.total_tokens != null;
+    }
+};
+
+/// One parsed chat completion. `content` is the answer only — reasoning
+/// that arrived in a separate field, a reasoning part, or a leading
+/// `<think>` block is moved to `reasoning`, so JSON-only callers parse
+/// the answer and nothing else.
+pub const Reply = struct {
+    content: []const u8,
+    reasoning: ?[]const u8 = null,
+    finish_reason: ?[]const u8 = null,
+    usage: Usage = .{},
+
+    /// The provider stopped at its token cap; the answer is cut off.
+    pub fn truncated(r: Reply) bool {
+        const f = r.finish_reason orelse return false;
+        return std.mem.eql(u8, f, "length") or std.mem.eql(u8, f, "max_tokens");
+    }
+};
+
 /// One chat completion on a live backend: resolves the endpoint and model
 /// for `kind`, needs MODEL_API_KEY, returns the first choice's content.
 /// `mock` has no endpoint; callers keep their own canned path for it.
 pub fn complete(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user: []const u8) Error![]const u8 {
-    if (kind == .mock)
-        return ctx.fail("backend 'mock' has no live completion (task '{s}')", .{@tagName(task)});
-    const key = ctx.environ.get("MODEL_API_KEY") orelse "";
-    if (key.len == 0)
-        return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
-    const url = switch (kind) {
-        .baseten => ctx.environ.get("KNAP_BASETEN_URL") orelse
-            "https://api.baseten.co/v1/chat/completions",
-        else => "https://api.meta.ai/v1/chat/completions",
-    };
-    const model: []const u8 = switch (kind) {
-        .spark => "muse-spark-1.3",
-        .wonder => "muse-wonder-1.0",
-        .baseten => "meta-models/muse-spark-open-1026",
-        .mock => unreachable,
-    };
-    ctx.countCall(system, user);
-    return chatCompletion(ctx, url, key, model, system, user);
+    return (try completeReply(ctx, kind, task, system, user)).content;
 }
 
-/// POST an OpenAI-compatible chat completion through curl; return the
-/// first choice's message content. Errors in the transport or a missing
-/// choices field both surface as ToolFailed with the raw reply attached.
-fn chatCompletion(
-    ctx: *Ctx,
-    url: []const u8,
-    key: []const u8,
-    model: []const u8,
-    system: []const u8,
-    user_msg: []const u8,
-) Error![]const u8 {
+/// `complete`, keeping the reasoning, finish reason and token usage.
+pub fn completeReply(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user: []const u8) Error!Reply {
+    if (kind == .mock)
+        return ctx.fail("backend 'mock' has no live completion (task '{s}')", .{@tagName(task)});
+    if (kind == .acp) return acpReply(ctx, task, system, user);
+    const key = try apiKey(ctx, kind);
+    const ep = try endpoint(ctx, kind);
+    ctx.countCall(system, user);
+    const reply = try chatCompletion(ctx, ep, key, system, user);
+    ctx.countUsage(reply.usage);
+    if (ctx.environ.get("KNAP_DEBUG") != null) {
+        const u = reply.usage;
+        std.debug.print("knap-mcp: {s}/{s} model={s} finish={s} usage prompt={?d} completion={?d} total={?d} reasoning={?d}\n", .{
+            @tagName(kind), @tagName(task), ep.model, reply.finish_reason orelse "-",
+            u.prompt_tokens, u.completion_tokens, u.total_tokens, u.reasoning_tokens,
+        });
+    }
+    return reply;
+}
+
+/// One ACP turn as a Reply. ACP prompts have no system role, so the
+/// system prefix leads the one text block. The agent's text goes through
+/// the same `<think>` split as an HTTP reply, and every caller's own
+/// scrubber after that. `stopReason` stands in for `finish_reason`:
+/// `max_tokens` reads as truncated, and a `refusal` is no answer.
+fn acpReply(ctx: *Ctx, task: Task, system: []const u8, user: []const u8) Error!Reply {
+    _ = try acp.requireAgent(ctx);
+    ctx.countCall(system, user);
+    const turn = try acp.prompt(ctx, try std.fmt.allocPrint(ctx.arena, "{s}\n\n{s}", .{ system, user }));
+    var reasoning: std.Io.Writer.Allocating = .init(ctx.arena);
+    const answer = if (std.mem.eql(u8, turn.stop_reason, "refusal")) "" else try splitThink(&reasoning.writer, turn.text);
+    const r = reasoning.written();
+    const reply: Reply = .{
+        .content = answer,
+        .reasoning = if (r.len > 0) r else null,
+        .finish_reason = if (turn.stop_reason.len > 0) turn.stop_reason else null,
+        .usage = parseUsage(turn.usage),
+    };
+    if (ctx.environ.get("KNAP_DEBUG") != null) {
+        const u = reply.usage;
+        std.debug.print("knap-mcp: acp/{s} agent={s} stop={s} usage prompt={?d} completion={?d} total={?d} reasoning={?d}\n", .{
+            @tagName(task),     acp.agentName(ctx) orelse "-", reply.finish_reason orelse "-",
+            u.prompt_tokens,    u.completion_tokens,           u.total_tokens,
+            u.reasoning_tokens,
+        });
+    }
+    return reply;
+}
+
+fn apiKey(ctx: *Ctx, kind: Kind) error{ToolFailed}![]const u8 {
+    const key = ctx.environ.get("MODEL_API_KEY") orelse "";
+    if (key.len == 0) return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
+    return key;
+}
+
+/// The model ids `kind`'s provider serves (`GET /v1/models`), so the
+/// smoke can confirm the KNAP_<KIND>_MODEL to set.
+pub fn listModels(ctx: *Ctx, kind: Kind) Error![]const []const u8 {
+    if (kind == .mock or kind == .acp) return ctx.fail("backend '{s}' has no model list", .{@tagName(kind)});
+    const key = try apiKey(ctx, kind);
+    const ep = try endpoint(ctx, kind);
+    const url = ep.models_url orelse
+        return ctx.fail("cannot derive a models URL from '{s}'; set {s}", .{ ep.url, switch (kind) {
+            inline else => |k| comptime envName(k, "MODELS_URL"),
+        } });
     warnProjectTreeStore(ctx);
-    var payload: std.Io.Writer.Allocating = .init(ctx.arena);
+    const r = try curl(ctx, url, key, null);
+    if (r.exit != 0) return httpFail(ctx, r);
+    return parseModelIds(ctx, r.body);
+}
+
+/// Model ids from a model-list reply. OpenAI's shape is `{"data":[{"id":
+/// …}]}`; `{"models":[…]}`, a bare array, string items and `name` in place
+/// of `id` are accepted too, since the providers' shape is unconfirmed.
+fn parseModelIds(ctx: *Ctx, body: []const u8) Error![]const []const u8 {
+    const parsed = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, body, .{}) catch
+        return ctx.fail("backend model list is not JSON", .{});
+    const list = switch (parsed) {
+        .array => parsed,
+        else => getPath(parsed, &.{"data"}) orelse getPath(parsed, &.{"models"}) orelse
+            return ctx.fail("backend model list has no data array", .{}),
+    };
+    if (list != .array) return ctx.fail("backend model list has no data array", .{});
+    var ids: std.ArrayList([]const u8) = .empty;
+    for (list.array.items) |item| {
+        const id = switch (item) {
+            .string => |s| s,
+            else => str(getPath(item, &.{"id"})) orelse str(getPath(item, &.{"name"})) orelse continue,
+        };
+        try ids.append(ctx.arena, id);
+    }
+    return ids.items;
+}
+
+/// The chat-completions request body. `temperature` null leaves the
+/// field out.
+fn requestBody(arena: std.mem.Allocator, model: []const u8, system: []const u8, user_msg: []const u8, temperature: ?f64) Error![]const u8 {
+    var payload: std.Io.Writer.Allocating = .init(arena);
     try payload.writer.print("{{\"model\":", .{});
     try std.json.Stringify.value(model, .{}, &payload.writer);
     try payload.writer.print(",\"messages\":[{{\"role\":\"system\",\"content\":", .{});
     try std.json.Stringify.value(system, .{}, &payload.writer);
     try payload.writer.print("}},{{\"role\":\"user\",\"content\":", .{});
     try std.json.Stringify.value(user_msg, .{}, &payload.writer);
-    try payload.writer.print("}}],\"temperature\":0}}", .{});
+    try payload.writer.writeAll("}]");
+    if (temperature) |t| try payload.writer.print(",\"temperature\":{d}", .{t});
+    try payload.writer.writeAll("}");
+    return payload.written();
+}
 
-    // The request body goes through an owner-only scratch file, not argv,
-    // so the prompt doesn't show up in `ps`. The API key never touches
-    // disk: curl reads it as a `-K -` config stream on stdin.
-    const body_path = try store.scratchFile(ctx, "json");
-    defer std.Io.Dir.deleteFile(.cwd(), ctx.io, body_path) catch {};
-    const Permissions = std.Io.File.Permissions;
-    const private: std.Io.Dir.CreateFileOptions = .{
-        .permissions = if (@hasDecl(Permissions, "fromMode")) Permissions.fromMode(0o600) else .default_file,
-    };
-    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = body_path, .data = payload.written(), .flags = private }) catch
-        return ctx.fail("cannot stage backend request body", .{});
-    const body_arg = try std.fmt.allocPrint(ctx.arena, "@{s}", .{body_path});
+/// POST an OpenAI-compatible chat completion through curl and parse the
+/// first choice. A 400/422 that names `temperature` is retried once
+/// without the field — reasoning models may refuse any explicit value.
+fn chatCompletion(ctx: *Ctx, ep: Endpoint, key: []const u8, system: []const u8, user_msg: []const u8) Error!Reply {
+    warnProjectTreeStore(ctx);
+    var temperature = ep.temperature;
+    while (true) {
+        const r = try curl(ctx, ep.url, key, try requestBody(ctx.arena, ep.model, system, user_msg, temperature));
+        if (r.exit == 0) return parseReply(ctx, r.body);
+        if (temperature != null and rejectsTemperature(r)) {
+            std.debug.print("knap-mcp: model '{s}' rejected temperature; retrying without it (set KNAP_TEMPERATURE=omit to skip)\n", .{ep.model});
+            temperature = null;
+            continue;
+        }
+        return httpFail(ctx, r);
+    }
+}
 
+fn rejectsTemperature(r: Http) bool {
+    return (r.status == 400 or r.status == 422) and std.mem.indexOf(u8, r.body, "temperature") != null;
+}
+
+/// One finished curl call: exit code, HTTP status (0 when none came
+/// back), body with the status line split off, and stderr.
+const Http = struct { exit: u8, status: u32, body: []const u8, stderr: []const u8 };
+
+fn httpFail(ctx: *Ctx, r: Http) error{ToolFailed} {
+    if (r.status >= 400)
+        return ctx.fail("backend http {d}: {s}", .{ r.status, brief(if (r.body.len > 0) r.body else r.stderr) });
+    return ctx.fail("backend request failed (curl exit {d}): {s}", .{ r.exit, brief(r.stderr) });
+}
+
+/// One authenticated request through curl: a POST of `payload` when
+/// given, else a GET.
+fn curl(ctx: *Ctx, url: []const u8, key: []const u8, payload: ?[]const u8) Error!Http {
+    var argv: std.ArrayList([]const u8) = .empty;
+    const total_secs = ctx.envSecs("KNAP_CURL_TIMEOUT", 60);
     // `-m`/`--connect-timeout` bound the call curl-side (`KNAP_CURL_TIMEOUT`
     // default 60s, `KNAP_CURL_CONNECT_TIMEOUT` default 10s); the process
     // deadline adds 15s of slack as a backstop in case curl itself wedges.
     // `-w` appends the HTTP status after the body so `--fail-with-body`
     // can keep the provider's error payload.
-    const total_secs = ctx.envSecs("KNAP_CURL_TIMEOUT", 60);
+    try argv.appendSlice(ctx.arena, &.{
+        "curl",              "-sS", "--fail-with-body", "-X", if (payload != null) "POST" else "GET", url,
+        "-m",                try std.fmt.allocPrint(ctx.arena, "{d}", .{total_secs}),
+        "--connect-timeout", try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.envSecs("KNAP_CURL_CONNECT_TIMEOUT", 10)}),
+        "-K",                "-",
+        "-w",                "\n%{http_code}",
+    });
+
+    // The request body goes through an owner-only scratch file, not argv,
+    // so the prompt doesn't show up in `ps`. The API key never touches
+    // disk: curl reads it as a `-K -` config stream on stdin.
+    var body_path: ?[]const u8 = null;
+    defer if (body_path) |p| std.Io.Dir.deleteFile(.cwd(), ctx.io, p) catch {};
+    if (payload) |data| {
+        const path = try store.scratchFile(ctx, "json");
+        body_path = path;
+        const Permissions = std.Io.File.Permissions;
+        const private: std.Io.Dir.CreateFileOptions = .{
+            .permissions = if (@hasDecl(Permissions, "fromMode")) Permissions.fromMode(0o600) else .default_file,
+        };
+        std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = data, .flags = private }) catch
+            return ctx.fail("cannot stage backend request body", .{});
+        try argv.appendSlice(ctx.arena, &.{
+            "-H",            "Content-Type: application/json",
+            "--data-binary", try std.fmt.allocPrint(ctx.arena, "@{s}", .{path}),
+        });
+    }
+
     const config = try std.fmt.allocPrint(ctx.arena, "header = \"Authorization: Bearer {s}\"\n", .{key});
-    const result = try runCurl(ctx, &.{
-        "curl",               "-sS", "--fail-with-body", "-X", "POST", url,
-        "-m",                 try std.fmt.allocPrint(ctx.arena, "{d}", .{total_secs}),
-        "--connect-timeout",  try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.envSecs("KNAP_CURL_CONNECT_TIMEOUT", 10)}),
-        "-K",                 "-",
-        "-H",                 "Content-Type: application/json",
-        "--data-binary",      body_arg,
-        "-w",                 "\n%{http_code}",
-    }, config, if (total_secs == 0) .none else ctx.deadline(total_secs + 15));
-
-    // `-w` appends "\n<status>" after the body; split them back apart.
-    var body: []const u8 = result.stdout;
-    var status: u32 = 0;
-    if (std.mem.lastIndexOfScalar(u8, body, '\n')) |i| {
-        const s = std.fmt.parseInt(u32, std.mem.trim(u8, body[i + 1 ..], " \r"), 10) catch 0;
-        if (s > 0) {
-            status = s;
-            body = body[0..i];
-        }
-    }
-
-    switch (result.term) {
-        .exited => |code| if (code != 0) {
-            if (status >= 400)
-                return ctx.fail("backend http {d}: {s}", .{ status, brief(if (body.len > 0) body else result.stderr) });
-            return ctx.fail("backend request failed (curl exit {d}): {s}", .{ code, brief(result.stderr) });
-        },
+    const result = try runCurl(ctx, argv.items, config, if (total_secs == 0) .none else ctx.deadline(total_secs + 15));
+    const exit = switch (result.term) {
+        .exited => |code| code,
         else => return ctx.fail("curl terminated abnormally", .{}),
-    }
+    };
+    const body, const status = splitStatus(result.stdout);
+    return .{ .exit = exit, .status = status, .body = body, .stderr = result.stderr };
+}
 
+/// `-w` appends "\n<status>" after the body; split them back apart.
+fn splitStatus(out: []const u8) struct { []const u8, u32 } {
+    const i = std.mem.lastIndexOfScalar(u8, out, '\n') orelse return .{ out, 0 };
+    const s = std.fmt.parseInt(u32, std.mem.trim(u8, out[i + 1 ..], " \r"), 10) catch 0;
+    return if (s > 0) .{ out[0..i], s } else .{ out, 0 };
+}
+
+/// Parse a chat-completion reply defensively. Structural breakage (not
+/// JSON, an `error` object, no choices, content of an unknown type) is a
+/// ToolFailed, which every caller degrades (repair to non-convergence,
+/// voice to a rejected field). An empty or reasoning-only answer is not:
+/// it comes back as empty content, and callers already treat that as
+/// "no proposal". Accepted shapes, since the providers' are unconfirmed:
+///
+///   - `message.content` as a string, null, or an array of parts —
+///     strings, `{"type":"text"|"output_text","text":…}` (`text` may be
+///     `{"value":…}`), reasoning parts (`reasoning`/`thinking`), others
+///     (images, refusals) skipped;
+///   - reasoning in `message.reasoning_content` or `message.reasoning`,
+///     or a leading `<think>…</think>` block in the content;
+///   - a legacy `choices[0].text`;
+///   - `usage` with OpenAI (`prompt_tokens`/`completion_tokens`) or
+///     `input_tokens`/`output_tokens` names, plus `*_tokens_details.
+///     reasoning_tokens`.
+fn parseReply(ctx: *Ctx, body: []const u8) Error!Reply {
     const parsed = std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, body, .{}) catch
         return ctx.fail("backend returned non-JSON", .{});
-    const choices = getPath(parsed, &.{ "choices" }) orelse
+    const choices = getPath(parsed, &.{"choices"}) orelse {
+        if (getPath(parsed, &.{"error"})) |e| {
+            const msg = str(getPath(e, &.{"message"})) orelse str(e) orelse brief(body);
+            return ctx.fail("backend error: {s}", .{brief(msg)});
+        }
         return ctx.fail("backend reply has no choices", .{});
-    switch (choices) {
-        .array => |arr| {
-            if (arr.items.len == 0) return ctx.fail("backend reply has empty choices", .{});
-            const content = getPath(arr.items[0], &.{ "message", "content" }) orelse
-                return ctx.fail("backend reply has no message.content", .{});
-            switch (content) {
-                .string => |s| return s,
-                else => return ctx.fail("backend message.content is not a string", .{}),
-            }
-        },
-        else => return ctx.fail("backend choices is not an array", .{}),
+    };
+    if (choices != .array) return ctx.fail("backend choices is not an array", .{});
+    if (choices.array.items.len == 0) return ctx.fail("backend reply has empty choices", .{});
+    const first = choices.array.items[0];
+
+    var content: std.Io.Writer.Allocating = .init(ctx.arena);
+    var reasoning: std.Io.Writer.Allocating = .init(ctx.arena);
+    if (getPath(first, &.{"message"})) |msg| {
+        switch (getPath(msg, &.{"content"}) orelse std.json.Value.null) {
+            .null => {},
+            .string => |s| try content.writer.writeAll(s),
+            .array => |parts| for (parts.items) |part| try appendPart(&content.writer, &reasoning.writer, part),
+            else => return ctx.fail("backend message.content is not a string or parts array", .{}),
+        }
+        inline for (.{ "reasoning_content", "reasoning" }) |field| {
+            if (str(getPath(msg, &.{field}))) |r| try reasoning.writer.writeAll(r);
+        }
+    } else if (str(getPath(first, &.{"text"}))) |t| {
+        try content.writer.writeAll(t);
+    } else return ctx.fail("backend reply has no message.content", .{});
+
+    const answer = try splitThink(&reasoning.writer, content.written());
+    const r = reasoning.written();
+    return .{
+        .content = answer,
+        .reasoning = if (r.len > 0) r else null,
+        .finish_reason = str(getPath(first, &.{"finish_reason"})) orelse str(getPath(first, &.{"stop_reason"})),
+        .usage = parseUsage(getPath(parsed, &.{"usage"})),
+    };
+}
+
+/// One `message.content` part: answer text to `content`, reasoning to
+/// `reasoning`, anything else dropped.
+fn appendPart(content: *std.Io.Writer, reasoning: *std.Io.Writer, part: std.json.Value) !void {
+    switch (part) {
+        .string => |s| return content.writeAll(s),
+        .object => {},
+        else => return,
     }
+    const ty = str(getPath(part, &.{"type"})) orelse "text";
+    const text = str(getPath(part, &.{"text"})) orelse str(getPath(part, &.{ "text", "value" }));
+    if (std.mem.eql(u8, ty, "text") or std.mem.eql(u8, ty, "output_text")) {
+        if (text) |t| try content.writeAll(t);
+    } else if (std.mem.eql(u8, ty, "reasoning") or std.mem.eql(u8, ty, "thinking")) {
+        if (text orelse str(getPath(part, &.{"thinking"})) orelse str(getPath(part, &.{"reasoning"}))) |t|
+            try reasoning.writeAll(t);
+    }
+}
+
+/// Move a leading `<think>…</think>` block into `reasoning` and return
+/// the answer after it. An unclosed block is all reasoning: no answer.
+fn splitThink(reasoning: *std.Io.Writer, content: []const u8) ![]const u8 {
+    const open = "<think>";
+    const close = "</think>";
+    const s = std.mem.trimStart(u8, content, " \t\r\n");
+    if (!std.mem.startsWith(u8, s, open)) return content;
+    const end = std.mem.indexOf(u8, s, close) orelse {
+        try reasoning.writeAll(s[open.len..]);
+        return "";
+    };
+    try reasoning.writeAll(std.mem.trim(u8, s[open.len..end], " \t\r\n"));
+    return std.mem.trimStart(u8, s[end + close.len ..], " \t\r\n");
+}
+
+fn parseUsage(v: ?std.json.Value) Usage {
+    const u = v orelse return .{};
+    return .{
+        .prompt_tokens = tokens(getPath(u, &.{"prompt_tokens"})) orelse tokens(getPath(u, &.{"input_tokens"})) orelse
+            tokens(getPath(u, &.{"inputTokens"})),
+        .completion_tokens = tokens(getPath(u, &.{"completion_tokens"})) orelse tokens(getPath(u, &.{"output_tokens"})) orelse
+            tokens(getPath(u, &.{"outputTokens"})),
+        .total_tokens = tokens(getPath(u, &.{"total_tokens"})) orelse tokens(getPath(u, &.{"totalTokens"})),
+        .reasoning_tokens = tokens(getPath(u, &.{ "completion_tokens_details", "reasoning_tokens" })) orelse
+            tokens(getPath(u, &.{ "output_tokens_details", "reasoning_tokens" })) orelse
+            tokens(getPath(u, &.{"thoughtTokens"})),
+    };
+}
+
+/// A non-negative whole token count, however the provider encoded it.
+fn tokens(v: ?std.json.Value) ?u64 {
+    return switch (v orelse return null) {
+        .integer => |i| if (i >= 0) @intCast(i) else null,
+        .float => |f| if (f >= 0 and f < 1e15 and @floor(f) == f) @intFromFloat(f) else null,
+        .number_string, .string => |s| std.fmt.parseInt(u64, s, 10) catch null,
+        else => null,
+    };
+}
+
+fn str(v: ?std.json.Value) ?[]const u8 {
+    return switch (v orelse return null) {
+        .string => |s| s,
+        else => null,
+    };
 }
 
 /// `std.process.run` plus a stdin payload (the curl `-K -` config stream)
@@ -596,7 +958,7 @@ fn runCurl(
 /// Tool errors carry a bounded slice of provider/curl output — a hostile
 /// endpoint can't bloat every response it trips. The cut never splits a
 /// UTF-8 codepoint.
-fn brief(s: []const u8) []const u8 {
+pub fn brief(s: []const u8) []const u8 {
     const t = std.mem.trim(u8, s, " \t\r\n");
     var end = @min(t.len, 300);
     while (end > 0 and end < t.len and (t[end] & 0xC0) == 0x80) end -= 1;
@@ -751,4 +1113,345 @@ test "brief trims and caps provider noise on a codepoint boundary" {
     try em.appendSlice(testing.allocator, "ab");
     for (0..110) |_| try em.appendSlice(testing.allocator, "—");
     try testing.expectEqual(@as(usize, 299), brief(em.items).len);
+}
+
+// --- live reply shapes -----------------------------------------------------
+//
+// Fixtures for the parsers above. None is captured from muse-spark,
+// muse-wonder or Baseten yet: MODEL_API_KEY is pending (#85), so each is
+// modeled on a public OpenAI-compatible shape and labelled with what it
+// assumes. Replace them with real captures from the #89 smoke.
+
+fn testCtx(arena: std.mem.Allocator, env: *std.process.Environ.Map) Ctx {
+    var ctx: Ctx = undefined;
+    ctx.arena = arena;
+    ctx.environ = env;
+    ctx.err_msg = "";
+    return ctx;
+}
+
+fn expectReplyFails(body: []const u8, msg: []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    try testing.expectError(error.ToolFailed, parseReply(&ctx, body));
+    try testing.expectEqualStrings(msg, ctx.err_msg);
+}
+
+test "parseReply: OpenAI string content with usage" {
+    // Assumed: plain OpenAI chat.completion, the shape chatCompletion has
+    // always expected.
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    const r = try parseReply(&ctx,
+        \\{"id":"chatcmpl-1","object":"chat.completion","created":1793000000,"model":"muse-spark-1.3",
+        \\ "choices":[{"index":0,"message":{"role":"assistant","content":"{% endif %}\n"},"finish_reason":"stop"}],
+        \\ "usage":{"prompt_tokens":412,"completion_tokens":9,"total_tokens":421}}
+    );
+    try testing.expectEqualStrings("{% endif %}\n", r.content);
+    try testing.expectEqual(@as(?[]const u8, null), r.reasoning);
+    try testing.expectEqualStrings("stop", r.finish_reason.?);
+    try testing.expect(!r.truncated());
+    try testing.expect(r.usage.metered());
+    try testing.expectEqual(@as(?u64, 412), r.usage.prompt_tokens);
+    try testing.expectEqual(@as(?u64, 9), r.usage.completion_tokens);
+    try testing.expectEqual(@as(?u64, 421), r.usage.total_tokens);
+    try testing.expectEqual(@as(?u64, null), r.usage.reasoning_tokens);
+}
+
+test "parseReply: content as an array of parts, reasoning part split off" {
+    // Assumed: a Responses-style parts array (`output_text`, `text` with
+    // a `{value}` wrapper, a `reasoning` part, an image part to skip) —
+    // the #89 question "is message.content ever an array?".
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    const r = try parseReply(&ctx,
+        \\{"choices":[{"message":{"role":"assistant","content":[
+        \\   {"type":"reasoning","text":"The if on line 3 never closes."},
+        \\   {"type":"output_text","text":"{\"value\":"},
+        \\   {"type":"text","text":{"value":"\"Ship it.\"}"}},
+        \\   {"type":"image_url","image_url":{"url":"data:,"}},
+        \\   "\n"
+        \\ ]},"finish_reason":"stop"}],
+        \\ "usage":{"prompt_tokens":"88","completion_tokens":30.0,"total_tokens":118,
+        \\          "completion_tokens_details":{"reasoning_tokens":21}}}
+    );
+    try testing.expectEqualStrings("{\"value\":\"Ship it.\"}\n", r.content);
+    try testing.expectEqualStrings("The if on line 3 never closes.", r.reasoning.?);
+    try testing.expectEqual(@as(?u64, 88), r.usage.prompt_tokens);
+    try testing.expectEqual(@as(?u64, 30), r.usage.completion_tokens);
+    try testing.expectEqual(@as(?u64, 21), r.usage.reasoning_tokens);
+}
+
+test "parseReply: reasoning in a separate message field" {
+    // Assumed: vLLM / DeepSeek-style `reasoning_content` next to the
+    // answer — the likely shape if Baseten serves the open model on vLLM.
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    const r = try parseReply(&ctx,
+        \\{"choices":[{"message":{"role":"assistant","reasoning_content":"Close the block.","content":"{\"value\":null}"},"finish_reason":"stop"}]}
+    );
+    try testing.expectEqualStrings("{\"value\":null}", r.content);
+    try testing.expectEqualStrings("Close the block.", r.reasoning.?);
+    try testing.expect(!r.usage.metered());
+    // OpenRouter-style `reasoning` spelling.
+    const r2 = try parseReply(&ctx,
+        \\{"choices":[{"message":{"content":"ok","reasoning":"hmm"}}]}
+    );
+    try testing.expectEqualStrings("ok", r2.content);
+    try testing.expectEqualStrings("hmm", r2.reasoning.?);
+}
+
+test "parseReply: a leading <think> block is reasoning, not answer" {
+    // Assumed: an open reasoning model that inlines its chain of thought.
+    // JSON-only callers (ratchet enrich) must see only the JSON after it.
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    const r = try parseReply(&ctx,
+        \\{"choices":[{"message":{"content":"<think>\nThe evidence says soon.\n</think>\n\n{\"value\":\"coming soon\"}"}}]}
+    );
+    try testing.expectEqualStrings("{\"value\":\"coming soon\"}", r.content);
+    try testing.expectEqualStrings("The evidence says soon.", r.reasoning.?);
+    // Cut off mid-thought: no answer at all, and flagged truncated.
+    const cut = try parseReply(&ctx,
+        \\{"choices":[{"message":{"content":"<think>The if on line"},"finish_reason":"length"}],
+        \\ "usage":{"input_tokens":50,"output_tokens":256,"output_tokens_details":{"reasoning_tokens":256}}}
+    );
+    try testing.expectEqualStrings("", cut.content);
+    try testing.expect(cut.truncated());
+    try testing.expectEqual(@as(?u64, 50), cut.usage.prompt_tokens);
+    try testing.expectEqual(@as(?u64, 256), cut.usage.completion_tokens);
+    try testing.expectEqual(@as(?u64, 256), cut.usage.reasoning_tokens);
+    // `<think>` anywhere but the front is content.
+    const mid = try parseReply(&ctx,
+        \\{"choices":[{"message":{"content":"a <think>b</think>"}}]}
+    );
+    try testing.expectEqualStrings("a <think>b</think>", mid.content);
+}
+
+test "parseReply: null content, legacy text and junk usage degrade quietly" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    // Assumed: an OpenAI refusal — null content, reason in `refusal`.
+    const refused = try parseReply(&ctx,
+        \\{"choices":[{"message":{"role":"assistant","content":null,"refusal":"I can't help with that."},"finish_reason":"stop"}],
+        \\ "usage":{"prompt_tokens":-1,"completion_tokens":1.5,"total_tokens":"lots"}}
+    );
+    try testing.expectEqualStrings("", refused.content);
+    try testing.expect(!refused.usage.metered());
+    const legacy = try parseReply(&ctx,
+        \\{"choices":[{"text":"{{ x }}","finish_reason":"stop"}]}
+    );
+    try testing.expectEqualStrings("{{ x }}", legacy.content);
+}
+
+test "parseReply: structural breakage is a ToolFailed with a bounded message" {
+    try expectReplyFails("<html>502</html>", "backend returned non-JSON");
+    // Assumed: an OpenAI-style error object delivered with HTTP 200.
+    try expectReplyFails(
+        \\{"error":{"message":"model 'muse-spark-1.3' not found","type":"invalid_request_error"}}
+    , "backend error: model 'muse-spark-1.3' not found");
+    try expectReplyFails(
+        \\{"error":"overloaded"}
+    , "backend error: overloaded");
+    try expectReplyFails("{}", "backend reply has no choices");
+    try expectReplyFails(
+        \\{"choices":{}}
+    , "backend choices is not an array");
+    try expectReplyFails(
+        \\{"choices":[]}
+    , "backend reply has empty choices");
+    try expectReplyFails(
+        \\{"choices":[{"index":0}]}
+    , "backend reply has no message.content");
+    try expectReplyFails(
+        \\{"choices":[{"message":{"content":42}}]}
+    , "backend message.content is not a string or parts array");
+}
+
+test "parseModelIds: OpenAI list, alternate keys, string items" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    // Assumed: OpenAI's `GET /v1/models` list object.
+    const ids = try parseModelIds(&ctx,
+        \\{"object":"list","data":[
+        \\  {"id":"muse-spark-1.3","object":"model","owned_by":"meta"},
+        \\  {"id":"muse-wonder-1.0","object":"model","owned_by":"meta"},
+        \\  {"object":"model"}
+        \\]}
+    );
+    try testing.expectEqual(@as(usize, 2), ids.len);
+    try testing.expectEqualStrings("muse-spark-1.3", ids[0]);
+    try testing.expectEqualStrings("muse-wonder-1.0", ids[1]);
+    const alt = try parseModelIds(&ctx,
+        \\{"models":[{"name":"meta-models/muse-spark-open-1026"},"other"]}
+    );
+    try testing.expectEqual(@as(usize, 2), alt.len);
+    try testing.expectEqualStrings("meta-models/muse-spark-open-1026", alt[0]);
+    try testing.expectEqualStrings("other", alt[1]);
+    try testing.expectError(error.ToolFailed, parseModelIds(&ctx, "{\"data\":1}"));
+    try testing.expectError(error.ToolFailed, parseModelIds(&ctx, "nope"));
+}
+
+test "endpoint: defaults, per-kind overrides and derived models URL" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+    const spark = try endpoint(&ctx, .spark);
+    try testing.expectEqualStrings("https://api.meta.ai/v1/chat/completions", spark.url);
+    try testing.expectEqualStrings("muse-spark-1.3", spark.model);
+    try testing.expectEqualStrings("https://api.meta.ai/v1/models", spark.models_url.?);
+    try testing.expectEqual(@as(?f64, 0), spark.temperature);
+    try testing.expectEqualStrings("muse-wonder-1.0", (try endpoint(&ctx, .wonder)).model);
+    try testing.expectEqualStrings("meta-models/muse-spark-open-1026", (try endpoint(&ctx, .baseten)).model);
+
+    try env.put("KNAP_WONDER_MODEL", " muse-wonder-1.1 ");
+    try env.put("KNAP_BASETEN_URL", "https://model-x.api.baseten.co/environments/production/sync/v1/chat/completions/");
+    try env.put("KNAP_SPARK_URL", "https://proxy.example/complete");
+    try env.put("KNAP_SPARK_MODEL", "");
+    try testing.expectEqualStrings("muse-wonder-1.1", (try endpoint(&ctx, .wonder)).model);
+    try testing.expectEqualStrings("https://model-x.api.baseten.co/environments/production/sync/v1/models", (try endpoint(&ctx, .baseten)).models_url.?);
+    // A URL of another shape has no derivable model list until one is set;
+    // an empty override falls back to the default.
+    const proxied = try endpoint(&ctx, .spark);
+    try testing.expectEqual(@as(?[]const u8, null), proxied.models_url);
+    try testing.expectEqualStrings("muse-spark-1.3", proxied.model);
+    try env.put("KNAP_SPARK_MODELS_URL", "https://proxy.example/models");
+    try testing.expectEqualStrings("https://proxy.example/models", (try endpoint(&ctx, .spark)).models_url.?);
+    try testing.expectError(error.ToolFailed, endpoint(&ctx, .mock));
+}
+
+test "endpoint: temperature is configurable, omittable and guarded" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+    try env.put("KNAP_TEMPERATURE", "0.7");
+    try testing.expectEqual(@as(?f64, 0.7), (try endpoint(&ctx, .spark)).temperature);
+    try env.put("KNAP_WONDER_TEMPERATURE", "omit");
+    try testing.expectEqual(@as(?f64, null), (try endpoint(&ctx, .wonder)).temperature);
+    try testing.expectEqual(@as(?f64, 0.7), (try endpoint(&ctx, .baseten)).temperature);
+    try env.put("KNAP_BASETEN_TEMPERATURE", "NONE");
+    try testing.expectEqual(@as(?f64, null), (try endpoint(&ctx, .baseten)).temperature);
+    for ([_][]const u8{ "hot", "-0.1", "2.5", "nan", "inf" }) |bad| {
+        try env.put("KNAP_SPARK_TEMPERATURE", bad);
+        try testing.expectError(error.ToolFailed, endpoint(&ctx, .spark));
+    }
+    try env.put("KNAP_SPARK_TEMPERATURE", "hot");
+    _ = endpoint(&ctx, .spark) catch {};
+    try testing.expectEqualStrings("temperature 'hot' is not a number or 'omit'", ctx.err_msg);
+}
+
+test "requestBody: temperature 0 keeps the historical body, null drops the field" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings(
+        \\{"model":"m","messages":[{"role":"system","content":"s"},{"role":"user","content":"u\n\"q\""}],"temperature":0}
+    , try requestBody(a, "m", "s", "u\n\"q\"", 0));
+    try testing.expectEqualStrings(
+        \\{"model":"m","messages":[{"role":"system","content":"s"},{"role":"user","content":"u"}],"temperature":0.2}
+    , try requestBody(a, "m", "s", "u", 0.2));
+    const omitted = try requestBody(a, "m", "s", "u", null);
+    try testing.expectEqualStrings(
+        \\{"model":"m","messages":[{"role":"system","content":"s"},{"role":"user","content":"u"}]}
+    , omitted);
+    _ = try std.json.parseFromSliceLeaky(std.json.Value, a, omitted, .{});
+}
+
+test "rejectsTemperature and splitStatus" {
+    try testing.expect(rejectsTemperature(.{ .exit = 22, .status = 400, .body =
+        \\{"error":{"message":"Unsupported value: 'temperature' does not support 0 with this model.","param":"temperature"}}
+    , .stderr = "" }));
+    try testing.expect(!rejectsTemperature(.{ .exit = 22, .status = 401, .body = "temperature", .stderr = "" }));
+    try testing.expect(!rejectsTemperature(.{ .exit = 22, .status = 400, .body = "bad model", .stderr = "" }));
+    const body, const status = splitStatus("{\"a\":1}\n200");
+    try testing.expectEqualStrings("{\"a\":1}", body);
+    try testing.expectEqual(@as(u32, 200), status);
+    const b2, const s2 = splitStatus("no status");
+    try testing.expectEqualStrings("no status", b2);
+    try testing.expectEqual(@as(u32, 0), s2);
+}
+
+test "live entry points stay compiled without a key" {
+    // Nothing calls listModels yet; referencing it keeps it type-checked.
+    _ = &listModels;
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    try testing.expectError(error.ToolFailed, completeReply(&ctx, .spark, .repair, "s", "u"));
+    try testing.expectEqualStrings("backend 'spark' needs MODEL_API_KEY", ctx.err_msg);
+    try testing.expectError(error.ToolFailed, listModels(&ctx, .wonder));
+    try testing.expectEqualStrings("backend 'wonder' needs MODEL_API_KEY", ctx.err_msg);
+}
+
+// --- acp ---------------------------------------------------------------------
+
+test {
+    _ = acp;
+}
+
+test "acp: parseKind, status and the missing-agent error" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    ctx.calls = 0;
+    try testing.expectEqual(Kind.acp, parseKind("acp").?);
+    try testing.expect(std.mem.startsWith(u8, statusLine(&ctx, .acp), "needs KNAP_ACP_AGENT"));
+    try testing.expectError(error.ToolFailed, complete(&ctx, .acp, .repair, "s", "u"));
+    try testing.expect(std.mem.startsWith(u8, ctx.err_msg, "backend 'acp' needs KNAP_ACP_AGENT"));
+    try testing.expectEqual(@as(usize, 0), ctx.calls);
+    try testing.expectError(error.ToolFailed, endpoint(&ctx, .acp));
+    try testing.expectError(error.ToolFailed, listModels(&ctx, .acp));
+    try env.put("KNAP_ACP_AGENT", "devin acp --agent-type summarizer");
+    try testing.expectEqualStrings("KNAP_ACP_AGENT set — live calls via 'devin'", statusLine(&ctx, .acp));
+}
+
+test "acp: a turn becomes a Reply with usage, counted like a live call" {
+    var f: acp.FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    var ctx = try f.ctx("ok");
+    const r = try completeReply(&ctx, .acp, .verify, "system", "user");
+    try testing.expectEqualStrings("reply from s1", r.content);
+    try testing.expectEqualStrings("end_turn", r.finish_reason.?);
+    try testing.expect(!r.truncated());
+    try testing.expectEqual(@as(?u64, 40), r.usage.prompt_tokens);
+    try testing.expectEqual(@as(?u64, 3), r.usage.completion_tokens);
+    try testing.expectEqual(@as(?u64, 43), r.usage.total_tokens);
+    try testing.expectEqual(@as(?u64, 1), r.usage.reasoning_tokens);
+    try testing.expectEqual(@as(usize, 1), ctx.calls);
+    try testing.expectEqual(@as(usize, 6), ctx.prefix_bytes);
+}
+
+test "acp: repair runs agent output through sanitizePatch and degrades on a cut-off turn" {
+    var f: acp.FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    const diag: engine.Diag = .{ .kind = "syntax error", .line = 1, .col = 1, .detail = "unclosed if block" };
+    var ctx = try f.ctx("fenced");
+    const patch = try repairPatch(&ctx, .acp, "{% if a %}A\n", 1, diag);
+    try testing.expectEqualStrings("{% if a %}A{% endif %}\n", patch.?);
+    ctx = try f.ctx("maxtok");
+    try testing.expectEqual(@as(?[]const u8, null), try repairPatch(&ctx, .acp, "{% if a %}A\n", 1, diag));
+    ctx = try f.ctx("crash");
+    try testing.expectError(error.ToolFailed, repairPatch(&ctx, .acp, "{% if a %}A\n", 1, diag));
 }
