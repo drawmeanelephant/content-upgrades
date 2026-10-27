@@ -30,7 +30,7 @@ Status key:
 | # | Beat | Target | Last render | Tape | Depends on | Status |
 |---|---|---|---|---|---|---|
 | 1 | Cold open: the generic AI doc | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
-| 2 | Ask for a verdict: model drafts data only | 20s | 20.8s | `02-verdict-data.tape` | main; `boris_ask`: B3 (B1's `ask.sh` works now); live drafting: M1 + MCP client | partial |
+| 2 | Ask for a verdict: model drafts data only | 20s | 20.7s | `02-verdict-data.tape` | frozen drafted take (I5); `boris_ask` (B3); MCP-client footage: #88 (human) | ready |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.2s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
 | 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
@@ -71,28 +71,35 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   longer blocked: `knap-mcp density <file>` takes a file path, and the fixture
   scores 3.7 on density/1 — an overlay could go on screen now (human, Kdenlive).
 
-### 2. Ask for a verdict (20s): partial
+### 2. Ask for a verdict (20s): ready
 
 - **On screen:** the tool names the model can call (`tools/list`, straight from the
-  MCP server over stdio), the verdict template's field names, the drafted values, and
-  `validate` returning ok. The point: the model sees shapes and writes values, and
-  never sees layout.
+  MCP server over stdio), the verdict template's field names, `boris_ask` hits from
+  the frozen site artifact, the frozen draft's `verdict`/`take`/`blockers` labeled
+  Muse Wonder 1.0 via ACP (devin, low thinking), and `validate` returning ok. The
+  point: the model sees shapes and writes values, and never sees layout.
 - **Commands:**
   ```sh
   echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | knap-mcp | jq -r '.result.tools[].name'
-  knap-mcp templates | jq -c '.templates[] | select(.id=="verdict") | .shape.fields | keys'
-  jq '{verdict, take, blockers}' data/verdict.sample.json
-  knap-mcp validate verdict -d data/verdict.sample.json | jq -c
+  knap-mcp templates | jq -r '.templates[] | select(.id=="verdict") | .shape.fields | keys[]'
+  knap-mcp boris-ask 'AcmeDB backups' --limit 3 | jq -c '.results[] | {score,title}'
+  jq -r .label frozen/provenance.json
+  jq '{verdict, take, blockers}' frozen/02-verdict.drafted.json
+  knap-mcp validate verdict -d frozen/02-verdict.drafted.json | jq -c
   ```
-- **Blocked:** "from real data (frozen boris artifact)" needs `boris_ask` (B3). B1's
-  reference query works today and is commented in the tape:
-  `boris-site/ask.sh -k 3 'AcmeDB backups' | jq -r '[.score, .title] | @tsv'` (top hits:
-  "AcmeDB docs — backups", the "no managed backups" claim). It adds about 4s to a beat
-  that is already at its target, so whether to show it before B3 lands is a timing call.
-  "The model drafts" needs a real backend (M1) and a client. There is no CLI draft
-  command; drafting happens in the MCP client (Muse Code if the probe works), which
-  calls `knap_templates` and `knap_validate`. Record that session with OBS, or keep
-  this tape and swap in the frozen drafted data file (I5).
+  `frozen/` is a symlink to `demo/frozen` made in the hidden preamble, so on-screen
+  paths name the frozen inputs. The shape prints `keys[]` one field per line — the
+  one-line `keys` array is 174 chars, over the 121-column frame.
+- **Frozen inputs (I5):** `demo/frozen/02-verdict.drafted.json` is the model's
+  drafted data (one take, no retakes); `demo/frozen/provenance.json` supplies the
+  on-screen label. `boris_ask` reads the frozen site artifact offline.
+- **Continuity (I5 cut list):** the draft reaches its own verdict (`"skip it"`) from
+  the sources alone; beat 4 renders the curated `data/verdict.sample.json`
+  (`"give a shit"`). The beat shows only that the model's draft validates against
+  the shape — nothing implies beat 4's doc is rendered from this draft.
+- **Open:** #88 (human-only Muse Code probe) has produced no footage. If OBS
+  MCP-client footage lands, it replaces this tape's frozen-draft portion (the
+  `jq`/`validate` lines on `02-verdict.drafted.json`); don't splice until then.
 
 ### 3. Seeded failure -> repair (25s): ready
 
