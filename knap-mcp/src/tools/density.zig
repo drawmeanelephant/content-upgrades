@@ -13,7 +13,7 @@ const ObjectMap = std.json.ObjectMap;
 
 pub const tool: tools.Tool = .{
     .name = "knap_density",
-    .description = "Deterministic formatting-density score (density/1, 0-100) of a rendered markdown doc (doc_id handle): per-signal breakdown plus format_check penalties. Markdown renders only.",
+    .description = "Deterministic formatting-density score (density/2, 0-100) of a rendered markdown doc (doc_id handle): per-signal breakdown plus format_check penalties. Markdown renders only.",
     .input_schema =
     \\{"type":"object","properties":{"doc_id":{"type":"string"}},"required":["doc_id"]}
     ,
