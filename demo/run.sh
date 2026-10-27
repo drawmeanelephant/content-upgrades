@@ -304,9 +304,9 @@ CMD
   run <<'CMD'
 find src/ -name '*.zig' -exec cat {} + | awk 'END{print NR " lines of Zig in src/"}'
 CMD
-  say "the card: demo/card/build.sh -> numbers.json (+ numbers.png via headless Chrome)"
+  say "the card: demo/card/build.sh -> out/numbers.json (the tracked demo/card/numbers.json refreshes only via a real card build)"
   run <<'CMD'
-"$ROOT/demo/card/build.sh" --json
+"$ROOT/demo/card/build.sh" --json --out out/numbers.json
 CMD
 
   close_beat

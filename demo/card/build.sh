@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # Beat-8 numbers card: every value measured, each carrying its source.
 #
-#   demo/card/build.sh          # writes numbers.json + numbers.png
-#   demo/card/build.sh --json   # numbers.json only (no Chrome)
+#   demo/card/build.sh               # writes demo/card/numbers.json + numbers.png
+#   demo/card/build.sh --json        # numbers.json only (no Chrome)
+#   demo/card/build.sh --out PATH    # write numbers.json to PATH instead
+#
+# The default output is the tracked demo/card/numbers.json: it stays
+# committed so the card's content is reviewable. Scripted runs that must
+# not dirty the worktree (demo/run.sh beat 8) pass --out into a
+# gitignored scratch dir.
 #
 # Sources (all offline; nothing calls a live model):
 #   repair convergence: knap-mcp/eval/results/live/{acp-seeds,
@@ -31,6 +37,17 @@ BIN=$KNAP/zig-out/bin/knap-mcp
 need() { command -v "$1" >/dev/null 2>&1 || { echo "card/build.sh: missing '$1'" >&2; exit 1; }; }
 need jq
 need awk
+
+json_only=0
+json_out=$CARD/numbers.json
+while [ $# -gt 0 ]; do
+  case $1 in
+    --json) json_only=1 ;;
+    --out) shift; json_out=${1:?"card/build.sh: --out needs a path"} ;;
+    *) echo "card/build.sh: unknown argument '$1'" >&2; exit 1 ;;
+  esac
+  shift
+done
 
 : "${KNAP_K4O_PATH:=$("$ROOT/scripts/engines.sh" path k4o)}"
 : "${KNAP_DOGBED_PATH:=$("$ROOT/scripts/engines.sh" path dogbed)}"
@@ -109,6 +126,7 @@ printf 'server                  %s lines   <- cat $(find knap-mcp/src -name %s) 
 git_sha=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)
 date_utc=$(date -u +%F)
 
+mkdir -p "$(dirname "$json_out")"
 jq -n \
   --arg date "$date_utc" --arg git "$git_sha" \
   --arg k4o "$k4o_pin" --arg k4o_ver "$k4o_ver" --arg dogbed "$dogbed_pin" \
@@ -173,11 +191,11 @@ jq -n \
       "No token-cost numbers: each ACP call carries ~13.5k tokens of agent system prompt (LIVE.md finding 3).",
       "Sources: knap-mcp/eval/results/live/ (I2/I3), eval/conformance/results/ (K3/K5), a fresh mock eval, src LOC."
     ]
-  }' > "$CARD/numbers.json"
+  }' > "$json_out"
 
-printf 'wrote %s\n' "${CARD#"$ROOT"/}/numbers.json"
+printf 'wrote %s\n' "${json_out#"$ROOT"/}"
 
-[ "${1:-}" = "--json" ] && exit 0
+[ "$json_only" = 1 ] && exit 0
 
 chrome=${KNAP_CHROME:-}
 if [ -z "$chrome" ]; then
@@ -191,7 +209,7 @@ fi
 
 # Inline numbers.json into the template (file:// pages cannot fetch it).
 awk 'NR == FNR {j = j $0 "\n"; next} /__NUMBERS_JSON__/ {printf "const DATA = %s;\n", j; next} {print}' \
-  "$CARD/numbers.json" "$CARD/card.html" > "$OUT/card.html"
+  "$json_out" "$CARD/card.html" > "$OUT/card.html"
 
 profile=$(mktemp -d "${TMPDIR:-/tmp}/knap-card-chrome.XXXXXX")
 "$chrome" --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=1 \
