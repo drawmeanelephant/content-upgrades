@@ -148,6 +148,9 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
         const has_max = spec.object.get("max_items") != null;
         // A required field grows only when the shape bounds it.
         if (f.kind == .other or (!f.optional and !has_max)) continue;
+        // evidenceClaims can only quote strings; on any other slot kind
+        // the evidence flag would gate the slot but verify nothing.
+        if (f.evidence and f.kind != .string and f.kind != .strings) return error.BadShape;
         // The slice carries ROLE on its own line; keep it out of SCHEMA.
         var schema = try spec.object.clone(arena);
         _ = schema.orderedRemove("role");
@@ -195,7 +198,10 @@ fn parseField(arena: std.mem.Allocator, name: []const u8, spec: ObjectMap, inher
         var it = sv.object.iterator();
         while (it.next()) |e| {
             if (e.value_ptr.* != .object) return error.BadShape;
-            try subs.append(arena, try parseField(arena, e.key_ptr.*, e.value_ptr.object, f.words));
+            const sf = try parseField(arena, e.key_ptr.*, e.value_ptr.object, f.words);
+            // Only a string sub-field can carry a quotable claim.
+            if (sf.evidence and sf.kind != .string) return error.BadShape;
+            try subs.append(arena, sf);
         }
         f.sub = subs.items;
     }
@@ -331,7 +337,15 @@ fn filled(data: ObjectMap, slots: []const Slot) usize {
 /// Returns the rejection detail, or null when the value fits.
 pub fn checkSchema(arena: std.mem.Allocator, s: Slot, value: Value, data: ObjectMap) !?[]const u8 {
     switch (s.field.kind) {
-        .string, .strings => return checkString(arena, s.field, value),
+        .string, .strings => {
+            if (try checkString(arena, s.field, value)) |why| return why;
+            if (s.field.ref) |ref| {
+                const keys = data.get(ref);
+                const ok = keys != null and keys.? == .object and keys.?.object.get(value.string) != null;
+                if (!ok) return try std.fmt.allocPrint(arena, "ref: {s} '{s}' is not a key in '{s}'", .{ s.field.name, value.string, ref });
+            }
+            return null;
+        },
         .number => return switch (value) {
             .integer, .float => null,
             else => "expected a number",
@@ -522,6 +536,9 @@ pub fn parseReply(arena: std.mem.Allocator, text: []const u8) Reply {
 
 pub const Reason = enum {
     ok,
+    /// The reply was not JSON at all — a parse failure, not a value that
+    /// violated the schema.
+    parse,
     schema,
     inert,
     render,
@@ -542,6 +559,7 @@ pub const Reason = enum {
 pub const Stop = enum { ceiling, plateau, stalled, max_iterations, budget };
 
 pub const Step = struct {
+    /// 1-based, the same counter Result.iterations reports.
     iteration: usize,
     slot: []const u8,
     probe_gain: f64,
@@ -624,6 +642,7 @@ const Run = struct {
         const a = r.ctx.arena;
         const json = try std.json.Stringify.valueAlloc(a, Value{ .object = data }, .{});
         const path = try store.scratchFile(r.ctx, "json");
+        defer std.Io.Dir.deleteFile(.cwd(), r.ctx.io, path) catch {};
         std.Io.Dir.writeFile(.cwd(), r.ctx.io, .{ .sub_path = path, .data = json }) catch
             return r.ctx.fail("cannot stage data file", .{});
         r.renders += 1;
@@ -706,6 +725,7 @@ pub fn run(
         .ok => |b| b,
         .diag => {
             const path = try store.scratchFile(ctx, "json");
+            defer std.Io.Dir.deleteFile(.cwd(), ctx.io, path) catch {};
             std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = try std.json.Stringify.valueAlloc(a, Value{ .object = data0 }, .{}) }) catch
                 return ctx.fail("cannot stage data file", .{});
             return switch (try engine.render(ctx, .markdown, tpl_path, path)) {
@@ -753,13 +773,13 @@ pub fn run(
                 break :outer;
             }
             const s = slots[c.slot];
-            var step: Step = .{ .iteration = iter, .slot = s.path, .probe_gain = c.gain };
+            var step: Step = .{ .iteration = iter + 1, .slot = s.path, .probe_gain = c.gain };
             const reply = try r.ask(s, best.data);
             calls += 1;
             judge: switch (reply) {
                 .declined => step.reason = .declined,
                 .bad => |why| {
-                    step.reason = .schema;
+                    step.reason = .parse;
                     step.detail = why;
                 },
                 .value => |v| {
@@ -936,7 +956,9 @@ const Case = struct {
     shape: []const u8,
     data: ObjectMap,
     mock: ObjectMap,
-    expect: ?ObjectMap,
+    /// Kept raw: a non-object expect is a malformed expectation and
+    /// checkExpect fails the case on it.
+    expect: ?Value,
     max_iterations: usize,
 };
 
@@ -945,6 +967,7 @@ const Row = struct {
     result: ?Result = null,
     err: []const u8 = "",
     check: []const u8 = "ok",
+    max_iterations: usize = 0,
 };
 
 /// `knap-mcp ratchet-eval [--corpus eval/ratchet.json] [--backend b]`:
@@ -1005,7 +1028,7 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
     var failed = false;
     for (cases_v.array.items) |cv| {
         const c = try parseCase(ctx, dir, cv, mock_file);
-        var row: Row = .{ .id = c.id };
+        var row: Row = .{ .id = c.id, .max_iterations = c.max_iterations };
         const shape = try loadShape(ctx, c.shape);
         const outcome = run(ctx, kind, c.tpl, shape, c.data, .{ .mock = c.mock, .max_iterations = c.max_iterations }) catch |e| {
             if (e == error.OutOfMemory) return error.OutOfMemory;
@@ -1032,17 +1055,17 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
         try rows.append(a, row);
     }
 
-    try w.print("backend: {s}   corpus: {s}   scorer: {s}   max_iters: {d}   eps: {d:.1}   top_k: {d}   max_calls: {d}\n\n", .{
-        @tagName(kind), corpus_path, density.version, default_max_iterations, epsilon, top_k, max_backend_calls,
+    try w.print("backend: {s}   corpus: {s}   scorer: {s}   eps: {d:.1}   top_k: {d}   max_calls: {d}\n\n", .{
+        @tagName(kind), corpus_path, density.version, epsilon, top_k, max_backend_calls,
     });
-    try w.writeAll("| case | start | final | gain | ceiling | iters | calls | accepted | schema | inert | render | verifier | no-gain | warn | declined | renders | ms | stop | check |\n");
-    try w.writeAll("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|---|\n");
+    try w.writeAll("| case | start | final | gain | ceiling | iters | cap | calls | accepted | parse | schema | inert | render | verifier | no-gain | warn | declined | renders | ms | stop | check |\n");
+    try w.writeAll("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|---|\n");
     var runs: usize = 0;
     var renders: usize = 0;
     var ms: f64 = 0;
     for (rows.items) |row| {
         const r = row.result orelse {
-            try w.print("| {s} | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | - | {s}: {s} |\n", .{ row.id, row.check, row.err });
+            try w.print("| {s} | - | - | - | - | - | {d} | - | - | - | - | - | - | - | - | - | - | - | - | {s}: {s} |\n", .{ row.id, row.max_iterations, row.check, row.err });
             continue;
         };
         runs += 1;
@@ -1050,10 +1073,11 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
         ms += r.ms;
         const rj = r.rejections;
         try w.print("| {s} | {d:.1} | {d:.1} | {d:.1} | {d:.1}", .{ row.id, r.start, r.final, r.final - r.start, r.ceiling });
-        try w.print(" | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d:.0} | {s} | {s} |\n", .{
-            r.iterations,    r.calls,           r.accepted(),     rj.get(.schema),       rj.get(.inert),
-            rj.get(.render), rj.get(.verifier), rj.get(.no_gain), rj.get(.new_warnings), rj.get(.declined),
-            r.renders,       r.ms,              @tagName(r.stop), row.check,
+        try w.print(" | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d:.0} | {s} | {s} |\n", .{
+            r.iterations,    row.max_iterations, r.calls,           r.accepted(),     rj.get(.parse),
+            rj.get(.schema), rj.get(.inert),     rj.get(.render),   rj.get(.verifier), rj.get(.no_gain),
+            rj.get(.new_warnings),               rj.get(.declined), r.renders,        r.ms,
+            @tagName(r.stop),                    row.check,
         });
     }
     if (runs > 0) {
@@ -1122,27 +1146,45 @@ fn parseCase(ctx: *Ctx, dir: []const u8, cv: Value, mock_file: []const u8) Error
         var it = mv.object.iterator();
         while (it.next()) |e| try mock.put(ctx.arena, e.key_ptr.*, e.value_ptr.*);
     }
-    const expect: ?ObjectMap = if (o.get("expect")) |ev| (if (ev == .object) ev.object else null) else null;
-    const iters = int(o, "max_iterations") orelse default_max_iterations;
+    const expect = o.get("expect");
+    // Same bound the MCP tool and CLI enforce (0-20).
+    const iters: usize = if (o.get("max_iterations")) |v| switch (v) {
+        .integer => |x| if (x >= 0 and x <= 20) @intCast(x) else return ctx.fail("case '{s}': max_iterations must be 0-20", .{id}),
+        else => return ctx.fail("case '{s}': max_iterations must be an integer 0-20", .{id}),
+    } else default_max_iterations;
     return .{ .id = id, .tpl = tpl, .shape = shape, .data = data, .mock = mock, .expect = expect, .max_iterations = iters };
 }
 
 /// `{"min_gain": n, "stop": "plateau", "min_accepted": n,
-///   "reject": {"<reason>": n}}`: every key present must hold.
-fn checkExpect(arena: std.mem.Allocator, r: Result, expect: ?ObjectMap) !?[]const u8 {
-    const e = expect orelse return null;
+///   "reject": {"<reason>": n}}`: every key present must hold, and a key
+///   present but malformed fails the case — a typo must not weaken the
+///   gate.
+fn checkExpect(arena: std.mem.Allocator, r: Result, expect: ?Value) !?[]const u8 {
+    const raw = expect orelse return null;
+    const e = switch (raw) {
+        .object => |o| o,
+        else => return "FAIL: expect must be an object",
+    };
     if (e.get("min_gain")) |v| {
         const want: f64 = switch (v) {
             .integer => |x| @floatFromInt(x),
             .float => |x| x,
-            else => 0,
+            else => return "FAIL: min_gain must be a number",
         };
         if (r.final - r.start < want) return try std.fmt.allocPrint(arena, "FAIL: gain {d:.1} < {d:.1}", .{ r.final - r.start, want });
     }
-    if (str(e, "stop")) |want| {
+    if (e.get("stop")) |v| {
+        const want = switch (v) {
+            .string => |s| s,
+            else => return "FAIL: stop must be a string",
+        };
         if (!std.mem.eql(u8, want, @tagName(r.stop))) return try std.fmt.allocPrint(arena, "FAIL: stop {s}, want {s}", .{ @tagName(r.stop), want });
     }
-    if (int(e, "min_accepted")) |want| {
+    if (e.get("min_accepted")) |v| {
+        const want: usize = switch (v) {
+            .integer => |x| if (x >= 0) @intCast(x) else return "FAIL: min_accepted must be a non-negative integer",
+            else => return "FAIL: min_accepted must be an integer",
+        };
         if (r.accepted() < want) return try std.fmt.allocPrint(arena, "FAIL: accepted {d} < {d}", .{ r.accepted(), want });
     }
     if (e.get("reject")) |rv| {
@@ -1152,7 +1194,10 @@ fn checkExpect(arena: std.mem.Allocator, r: Result, expect: ?ObjectMap) !?[]cons
             const reason = for (std.enums.values(Reason)) |x| {
                 if (std.mem.eql(u8, x.label(), kv.key_ptr.*)) break x;
             } else return try std.fmt.allocPrint(arena, "FAIL: unknown reason '{s}'", .{kv.key_ptr.*});
-            const want: usize = if (kv.value_ptr.* == .integer and kv.value_ptr.integer > 0) @intCast(kv.value_ptr.integer) else 1;
+            const want: usize = switch (kv.value_ptr.*) {
+                .integer => |x| if (x > 0) @intCast(x) else return try std.fmt.allocPrint(arena, "FAIL: reject '{s}' count must be a positive integer", .{kv.key_ptr.*}),
+                else => return try std.fmt.allocPrint(arena, "FAIL: reject '{s}' count must be a positive integer", .{kv.key_ptr.*}),
+            };
             if (r.rejections.get(reason) < want)
                 return try std.fmt.allocPrint(arena, "FAIL: {s} {d} < {d}", .{ reason.label(), r.rejections.get(reason), want });
         }
@@ -1284,6 +1329,46 @@ test "schema check: enum, url, unknown and missing fields, ref, row width" {
     try testing.expectEqualStrings("expected a string", (try checkSchema(a, slotNamed(sh, "author"), .{ .integer = 3 }, d)).?);
 }
 
+test "schema check: ref integrity applies to scalar and array<string> slots" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "note":{"type":"string","optional":true,"apparatus":"footnote","ref":"notes"},
+        \\ "refs":{"type":"array<string>","optional":true,"apparatus":"list","max_items":2,"ref":"notes"},
+        \\ "notes":{"type":"object<string,string>","optional":true}}}
+    );
+    const d = try testData(a, "{\"notes\":{\"n1\":\"a note\"}}");
+    try testing.expectEqual(@as(?[]const u8, null), try checkSchema(a, slotNamed(sh, "note"), .{ .string = "n1" }, d));
+    try testing.expectEqualStrings("ref: note 'n9' is not a key in 'notes'", (try checkSchema(a, slotNamed(sh, "note"), .{ .string = "n9" }, d)).?);
+    try testing.expectEqual(@as(?[]const u8, null), try checkSchema(a, slotNamed(sh, "refs[+]"), .{ .string = "n1" }, d));
+    try testing.expect((try checkSchema(a, slotNamed(sh, "refs[+]"), .{ .string = "n9" }, d)) != null);
+}
+
+test "parseShape rejects evidence on slots that cannot carry a claim" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectError(error.BadShape, parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "grid":{"type":"array<array<string>>","optional":true,"apparatus":"table","cells":2,"evidence":true}}}
+    ));
+    try testing.expectError(error.BadShape, parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "objs":{"type":"array<object>","optional":true,"apparatus":"list","max_items":2,"evidence":true,"fields":{"x":{"type":"string"}}}}}
+    ));
+    try testing.expectError(error.BadShape, parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "objs":{"type":"array<object>","optional":true,"apparatus":"list","max_items":2,"fields":{"n":{"type":"number","evidence":true}}}}}
+    ));
+    // evidence on a non-slot field (kind .other) stays legal.
+    _ = try parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "notes":{"type":"object<string,string>","optional":true,"apparatus":"footnote","evidence":true}}}
+    );
+}
+
 test "isInert rejects markup anywhere in a value" {
     const bad = [_]struct { []const u8, []const u8 }{
         .{ "see [[Page]]", "[[" },
@@ -1345,6 +1430,33 @@ test "slice stays under the byte cap with large evidence" {
     try testing.expect(slice.len <= max_slice_bytes);
     try testing.expect(std.mem.indexOf(u8, slice, "FIELD: pull") != null);
     try testing.expect(std.mem.indexOf(u8, slice, "HEADLINE: {\"title\":\"T\"}") != null);
+}
+
+test "checkExpect fails the case on malformed expectation blocks" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const r: Result = .{
+        .data = .empty, .doc = "", .start = 0, .final = 0, .ceiling = 0,
+        .iterations = 0, .calls = 0, .renders = 0, .ceiling_renders = 0,
+        .ms = 0, .stop = .plateau, .slots = 0, .fill_start = 0, .fill_final = 0,
+        .steps = &.{}, .rejections = .initFill(0),
+    };
+    const f = struct {
+        fn f(arena2: std.mem.Allocator, json: []const u8) !?Value {
+            return try std.json.parseFromSliceLeaky(Value, arena2, json, .{});
+        }
+    }.f;
+    // A malformed key fails the case instead of silently passing.
+    try testing.expectEqualStrings("FAIL: expect must be an object", (try checkExpect(a, r, try f(a, "5"))).?);
+    try testing.expectEqualStrings("FAIL: min_gain must be a number", (try checkExpect(a, r, try f(a, "{\"min_gain\":\"lots\"}"))).?);
+    try testing.expectEqualStrings("FAIL: stop must be a string", (try checkExpect(a, r, try f(a, "{\"stop\":3}"))).?);
+    try testing.expect((try checkExpect(a, r, try f(a, "{\"min_accepted\":-1}"))) != null);
+    try testing.expect((try checkExpect(a, r, try f(a, "{\"reject\":{\"schema\":0}}"))) != null);
+    try testing.expect((try checkExpect(a, r, try f(a, "{\"reject\":{\"schema\":\"x\"}}"))) != null);
+    // Well-formed expectations still evaluate.
+    try testing.expectEqual(@as(?[]const u8, null), try checkExpect(a, r, try f(a, "{\"stop\":\"plateau\"}")));
+    try testing.expectEqual(@as(?[]const u8, null), try checkExpect(a, r, null));
 }
 
 test "warnsSubset compares rule counts, not lines" {

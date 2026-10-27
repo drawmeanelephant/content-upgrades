@@ -51,6 +51,26 @@
         {"kind": "warning", "body": "Back up before you upgrade; the migration is one way."},
         {"kind": "tip", "body": "Run the doctor command first, it catches the config rename."}
       ]
+    },
+    "ladder": {
+      "box": ["Back up before you upgrade; the migration is one way."],
+      "matrix[+]": [
+        ["1.9.x", "rename one config key"],
+        ["1.8.x", "config key plus driver bump"],
+        ["1.7", "dump and reload"],
+        ["1.6", "start over"]
+      ],
+      "pull": ["Snapshots are online, incremental, and restorable to any point in the last seven days."],
+      "see_also": ["AcmeDB docs — backups"],
+      "docs": ["https://example.com/acmedb/docs/upgrading"],
+      "guide": ["AcmeDB migration guide"],
+      "shot": ["https://example.com/acmedb/img/doctor-2.0.png"],
+      "terms[+]": ["release-notes", "databases", "acmedb"],
+      "items[+]": [
+        "Snapshots of databases over two terabytes take hours rather than minutes, and while a snapshot is running the background compactor pauses.",
+        "Still single-region, so a region loss is still an outage no matter how good the snapshots get.",
+        "Drivers older than 1.8 can no longer connect at all."
+      ]
     }
   }
 }

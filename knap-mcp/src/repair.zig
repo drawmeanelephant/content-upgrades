@@ -56,6 +56,7 @@ pub fn run(
     var iter: usize = 0;
     while (iter < max_iterations) : (iter += 1) {
         const tpl_path = try store.scratchFile(ctx, "knap");
+        defer std.Io.Dir.deleteFile(.cwd(), ctx.io, tpl_path) catch {};
         std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = tpl_path, .data = current }) catch
             return ctx.fail("cannot stage working template", .{});
 
@@ -83,7 +84,20 @@ pub fn run(
                 else
                     regionBounds(current, first.line, context);
                 const region = current[bounds[0]..bounds[1]];
-                const patch = try backend.repairPatch(ctx, kind, region, firstLine(first.line, context), first);
+                const patch = backend.repairPatch(ctx, kind, region, firstLine(first.line, context), first) catch |e| {
+                    if (e != error.ToolFailed) return e;
+                    // A transient backend failure degrades to
+                    // non-convergence: keep the working template and the
+                    // step history (same contract knap_voice follows).
+                    try steps.append(ctx.arena, .{
+                        .iteration = iter,
+                        .kind = first.kind,
+                        .line = first.line,
+                        .detail = try std.fmt.allocPrint(ctx.arena, "backend error: {s}", .{ctx.err_msg}),
+                        .patch_applied = false,
+                    });
+                    break;
+                };
                 const applied = patch != null and !std.mem.eql(u8, patch.?, region);
                 try steps.append(ctx.arena, .{
                     .iteration = iter,
