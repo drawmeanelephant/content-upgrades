@@ -37,7 +37,7 @@ Status key:
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
 | 6 | Same template, mild vs feral | 20s | 19.7s | `06-voice.tape` | frozen live voice takes (I5); structure hash: C2 | ready |
 | 7 | One source -> md + html + apparatus | 15s | 15.2s | `07-one-source.tape` | main; oliver target: P1; one shared data file: cut (T2/I5 deferred) | ready |
-| 8 | Numbers card, measured only | 10s | 12.0s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
+| 8 | Numbers card, measured only | 10s | 10.5s | `08-numbers.tape` | main (E1 corpora, K3 results); live takes: I2/I3; card: I4 | ready |
 
 **Runtime.** SPEC calls the demo "~2 min", but its per-beat targets add up to 2:20
 (2:35 with beat 4b). The current rough cut of all 9 tapes runs 2:43 (2:27 without
@@ -252,29 +252,42 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   deferred. apparatus keeps its own `data/apparatus.sample.json`; the take
   shows verdict and apparatus rendered from their own sample files.
 
-### 8. Numbers (10s): partial
+### 8. Numbers (10s): ready
 
-- **On screen:** the mock eval summary on E1's 2nap corpus, K3's conformance totals
-  for the pinned k4o, and the server's line count. This tape is the provenance shot. The
-  card itself is a still built by I4 and placed in Kdenlive.
+- **On screen:** the provenance for every number on the card: the frozen live
+  repair runs (acp: devin summarizer + Muse Wonder 1.0 via ACP (devin), I2) on
+  both corpora, then `demo/card/build.sh` deriving and printing each card value
+  with its source — the mock control eval, the density/2 ratchet tally (I3),
+  the pinned-k4o conformance, the server LOC — and writing
+  `demo/card/numbers.json` + `numbers.png`. The card itself is a still placed
+  in Kdenlive.
 - **Commands:**
   ```sh
-  knap-mcp eval --corpus eval/seeds.2nap.json --backend mock 2>/dev/null | grep '^converged'
-  jq -c '{label, totals}' eval/conformance/results/k4o-main-aeba163.json
-  cat $(find src/ -name '*.zig') | wc -l
+  grep '^converged' n/s22.out n/w22.out n/s2.out n/w2.out
+  card/build.sh
+  jq -r '.columns[].label' card/numbers.json
   ```
-- **Today's values (pinned k4o aeba163, dogbed 188ccac, mock):** `seeds.2nap.json`
-  converged 120/167, exact 58/115, 0 no-op seeds. `seeds.json` (demo templates only,
-  not on tape) converged 12/22, exact 4/12, 0 no-op seeds. Conformance: k4o main
-  187/188 (1 fail: the accepted `diagnostics/unknown-filter` buffered-output
-  difference, 0 unsupported).
-  Per K3, never quote main → #70 → #71 as a progression. Under this k4o, three 2nap
-  base templates don't render (no `codeblock` or `numbered` filter), and their 12
-  seeds plus the no-op seeds each print a warning on stderr, so the tape sends stderr
-  to `/dev/null`.
-- **Missing:** the real-backend runs (M1, I2); mock numbers prove the plumbing, not
-  the model. "Calls x mean slice size" has no instrumentation, so it stays off the
-  card. No token-cost numbers.
+  `n/*.out` are symlinks to the I2 repair runs (`eval/results/live/acp-seeds*.out`,
+  `eval/results/live/devin-wonder/repair-seeds*.out`) made in the hidden
+  preamble; `card` links `demo/card/`.
+- **Card:** `demo/card/build.sh` writes `numbers.json` (every value carries its
+  source path plus the engine/scorer version) and renders `numbers.png`
+  (1920x1080) through `card.html` and a headless Chrome screenshot (this
+  ffmpeg has no drawtext, V0.md finding 4). Columns: mock (control),
+  acp: devin summarizer, Muse Wonder 1.0 via ACP (devin). Rows: repair
+  converged on both corpora, the density/2 ratchet cases-ok tally and best
+  climb, calls × mean slice for both evals, k4o conformance, server LOC.
+  Conformance shows 187/188 on pin aeba163 next to the base → #70 → #71
+  lineage line — never a main → #70 → #71 progression (K3). ACP columns are
+  model plus agent; no token-cost numbers (the ~13.5k-token agent system
+  prompt per call, LIVE.md finding 3).
+- **Values on this render (pinned k4o aeba163, dogbed d96b125):** repair
+  converged — mock 12/22 + 120/167, summarizer 22/22 + 166/167, Wonder
+  22/22 + 167/167. Ratchet cases ok — mock 9/9, summarizer 3/9, Wonder 2/9
+  (the misses are measured model shortfall against the mock-tuned bar, not
+  harness breakage). Conformance 187/188 (the one accepted
+  `diagnostics/unknown-filter` buffered-output diff, 0 unsupported). Server
+  14,494 lines of Zig.
 
 ## Not on tape
 

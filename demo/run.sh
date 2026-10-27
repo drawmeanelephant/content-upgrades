@@ -285,15 +285,28 @@ CMD
 grep -c '<script' out/verdict.md out/verdict.oliver out/verdict.html out/apparatus.html
 CMD
 
-  beat 8 "numbers, measured only (mock backend)"
+  beat 8 "numbers card: every value measured (I4)"
+  say "repair convergence, frozen live runs (I2): acp summarizer + Muse Wonder via ACP"
   run <<'CMD'
-knap-mcp eval --corpus eval/seeds.json --backend mock 2>/dev/null | grep '^converged'
+grep '^converged' eval/results/live/acp-seeds.2nap.out eval/results/live/devin-wonder/repair-seeds.2nap.out
+CMD
+  say "density ratchet cases meeting the mock-tuned bar (I3, scorer density/2)"
+  run <<'CMD'
+grep -c '| ok |' eval/results/live/mock.txt eval/results/live/acp.txt eval/results/live/devin-wonder/ratchet.out
+CMD
+  say "k4o conformance on the pinned engine; lineage is base -> #70 -> #71, not a main progression (K3)"
+  run <<'CMD'
+jq -c '{label, revision: .revision[:7], totals}' eval/conformance/results/k4o-main-aeba163.json
 CMD
   run <<'CMD'
-knap-mcp eval --corpus eval/seeds.2nap.json --backend mock 2>/dev/null | grep '^converged'
+jq -r .headline eval/conformance/results/summary-lineage.json
 CMD
   run <<'CMD'
 find src/ -name '*.zig' -exec cat {} + | awk 'END{print NR " lines of Zig in src/"}'
+CMD
+  say "the card: demo/card/build.sh -> numbers.json (+ numbers.png via headless Chrome)"
+  run <<'CMD'
+"$ROOT/demo/card/build.sh" --json
 CMD
 
   close_beat
