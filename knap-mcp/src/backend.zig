@@ -244,10 +244,102 @@ fn startsKw(body: []const u8, kw: []const u8) bool {
         (body.len == kw.len or !isIdent(body[kw.len]));
 }
 
-/// `no filter named "head2"` → drop `| head2` (and its `:arg`, if any)
-/// from the `{{ }}` tag the diagnostic points at — an earlier tag may
-/// legitimately use the same name. The conservative mock fix is removing
-/// the bad filter, not inventing one.
+/// Filter names the pinned k4o registers — `filters.entries` at
+/// aeba163 (each module's `names`: markup, text, numbers, dates,
+/// collections, extensions, advanced, html). The blocked host-only names
+/// (`html_to_json`, `remove_html`) are left out: renaming a typo to one
+/// of those only swaps the diagnostic for an unfixable one.
+const known_filters = [_][]const u8{
+    "h1",        "h2",           "h3",         "h4",
+    "h5",        "h6",           "bold",       "italic",
+    "code",      "code_block",   "blockquote", "list",
+    "link",      "image",        "hr",         "hard_break",
+    "escape_md", "fragment_link", "embed",
+    "camel",     "capitalize",   "kebab",      "lower",
+    "pascal",    "snake",        "title",      "uncamel",
+    "upper",     "trim",         "truncate",   "truncatewords",
+    "indent",    "unescape",     "safe_name",  "encode_uri",
+    "decode_uri",
+    "calc",      "number_format", "round",
+    "date",      "date_modify",  "duration",
+    "compact",   "first",        "join",       "last",
+    "length",    "merge",        "nth",        "object",
+    "parse_json", "reverse",     "slice",      "sort",
+    "split",     "sum",          "unique",     "where",
+    "callout",   "wikilink",     "footnote",   "strike",
+    "table",     "table_pretty", "highlight",  "math",
+    "math_block", "comment",
+    "map",       "template",     "replace",    "yaml",
+    "yaml_property",
+    "remove_attr", "strip_attr", "remove_tags", "replace_tags",
+    "strip_tags",  "strip_md",   "stripmd",
+};
+
+/// The registered filter `name` most plausibly mistyped, or null when no
+/// candidate qualifies or the best distance is tied. Two shapes count as
+/// the same edit distance 1 typo: Levenshtein distance ≤ 2, and one
+/// contiguous run of ≤ 3 extra characters — the seeded corruptions
+/// stretch a name (`h2` → `head2`, `wikilink` → `wiki_link`) rather than
+/// shuffle it. Candidates must share the first letter: the corruptions
+/// never change it, and a different initial is a different word (`url`
+/// is not `hr`). A tie means the typo is ambiguous (`hr2` could be `hr`
+/// or `h2`) and the filter is stripped.
+fn bestFilterMatch(name: []const u8) ?[]const u8 {
+    if (name.len == 0) return null;
+    var best: ?[]const u8 = null;
+    var best_d: usize = 3; // accept distances 1 and 2
+    var tied = false;
+    for (known_filters) |k| {
+        if (k[0] != name[0]) continue;
+        var d = levenshtein(name, k);
+        if (singleRunDiff(name, k)) |run| {
+            if (run <= 3) d = @min(d, 1);
+        }
+        if (d < best_d) {
+            best = k;
+            best_d = d;
+            tied = false;
+        } else if (d == best_d) {
+            tied = true;
+        }
+    }
+    return if (tied) null else best;
+}
+
+/// Ordinary Levenshtein distance; names are short, so a 64-entry row is
+/// ample and anything longer just reports "too far".
+fn levenshtein(a: []const u8, b: []const u8) usize {
+    if (a.len > 63 or b.len > 63) return a.len + b.len;
+    var prev: [64]usize = undefined;
+    var cur: [64]usize = undefined;
+    for (0..b.len + 1) |j| prev[j] = j;
+    for (a, 1..) |ca, i| {
+        cur[0] = i;
+        for (b, 1..) |cb, j| {
+            cur[j] = @min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + @intFromBool(ca != cb));
+        }
+        @memcpy(prev[0 .. b.len + 1], cur[0 .. b.len + 1]);
+    }
+    return prev[b.len];
+}
+
+/// `a` is `b` with one contiguous run of characters inserted or removed:
+/// returns the run's length (`head2`/`h2` → 3, `wiki_link`/`wikilink` →
+/// 1), or null when the difference is more than one run.
+fn singleRunDiff(a: []const u8, b: []const u8) ?usize {
+    const lo, const hi = if (a.len <= b.len) .{ a, b } else .{ b, a };
+    var p: usize = 0;
+    while (p < lo.len and lo[p] == hi[p]) p += 1;
+    var s: usize = 0;
+    while (s < lo.len - p and lo[lo.len - 1 - s] == hi[hi.len - 1 - s]) s += 1;
+    return if (p + s == lo.len) hi.len - lo.len else null;
+}
+
+/// `no filter named "head2"` → rename `| head2` to the registered filter
+/// it most plausibly mistyped (`| h2`), or drop the filter (and its
+/// `:arg`, if any) from the `{{ }}` tag the diagnostic points at when no
+/// candidate qualifies — an earlier tag may legitimately use the same
+/// name.
 fn stripUnknownFilter(ctx: *Ctx, region: []const u8, first_line: u32, diag: engine.Diag) !?[]const u8 {
     const detail = diag.detail;
     const q1 = std.mem.indexOfScalar(u8, detail, '"') orelse return null;
@@ -255,6 +347,7 @@ fn stripUnknownFilter(ctx: *Ctx, region: []const u8, first_line: u32, diag: engi
     const q2 = std.mem.indexOfScalar(u8, rest, '"') orelse return null;
     const name = rest[0..q2];
     const at = offsetOf(region, first_line, diag.line, diag.col) orelse return null;
+    const rename = bestFilterMatch(name);
     // The filter lives in the `{{` tag still open at `at`.
     const open = std.mem.lastIndexOf(u8, region[0..@min(at, region.len)], "{{") orelse return null;
     if (std.mem.indexOf(u8, region[open..at], "}}") != null) return null;
@@ -265,8 +358,11 @@ fn stripUnknownFilter(ctx: *Ctx, region: []const u8, first_line: u32, diag: engi
         var i = pipe + 1;
         while (i < region.len and region[i] == ' ') i += 1;
         if (!std.mem.startsWith(u8, region[i..], name)) continue;
+        const name_at = i;
         i += name.len;
         if (i < region.len and isIdent(region[i])) continue;
+        // A rename keeps the `:` argument list where it stands.
+        if (rename) |r| return try splice(ctx, region, name_at, i, r);
         if (i < region.len and region[i] == ':') i = skipArgs(region, i + 1);
         const keep = std.mem.trimEnd(u8, region[0..pipe], " \t").len;
         return try splice(ctx, region, keep, i, "");
@@ -582,17 +678,36 @@ test "mock strips an unknown filter with its argument" {
     ctx.arena = arena.allocator();
     const d: engine.Diag = .{ .kind = "unknown filter", .line = 1, .col = 10, .detail = "no filter named \"url\"" };
     try testing.expectEqualStrings("See {{ name }} now", (try mockPatch(&ctx, "See {{ name | url:\"https://e.com/\" }} now", 1, d)).?);
-    const d2: engine.Diag = .{ .kind = "unknown filter", .line = 1, .col = 24, .detail = "no filter named \"head2\"" };
-    try testing.expectEqualStrings("{{ t | head22 }}{{ t }}", (try mockPatch(&ctx, "{{ t | head22 }}{{ t | head2 }}", 1, d2)).?);
+}
+
+test "mock renames an unknown filter to its unique registry match" {
+    // The seeded corruption `| h2` → `| head2`: one inserted run of 3.
+    try expectMock("{{ t | head2 }}\n", 1, 8, "no filter named \"head2\"", "{{ t | h2 }}\n");
+    // Same shape, one inserted character.
+    try expectMock("{{ x | wiki_link }}\n", 1, 8, "no filter named \"wiki_link\"", "{{ x | wikilink }}\n");
+    // An ordinary typo within Levenshtein 2.
+    try expectMock("{{ t | h20 }}\n", 1, 8, "no filter named \"h20\"", "{{ t | h2 }}\n");
+    // Only the tag holding the diagnostic column gets the rename.
+    try expectMock("{{ t | head22 }}{{ t | head2 }}", 1, 24, "no filter named \"head2\"", "{{ t | head22 }}{{ t | h2 }}");
+}
+
+test "mock strips an unknown filter with no unique match" {
+    // Ambiguous: `hr2` is one run away from both `hr` and `h2`.
+    try expectMock("{{ t | hr2 }}\n", 1, 8, "no filter named \"hr2\"", "{{ t }}\n");
+    // `url` is a different word, not a typo of `hr` — a candidate must
+    // share the first letter.
+    try expectMock("{{ t | url }}\n", 1, 8, "no filter named \"url\"", "{{ t }}\n");
+    // Far off every registered name.
+    try expectMock("{{ t | monospace }}\n", 1, 8, "no filter named \"monospace\"", "{{ t }}\n");
 }
 
 test "mock strips the unknown filter at the diagnostic position, not the first match" {
     // The same name in an earlier tag stays put; only the tag holding the
     // diagnostic column loses its filter.
-    try expectMock("{{ a | bad }}{{ b | bad }}", 1, 22, "no filter named \"bad\"", "{{ a | bad }}{{ b }}");
-    try expectMock("{{ a | bad }}{{ b | bad }}", 1, 8, "no filter named \"bad\"", "{{ a }}{{ b | bad }}");
+    try expectMock("{{ a | badname }}{{ b | badname }}", 1, 22, "no filter named \"badname\"", "{{ a | badname }}{{ b }}");
+    try expectMock("{{ a | badname }}{{ b | badname }}", 1, 8, "no filter named \"badname\"", "{{ a }}{{ b | badname }}");
     // A column outside every output tag gets no patch.
-    try expectMock("{{ a | bad }}", 1, 1, "no filter named \"bad\"", null);
+    try expectMock("{{ a | badname }}", 1, 1, "no filter named \"badname\"", null);
 }
 
 test "mock only closes an if/for when the region has an unmatched opener" {
