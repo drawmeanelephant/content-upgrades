@@ -13,7 +13,7 @@
 #   cmds      commands that must be on PATH
 #   expect    a glob the resolved model must match. Agents fall back to a
 #             default model without saying so, so a mismatch stops the run
-#   scratch   1: results go to a temp dir, never the tree
+#   scratch   1: results go to a temp dir unless --out is given
 #
 # and exports whatever KNAP_* settings the backend reads. Keys come from the
 # caller's environment, never from this file.

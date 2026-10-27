@@ -42,7 +42,9 @@ make live P=fake                                     # credential-free self-test
   Each profile writes `<out>/<profile>/{suite}.out|.err`,
   `provenance.json` (label, model, effort, git sha, engine pins, commands,
   exit codes, seconds) and `summary.txt`, then the runner prints a
-  cross-profile table. ratchet-eval exits 1 when a live model misses the
+  cross-profile table. A rerun replaces only the suites it runs, so
+  `--suite repair --full` later adds the 2nap corpus without losing the
+  ratchet and voice results. ratchet-eval exits 1 when a live model misses the
   mock-tuned bar. That is recorded, not counted as a harness failure.
 - **Fix in `backend.zig`:** `acpReply` parsed ACP `usage` but never called
   `ctx.countUsage`, so acp token totals always read 0.

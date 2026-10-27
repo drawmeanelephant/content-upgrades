@@ -17,7 +17,8 @@
 # when any smoke row fails, before a long eval spends anything.
 #
 # Per profile, <out>/<profile>/ gets <suite>.out / .err, provenance.json and
-# summary.txt; a rerun overwrites them. Exit 1 when a named profile isn't
+# summary.txt. A rerun replaces only the suites it runs: earlier results for
+# other suites, and their provenance entries, stay. Exit 1 when a named profile isn't
 # ready, a smoke fails, the model mismatches, an eval has errored seeds, or
 # voice moves the layout. ratchet-eval exits 1 whenever a live model misses
 # the mock-tuned bar; that is recorded, not a failure here.
@@ -125,6 +126,7 @@ bin=${KNAP_MCP_BIN:-$knap/zig-out/bin/knap-mcp}
 if [ ! -x "$bin" ]; then
     (cd "$knap" && zig build) || die "zig build failed"
 fi
+out_given=$out
 out=${out:-$knap/eval/results/live}
 case $out in /*) ;; *) out=$(pwd)/$out ;; esac
 
@@ -151,7 +153,8 @@ suite() {
     set -e
     secs=$(($(date +%s) - t0))
     jq -c --arg s "$name" --arg f "$stem" --arg cmd "$cmdline" --argjson c "$code" --argjson t "$secs" \
-        '. + [{suite:$s, command:$cmd, exit:$c, seconds:$t, out:($f+".out"), err:($f+".err")}]' \
+        --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        '. + [{suite:$s, command:$cmd, exit:$c, seconds:$t, at:$at, out:($f+".out"), err:($f+".err")}]' \
         "$runs" >"$runs.tmp" && mv "$runs.tmp" "$runs"
     echo "  $stem: exit $code, ${secs}s" >&2
     return "$code"
@@ -162,6 +165,7 @@ suite() {
 voice_suite() {
     work=$KNAP_MCP_HOME/voice
     mkdir -p "$work"
+    rm -f "$dir"/voice-*.json
     rows=0 same=0 failed=0
     echo "| template | tone | changed | rejected | fields | structhash |"
     echo "|---|---|--:|--:|--:|---|"
@@ -207,9 +211,8 @@ for p in $expanded; do
             printf '%s\t%s\t-\t-\t-\t-\t-\t%s\n' "$p" "$backend" "skipped: needs $m" >>"$summary"
             exit 1
         fi
-        if [ "$scratch" = 1 ]; then dir=$(mktemp -d)/$p; else dir=$out/$p; fi
+        if [ "$scratch" = 1 ] && [ -z "$out_given" ]; then dir=$(mktemp -d)/$p; else dir=$out/$p; fi
         mkdir -p "$dir"
-        rm -f "$dir"/*.out "$dir"/*.err "$dir"/voice-*.json
         KNAP_MCP_HOME=$(mktemp -d)
         export KNAP_MCP_HOME KNAP_ACP_CWD="$KNAP_MCP_HOME"
         runs=$KNAP_MCP_HOME/runs.json
@@ -277,19 +280,22 @@ ratchet: ${ratchet_s:--}
 voice:   ${voice_s:--}
 ${note:+note:    $note}
 EOF
+        prev=$KNAP_MCP_HOME/prev.json
+        if [ -f "$dir/provenance.json" ]; then jq '.runs // []' "$dir/provenance.json" >"$prev"; else echo '[]' >"$prev"; fi
         jq -n --arg profile "$p" --arg source "$source" --arg label "$label" --arg backend "$backend" \
             --arg model "$model" --arg effort "$effort" --arg expect "$expect" --arg note "$note" \
             --arg started "$started" --arg finished "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --arg git "$git_sha" --arg version "$version" --arg host "$(uname -sm)" \
             --arg k4o "$(pin "$KNAP_K4O_PATH")" --arg dogbed "$(pin "$KNAP_DOGBED_PATH")" \
-            --slurpfile runs "$runs" '{
+            --slurpfile runs "$runs" --slurpfile old "$prev" '{
                 profile: $profile, profile_source: $source, label: $label, backend: $backend,
                 model: (if $model == "" then null else $model end),
                 effort: (if $effort == "" or $effort == "-" then null else $effort end),
                 expect: $expect, note: (if $note == "" then null else $note end),
                 started: $started, finished: $finished,
                 knap_mcp: {version: $version, git: $git}, engines: {k4o: $k4o, dogbed: $dogbed},
-                host: $host, runs: $runs[0]
+                host: $host,
+                runs: ([$old[0][] | select(.out as $o | $runs[0] | map(.out) | index($o) | not)] + $runs[0])
             }' >"$dir/provenance.json"
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$p" "$backend" "${model:-?}" "${smoke_s:--}" \
             "${repair_s:--}${full_s:+ | 2nap $full_s}" "${ratchet_s:--}" "${voice_s:--}" "${note:-}" >>"$summary"
