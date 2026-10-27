@@ -41,6 +41,9 @@ const repair_prefix =
 /// `first_line` is the 1-based template line the region starts on, so a
 /// diagnostic's line/column can be mapped into it.
 pub fn repairPatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, diag: engine.Diag) Error!?[]const u8 {
+    // Mock counts the slice a live call would carry so eval numbers
+    // measure the real context economy.
+    if (kind == .mock) ctx.countCall(repair_prefix, try repairUser(ctx, region, first_line, diag));
     return switch (kind) {
         .mock => mockPatch(ctx, region, first_line, diag),
         .spark, .wonder, .baseten => remotePatch(ctx, kind, region, first_line, diag),
@@ -388,14 +391,19 @@ fn skipArgs(s: []const u8, start: usize) usize {
 
 // --- remote (OpenAI-compatible, via curl) -----------------------------------
 
-fn remotePatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, diag: engine.Diag) Error!?[]const u8 {
+/// The repair user message a live call carries: the diagnostic, then the
+/// region around it. The mock path counts it as the slice it would send.
+fn repairUser(ctx: *Ctx, region: []const u8, first_line: u32, diag: engine.Diag) Error![]const u8 {
     var user: std.Io.Writer.Allocating = .init(ctx.arena);
     try user.writer.print(
         "diagnostic: {s} at line {d}, column {d}: {s}\n\nregion (starts at line {d}):\n{s}\n",
         .{ diag.kind, diag.line, diag.col, diag.detail, first_line, region },
     );
+    return user.written();
+}
 
-    const body = try complete(ctx, kind, .repair, repair_prefix, user.written());
+fn remotePatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, diag: engine.Diag) Error!?[]const u8 {
+    const body = try complete(ctx, kind, .repair, repair_prefix, try repairUser(ctx, region, first_line, diag));
     const patch = sanitizePatch(body) orelse return null;
     // The model trims the region's final newline about half the time;
     // without it the splice glues the next template line onto this one.
@@ -442,6 +450,7 @@ pub fn complete(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user: []c
         .baseten => "meta-models/muse-spark-open-1026",
         .mock => unreachable,
     };
+    ctx.countCall(system, user);
     return chatCompletion(ctx, url, key, model, system, user);
 }
 

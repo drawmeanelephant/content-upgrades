@@ -189,6 +189,9 @@ pub fn run(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: anytype) !
     try w.print("\nconverged {d}/{d} breaks   mean iters {d:.2}   exact {d}/{d}   no-op seeds {d}   controls {d}/{d} clean\n", .{
         a.converged, a.breaks, ratio(a.iters, a.converged), a.exact, a.exact_known, a.noop, sum.controls_clean, sum.controls,
     });
+    try w.print("calls: {d}  mean slice: {d} B  max: {d} B  prefix: {d} B\n", .{
+        ctx.calls, ctx.meanSlice(), ctx.slice_bytes_max, ctx.prefix_bytes,
+    });
 
     // The gate must be able to fail: an errored seed or a broken control
     // means the table measured nothing for that row.

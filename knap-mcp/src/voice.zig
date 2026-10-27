@@ -103,6 +103,14 @@ pub fn voiceData(ctx: *Ctx, template_id: []const u8, data_json: []const u8, tone
     var system: []const u8 = "";
     if (kind == .mock) {
         mock_lines = try readPrompt(ctx, dir, try std.fmt.allocPrint(a, "mock/{s}.jsonl", .{tone_name}));
+        // Counted, not sent: the system prefix a live call would carry,
+        // when the prompts dir has it (eval/voice's private
+        // KNAP_PROMPTS_DIR controls ship only mock lines).
+        if (mockVoiceSystem(ctx, a, dir, tone_name)) |s| {
+            system = s;
+        } else |_| {
+            ctx.err_msg = "";
+        }
     } else {
         system = assembleSystem(
             a,
@@ -119,10 +127,11 @@ pub fn voiceData(ctx: *Ctx, template_id: []const u8, data_json: []const u8, tone
     var changed: usize = 0;
     for (slots) |slot| {
         const before = slot.ptr.string;
-        const raw: ?[]const u8 = if (kind == .mock)
-            mockReply(a, mock_lines, template_id, slot.path, before) catch
-                return ctx.fail("voice mock/{s}.jsonl has a bad line", .{tone_name})
-        else
+        const raw: ?[]const u8 = if (kind == .mock) blk: {
+            ctx.countCall(system, try userMessage(a, slot.path, slot.role, before));
+            break :blk mockReply(a, mock_lines, template_id, slot.path, before) catch
+                return ctx.fail("voice mock/{s}.jsonl has a bad line", .{tone_name});
+        } else
             backend.complete(ctx, kind, .voice, system, try userMessage(a, slot.path, slot.role, before)) catch |e| switch (e) {
                 error.ToolFailed => {
                     const why = try std.fmt.allocPrint(a, "backend error: {s}", .{ctx.err_msg});
@@ -153,6 +162,13 @@ pub fn voiceData(ctx: *Ctx, template_id: []const u8, data_json: []const u8, tone
             .reasons = reasons.items,
         });
     }
+    // The voice-eval numbers line; stderr keeps stdout's JSON clean.
+    // Skipped under `zig test`: stray stderr breaks the runner's
+    // --listen protocol.
+    if (!@import("builtin").is_test)
+        std.debug.print("calls: {d}  mean slice: {d} B  max: {d} B  prefix: {d} B\n", .{
+            ctx.calls, ctx.meanSlice(), ctx.slice_bytes_max, ctx.prefix_bytes,
+        });
     return .{
         .template_id = template_id,
         .tone = tone,
@@ -342,6 +358,16 @@ pub fn assembleSystem(a: Allocator, system_md: []const u8, tone_md: []const u8, 
 /// As `assemble.sh user <field> <role> <value>` prints.
 pub fn userMessage(a: Allocator, field: []const u8, role: []const u8, value: []const u8) Allocator.Error![]const u8 {
     return std.fmt.allocPrint(a, "Field: {s}\nRole: {s}\nInput: {s}", .{ field, role, value });
+}
+
+/// The system prompt a live call would carry, or null when the prompts
+/// dir lacks the voice files — eval/voice's private KNAP_PROMPTS_DIR
+/// controls ship only mock lines. Lets a mock run count the real prefix.
+fn mockVoiceSystem(ctx: *Ctx, a: Allocator, dir: []const u8, tone_name: []const u8) ![]const u8 {
+    const system_md = try readPrompt(ctx, dir, "system.md");
+    const tone_md = try readPrompt(ctx, dir, try std.fmt.allocPrint(a, "{s}.md", .{tone_name}));
+    const examples = try readPrompt(ctx, dir, try std.fmt.allocPrint(a, "examples/{s}.jsonl", .{tone_name}));
+    return assembleSystem(a, system_md, tone_md, examples);
 }
 
 /// The canned reply for (template, field, input), or null on a miss.
