@@ -22,6 +22,14 @@ pub const Step = struct {
     line: u32,
     detail: []const u8,
     patch_applied: bool,
+    /// 1-based template lines `region` covers.
+    region_start: u32,
+    region_end: u32,
+    /// The region text sent to the backend.
+    region: []const u8,
+    /// The replacement text, or null when the backend proposed no change
+    /// or the call failed.
+    patch: ?[]const u8,
 };
 
 pub const Outcome = struct {
@@ -84,7 +92,9 @@ pub fn run(
                 else
                     regionBounds(current, first.line, context);
                 const region = current[bounds[0]..bounds[1]];
-                const patch = backend.repairPatch(ctx, kind, region, firstLine(first.line, context), first) catch |e| {
+                const first_line = firstLine(first.line, context);
+                const last_line = lastLine(region, first_line);
+                const patch = backend.repairPatch(ctx, kind, region, first_line, first) catch |e| {
                     if (e != error.ToolFailed) return e;
                     // A transient backend failure degrades to
                     // non-convergence: keep the working template and the
@@ -95,6 +105,10 @@ pub fn run(
                         .line = first.line,
                         .detail = try std.fmt.allocPrint(ctx.arena, "backend error: {s}", .{ctx.err_msg}),
                         .patch_applied = false,
+                        .region_start = first_line,
+                        .region_end = last_line,
+                        .region = region,
+                        .patch = null,
                     });
                     break;
                 };
@@ -105,6 +119,10 @@ pub fn run(
                     .line = first.line,
                     .detail = first.detail,
                     .patch_applied = applied,
+                    .region_start = first_line,
+                    .region_end = last_line,
+                    .region = region,
+                    .patch = patch,
                 });
                 if (!applied) break;
                 current = try std.fmt.allocPrint(ctx.arena, "{s}{s}{s}", .{
@@ -129,6 +147,13 @@ pub fn run(
 fn firstLine(line: u32, context: usize) u32 {
     const ctx32: u32 = @intCast(context);
     return if (line > ctx32) line - ctx32 else 1;
+}
+
+/// The 1-based line the region's last byte sits on, given the line it
+/// starts on. A trailing newline belongs to the line it ends.
+fn lastLine(region: []const u8, first_line: u32) u32 {
+    const nls: u32 = @intCast(std.mem.count(u8, region, "\n"));
+    return first_line + nls - @intFromBool(nls > 0 and region[region.len - 1] == '\n');
 }
 
 /// Byte range covering `context` lines above and below `line` (1-based),
@@ -159,6 +184,13 @@ fn regionBounds(text: []const u8, line: u32, context: usize) [2]usize {
         }
     }
     return .{ start, @min(i, text.len) };
+}
+
+test "lastLine counts the lines a region spans" {
+    try std.testing.expectEqual(5, lastLine("c\nd\ne\n", 3));
+    try std.testing.expectEqual(4, lastLine("c\nd", 3));
+    try std.testing.expectEqual(3, lastLine("c\n", 3));
+    try std.testing.expectEqual(3, lastLine("c", 3));
 }
 
 test "regionBounds centers on the diagnostic line" {
