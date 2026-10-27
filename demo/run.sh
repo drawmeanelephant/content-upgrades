@@ -230,8 +230,16 @@ CMD
   same_hash out/structhash.md.txt
   say "and it is the frozen record's hash"
   run <<'CMD'
-cut -d' ' -f1 out/structhash.md.txt | sort -u
+cut -d' ' -f1 out/structhash.md.txt | sort -u | grep -Fxf <(cut -d' ' -f1 "$ROOT/demo/frozen/06-structhash.txt" | sort -u)
 CMD
+  say "same proof through dogbed: html renders share one layout hash too"
+  run <<'CMD'
+for t in orig mild feral; do d=data/verdict.sample.json; [ "$t" = orig ] || d=out/verdict.$t.json; knap-mcp render verdict -d "$d" --target html --out out/verdict.$t.html | jq -c "{tone: \"$t\", ok, bytes}" || exit 1; done
+CMD
+  run <<'CMD'
+knap-mcp structhash out/verdict.orig.html out/verdict.mild.html out/verdict.feral.html | tee out/structhash.html.txt
+CMD
+  same_hash out/structhash.html.txt
   run 1 <<'CMD'
 diff out/verdict.mild.md out/verdict.feral.md
 CMD
