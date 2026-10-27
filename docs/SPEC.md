@@ -43,7 +43,7 @@ Three jobs, three owners, one invariant per owner:
 |---|---|---|
 | WHAT to say (facts) | boris | Validated graph artifact; cited, deterministic, never regenerated mid-render |
 | HOW it looks (layout) | knap template | Rendered by k4o/dogbed only; the model never sees it |
-| HOW it sounds (voice) | Muse models | Writes JSON *values* only; cannot touch structure |
+| HOW it sounds (voice) | the model backend | Writes JSON *values* only; cannot touch structure |
 | Is it right (validation) | boris + engines | Native binaries, sub-100ms cycles — never a model call where a compiler check exists |
 
 Boris is a **downstream-consumer** relationship only: the MCP calls existing
@@ -88,10 +88,10 @@ ms, so layer 3 joins the sub-100ms claim.
 - **Verifier (decision model, ms)** — per-field quality gates (did this
   rewrite improve?), citation entailment checks, escalation decisions.
   Turns blind iteration into scored iteration — and produces the convergence
-  metrics for the eval slide.
+  metrics for the eval numbers card.
 - Iteration noise lives entirely in the cheap tiers; the thinking model only
-  ever sees research → judgment. Open-weights verifiers route through
-  Baseten/Modal/Fireworks credits (bonus-prize surface).
+  ever sees research → judgment. Open-weights verifiers route through an
+  OpenAI-compatible provider (Baseten/Modal/Fireworks-class).
 
 ## Context economy (the design layer that makes it cheap)
 
@@ -142,20 +142,21 @@ not a message pump. Rules:
 - `knap_voice(template_id, data, tone)` — field-by-field voice rewrite via
   Spark. `tone`: `mild | spicy | feral`. Returns patched data JSON + per-field
   diff count. Same template renders all tones — layout untouched.
-- `knap_format_check(doc_id)` — advisory structure linter, ~8 pinned rules,
+- `knap_format_check(doc_id)` — advisory structure linter, 9 pinned rules,
   warnings only, never blocks: skipped heading levels, wall-of-text where
-  table-shaped data exists, unresolved footnotes, empty callouts, raw-URL
-  count, heading/length ratio, unclosed fences, list-per-paragraph ratio.
+  table-shaped data exists, unresolved footnotes, unused footnotes, empty
+  callouts, raw-URL count, heading/length ratio, unclosed fences,
+  list-per-paragraph ratio.
 - `boris_ask(query)` → ranked snippets from the frozen artifact.
 - `boris_check(claim)` → grounded yes/no + citation from the artifact.
 
 ## Engine contract
 
 - Engines: **k4o** main — knap-faithful, byte-compatible with knap 0.6.0;
-  emits markdown or oliver — plus **dogbed** (html; pinned to the #33 head,
-  which bundles k4o main). Textile and gfm are dropped (k4o keeps that
-  legacy surface in its v0.1.0 release). 2nap retired to eval-corpus origin
-  only.
+  emits markdown or oliver — plus **dogbed** (html; pinned via
+  `scripts/engines.sh`, currently `d96b125` — the dogbed #35 merge). Textile
+  and gfm are dropped (k4o keeps that legacy surface in its v0.1.0 release).
+  2nap retired to eval-corpus origin only.
 - Grammar target: **the demo-needed referential subset, hard-scoped.** k4o
   main already ships all of it (plus `{% set %}` and `??`); the list stays
   as the scope contract for the demo templates.
@@ -163,7 +164,7 @@ not a message pump. Rules:
     `callout`, `embed`, `image`, `yaml`, `yaml_property` + `{% set %}`, `??`
   - Stretch (only if above lands early): `map`, `where`, `sort`, `join`,
     `unique`, `first`/`last`, `length`
-  - Cut for the event: `calc`, `math`, `duration`, `date_modify`, `truncate*`,
+  - Cut from scope: `calc`, `math`, `duration`, `date_modify`, `truncate*`,
     `number_format`, `round`, `safe_name`, case filters, `replace`,
     `escape_md`, `strip_md`, `highlight`, `strike`, `hard_break`, `comment`,
     `unescape`, `*_uri`, `nth`/`slice`/`sum`/`object`/`compact`/`reverse`,
@@ -202,13 +203,14 @@ never rewrites the whole template.
   `compat/fixtures/render.json` (188 cases) as the stretch corpus.
 - **Repair eval**: seeded-breakage corpus — mutate the conformance fixtures
   through each pinned error class. Metric: convergence rate × mean iters.
-  This produces the demo-slide numbers.
+  This produces the numbers-card figures.
 - **Voice eval**: same data × 3 tones → byte-identical layout assertions
   (structure hashes equal, strings differ). Proves the invariant.
 
 ## Demo script (~2 min, all-OSS pipeline)
 
-vhs tapes → ffmpeg → Kdenlive → mp4. Muse Image title cards.
+Optional video rig: vhs tapes → ffmpeg → Kdenlive → mp4. Title cards and
+slates are stills rendered by `demo/card/` or hand-made.
 
 1. (5s) Cold open: AI doc — clean but *generic*: no callouts, no footnotes,
    no deep links, voice ironed flat. (Not a strawman "broken table" — the
@@ -217,7 +219,7 @@ vhs tapes → ffmpeg → Kdenlive → mp4. Muse Image title cards.
    are fixed; the model drafts *data only*.
 3. (25s) Seeded template failure → pinned diagnostic → real repair loop →
    clean. Show diagnostic, patch, re-render visibly.
-4. (30s) The doc: callouts, real table, footnotes, Muse Image art — sass intact.
+4. (30s) The doc: callouts, real table, footnotes, embedded art — sass intact.
 5. (15s) The boris catch: a hallucinated wikilink fails `knap_publish_check`
    — references caught pre-publish, made visible.
 6. (20s) Same template × mild vs feral — byte-identical layout (structure-

@@ -1,4 +1,4 @@
-//! The ratchet loop: values-only density climbing (docs/next-phase-plan.md
+//! The ratchet loop: values-only density climbing (docs/tracks/next-phase-plan.md
 //! section 2).
 //!
 //!   render(data0) -> score

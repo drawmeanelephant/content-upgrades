@@ -1,30 +1,31 @@
-# Cuntiness Eval — the formatting-density benchmark
+# Density eval — the formatting-density benchmark
 
-Notes from the Oct 25 probe, for when the model list lands (Oct 26 kickoff).
+Design notes behind `src/density.zig` and the ratchet loop. The
+WordCraft/DesignCraft control-channel probe below was measured Oct 25.
 
 ## The thesis
 
 LLM output regresses to boring: wall-paragraph, header, wall-paragraph, maybe
-one table, no apparatus. "Cuntiness" = **formatting/emphasis density** — how
+one table, no apparatus. "Density" = **formatting/emphasis richness** — how
 much structure and typographic apparatus a document carries per unit of prose.
 It's the axis where models are laziest and nobody benchmarks.
 
-Scope: **general-purpose markdown cuntiness, not a k4o feature.** Three
+Scope: **general-purpose markdown density, not a k4o feature.** Three
 separable pieces — a renderer-agnostic density scorer on the markdown AST
 (knap_format_check generalized), the apparatus vocabulary (the referential
 knap subset: footnote/callout/wikilink/embed/fragment_link/image/yaml — that
-list IS the cuntiness feature set), and the ratchet loop. k4o/dogbed and
-WordCraft/DesignCraft are ceilings/proof targets, not the product. Pitch
-corollary: "everyone else fixes AI markdown by making it smaller; we measure
-how thin it is and add apparatus until it isn't."
+list IS the density feature set), and the ratchet loop. k4o/dogbed and
+WordCraft/DesignCraft are ceilings/proof targets, not the product. Corollary:
+"everyone else fixes AI markdown by making it smaller; we measure how thin it
+is and add apparatus until it isn't."
 
 Three claims to test:
 
 1. Density is **measurable without a model** — deterministic, native, sub-second.
 2. Density is **improvable by a bounded feedback loop** — the ratchet.
-3. Density is **wildly variant across models** — a ranking axis worth a slide.
+3. Density is **wildly variant across models** — a ranking axis worth measuring.
 
-## The sensor — verified working Oct 25
+## The sensor — external apps probe (measured Oct 25)
 
 WordCraft and DesignCraft are drivable over their control channels today; no
 `wordcraft-cli`/`designcraft-cli` needed (only `vectorcraft-cli` 0.14 is
@@ -48,7 +49,8 @@ Wire protocol — newline-delimited JSON over TCP:
 
 - WordCraft additionally wants `"key": "<contents of
   ~/Library/Application Support/WordCraft/control-key.local-PORT>"`.
-- DesignCraft takes no key.
+- DesignCraft takes no key, and wants `DESIGNCRAFT_CONTROL_PORT` env, not
+  `--control`.
 - `vectorcraft-cli mcp --connect 127.0.0.1:7983` also bridges DesignCraft as a
   32-tool MCP server (catalogue comes from the app); fails on WordCraft's auth.
 
@@ -68,7 +70,8 @@ floor, quantified.
 
 ## The density score (never a model call)
 
-Composite of signals `document.inspect` already returns:
+Composite of signals — the shipped scorer (`src/density.zig`) reads them off
+the markdown AST; `document.inspect` is the WordCraft-mode equivalent:
 
 - styled-char coverage % (runs carrying props / total chars)
 - distinct paragraph + character styles in use
@@ -93,9 +96,10 @@ draft → inspect → density score
 - Score-monotonic: a step that lowers density reverts.
 - Bounded, like knap_repair (max ~4–8 iterations).
 - Converges when no single command raises the score — "maximal", not infinite.
-- Cheap-tiers-do-the-loop per SPEC: Spark-class iterates, Wonder-class judges.
+- Cheap tiers run the loop per SPEC: a fast model iterates; the thinking
+  model stays out of the churn.
 
-## Model eval matrix — once the list lands
+## Model eval matrix
 
 Same harness, vary the model. Two distinct eval modes, don't conflate:
 
@@ -107,13 +111,13 @@ Same harness, vary the model. Two distinct eval modes, don't conflate:
    Tests whether it reaches for apparatus unprompted.
 
 Per cell: density score achieved · iterations to plateau · contract
-violations (did it touch layout when told not to) · judgement (dense ≠ noisy —
+violations (did it touch layout when told not to) · fit (dense ≠ noisy —
 does the apparatus fit the content or is it confetti).
 
-Slide numbers this produces: "model X hits 12% styled coverage unaided, 47%
+Numbers this produces: "model X hits 12% styled coverage unaided, 47%
 after 3 ratchet iterations" / "model Y fills 0/6 footnote slots" etc.
 
-## What counts as cunty vs lazy (seed the rubric)
+## What counts as dense vs lazy (the rubric)
 
 - pull quotes, kickers, decks, margin notes — used or absent
 - footnotes/endnotes with real content vs none
@@ -127,7 +131,7 @@ after 3 ratchet iterations" / "model Y fills 0/6 footnote slots" etc.
 - WC one-command tone shifts: `design.styleSet`, `design.themeFonts`,
   `design.pageBorders`, `design.watermark`
 
-## Fit to the pitch
+## Why it matters
 
 "AI can't do layout. So we don't let it." — the eval is the *proof of the
 wound*: even where models may touch layout they under-format. The product
@@ -137,18 +141,9 @@ designed PDF/EPUB, not markdown→HTML) plus the density ratchet.
 Per SPEC: keep eval numbers on their own axis — density scores are not
 fixture conformance and never sit next to the 188-case corpus counts.
 
-## Model list (landed Oct 26)
+## Open items
 
-- **Iteration / voice:** `muse-spark-1.3` — 1M ctx, 131k out, multimodal in,
-  OpenAI/Anthropic-compatible, encrypted reasoning carry-over for tool loops.
-- **Judgment:** `muse-wonder-1.0` — reasoning effort minimal→max; Standard
-  mode only via API (Full is Muse-Code-locked).
-- **Cheap iteration / verifier candidates:** `muse-spark-open-1026` on Baseten
-  (2M TPM if credits land), `muse-glimmer` self-host (post-trainable — a
-  trained density judge is a stretch goal, not a dependency).
-- **Eval grid:** every generative model the account exposes — wonder vs spark
-  is already an interesting density axis (does capability spend on apparatus?).
-
-Open items: harness location (standalone script driving the control channel
-first; fold scorer into `knap_format_check` later); DesignCraft wants
-`DESIGNCRAFT_CONTROL_PORT` env, not `--control`.
+- The shipped scorer (`src/density.zig`) measures markdown. Driving
+  WordCraft or DesignCraft directly over the control channel remains a
+  separate, unscheduled eval mode.
+- A trained density-rating model is a stretch goal, not a dependency.
