@@ -115,13 +115,25 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | knap-mcp | jq -r '[.resu
 CMD
   say "the model sees the shape, never the layout"
   run <<'CMD'
-knap-mcp templates | jq -c '.templates[] | select(.id == "verdict") | .shape.fields | keys'
+knap-mcp templates | jq -r '.templates[] | select(.id == "verdict") | .shape.fields | keys[]'
+CMD
+  say "the evidence store: ranked hits from the frozen boris artifact"
+  run <<'CMD'
+knap-mcp boris-ask 'AcmeDB backups' --limit 3 | jq -c '.results[] | {score, title}'
 CMD
   run <<'CMD'
-jq -c '{verdict, take, blockers}' data/verdict.sample.json
+ln -s "$ROOT/demo/frozen" frozen
 CMD
   run <<'CMD'
-knap-mcp validate verdict -d data/verdict.sample.json | jq -c
+jq -r .label frozen/provenance.json
+CMD
+  say "the model's draft: values only, and it reaches its own verdict"
+  run <<'CMD'
+jq '{verdict, take, blockers}' frozen/02-verdict.drafted.json
+CMD
+  say "the model's draft validates against the shape (beat 4 renders the curated sample data, not this draft)"
+  run <<'CMD'
+knap-mcp validate verdict -d frozen/02-verdict.drafted.json | jq -c
 CMD
 
   beat 3 "seeded failure -> diagnostic -> repair -> clean"
