@@ -1104,12 +1104,12 @@ test "calibration fixtures rank as the rubric says" {
     const verdict = (try score(a, try loadFixture(a, "verdict.md"))).total;
     const v1_pipe = (try score(a, try loadFixture(a, "verdict-v1.pipe-table.md"))).total;
     const v1_html = (try score(a, try loadFixture(a, "verdict-v1.html-table.md"))).total;
-    const cunty = (try score(a, try loadFixture(a, "cunty.md"))).total;
+    const dense_ideal = (try score(a, try loadFixture(a, "dense-ideal.md"))).total;
     const confetti = (try score(a, try loadFixture(a, "confetti.md"))).total;
 
     try testing.expect(barf < generic);
     try testing.expect(generic < verdict);
-    try testing.expect(verdict < cunty);
+    try testing.expect(verdict < dense_ideal);
     try testing.expect(barf < apparatus);
     // Dense is not noisy: piling on markup must not beat the real doc.
     try testing.expect(confetti < verdict);
@@ -1139,7 +1139,7 @@ test "scoring every fixture takes under 50ms" {
         try loadFixture(a, "verdict-v1.html-table.md"),
         try loadFixture(a, "release-notes.md"),
         try loadFixture(a, "reading-note.md"),
-        try loadFixture(a, "cunty.md"),
+        try loadFixture(a, "dense-ideal.md"),
         try loadFixture(a, "confetti.md"),
     };
     const t0 = std.Io.Timestamp.now(testing.io, .awake);
