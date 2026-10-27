@@ -80,6 +80,7 @@ for t in $templates; do
                 jq -S '.data' "$work/voice.json" >"$work/voice.data" 2>/dev/null &&
                 jq -S . "$work/$t.$tone.json" | cmp -s - "$work/voice.data"; then
                 voice_checked=$((voice_checked + 1))
+                grep '^calls: ' "$work/voice.err" | sed "s/^/  $t $tone: /" >>"$work/counters"
             else
                 note "FAIL: knap-mcp voice $t --tone $tone differs from the jq reference: $(head -c 400 "$work/voice.err")"
                 failed=1
@@ -220,6 +221,12 @@ EOF
     done
 else
     echo "| (skipped: knap-mcp voice not built) | | |"
+fi
+
+if [ -f "$work/counters" ]; then
+    echo
+    echo "voice counters (knap-mcp voice --backend mock, per template x tone):"
+    cat "$work/counters"
 fi
 
 echo
