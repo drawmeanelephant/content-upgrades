@@ -17,7 +17,7 @@ pub const tool: tools.Tool = .{
     .name = "knap_ratchet",
     .description = "Values-only density ratchet: the server probes which empty data slot raises the density score most, asks the backend for ONE value for that slot, and keeps it only if schema, markup and evidence checks pass and the markdown score rises. Never changes a non-empty value or the template. Returns data_id and doc_id handles.",
     .input_schema =
-    \\{"type":"object","properties":{"template_id":{"type":"string"},"data":{"type":"object"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten"]},"max_iterations":{"type":"integer","minimum":0,"maximum":20},"epsilon":{"type":"number"},"tone":{"type":"string"},"evidence":{"type":"string","enum":["data"]},"verifier":{"type":"string","enum":["heuristic","none","decision"]}},"required":["template_id","data"]}
+    \\{"type":"object","properties":{"template_id":{"type":"string"},"data":{"type":"object"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten"]},"max_iterations":{"type":"integer","minimum":0,"maximum":20},"epsilon":{"type":"number"},"tone":{"type":"string"},"evidence":{"type":"string","enum":["data","boris"]},"verifier":{"type":"string","enum":["heuristic","none","decision"]}},"required":["template_id","data"]}
     ,
     .run = run,
 };
@@ -29,15 +29,19 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     else
         ctx.backend_kind;
     const evidence = common.getStr(args, "evidence") orelse "data";
-    if (!std.mem.eql(u8, evidence, "data"))
-        return ctx.fail("evidence '{s}' is not supported yet; use \"data\" (boris waits for boris_ask)", .{evidence});
+    const evidence_kind: ratchet.Evidence = if (std.mem.eql(u8, evidence, "data"))
+        .data
+    else if (std.mem.eql(u8, evidence, "boris"))
+        .boris
+    else
+        return ctx.fail("evidence '{s}' must be \"data\" or \"boris\"", .{evidence});
     const a = args orelse return ctx.fail("missing arguments", .{});
     const data = switch (a.get("data") orelse return ctx.fail("missing required argument 'data'", .{})) {
         .object => |o| o,
         else => return ctx.fail("data must be a JSON object", .{}),
     };
 
-    var opts: ratchet.Options = .{ .tone = common.getStr(args, "tone") };
+    var opts: ratchet.Options = .{ .tone = common.getStr(args, "tone"), .evidence = evidence_kind };
     if (common.getStr(args, "verifier")) |v| opts.verifier = verifier.parseKind(v) orelse
         return ctx.fail("verifier must be heuristic|none|decision", .{});
     if (a.get("max_iterations")) |v| opts.max_iterations = switch (v) {
