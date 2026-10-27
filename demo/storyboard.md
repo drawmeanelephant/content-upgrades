@@ -30,9 +30,9 @@ Status key:
 | # | Beat | Target | Last render | Tape | Depends on | Status |
 |---|---|---|---|---|---|---|
 | 1 | Cold open: the generic AI doc (density/2 25.7) | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
-| 2 | Ask for a verdict: model drafts data only | 20s | 20.7s | `02-verdict-data.tape` | frozen drafted take (I5); `boris_ask` (B3); MCP-client footage: #88 (human) | ready |
+| 2 | Ask for a verdict: model drafts data only | 20s | 20.7s | `02-verdict-data.tape` | frozen drafted take (I5); `boris_ask` (B3) | ready |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 25.0s | `03-repair.tape` | frozen live take (I5); seed + diag: main | ready |
-| 4 | The doc | 30s | 28.9s | `04-the-doc.tape` | main; hero still: `demo/hero/`; art: Muse Image (human) | ready |
+| 4 | The doc | 30s | 28.9s | `04-the-doc.tape` | main; hero still: `demo/hero/`; art overlay: #102 (human) | ready |
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
 | 6 | Same template, mild vs feral | 20s | 19.7s | `06-voice.tape` | frozen live voice takes (I5); structure hash: C2 | ready |
@@ -98,9 +98,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   the sources alone; beat 4 renders the curated `data/verdict.sample.json`
   (`"give a shit"`). The beat shows only that the model's draft validates against
   the shape — nothing implies beat 4's doc is rendered from this draft.
-- **Open:** #88 (human-only Muse Code probe) has produced no footage. If OBS
-  MCP-client footage lands, it replaces this tape's frozen-draft portion (the
-  `jq`/`validate` lines on `02-verdict.drafted.json`); don't splice until then.
+- **Open:** none — the frozen-draft portion stays; #88 was closed won't-do.
 
 ### 3. Seeded failure -> repair (25s): ready
 
@@ -156,8 +154,8 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   render wrapped in `demo/hero/style.css` (Catppuccin Mocha, zero JavaScript;
   `demo/hero/build.sh` re-captures it with headless Chrome and refuses to ship a
   page containing any). Callouts, the receipts table and the footnotes sit above
-  the fold; the empty right third is the slot for the Muse Image art overlay
-  (human, placed in Kdenlive).
+  the fold; the empty right third is the slot for the art overlay (#102 —
+  human, placed in Kdenlive).
 
 ### 4b. Density ratchet (15s, optional): ready (mock)
 
@@ -178,7 +176,9 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   `verdict` and `data/verdict.min.json` ships now, but the README's ratchet
   example is `release-notes` + `data/release-notes.min.json`, which is what
   the tape runs — and verdict's shape carries no ratchet slots yet.
-- **Missing:** only a live-backend run (M1).
+- **Missing:** only a live take — the `devin-wonder` ACP profile
+  (`--backend acp`, `KNAP_ACP_AGENT='devin acp --model muse-wonder-1-0-low'`;
+  `scripts/providers.sh`).
 
 ### 5. The boris catch (15s): ready
 
@@ -290,6 +290,6 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
 
 ## Not on tape
 
-- Title card and section slates: Muse Image stills, placed in Kdenlive.
+- Title card and section slates: hand-made or pipeline-rendered stills
+  (#102), placed in Kdenlive.
 - Voiceover: recorded by the human (see V0.md).
-- MCP-client footage (Muse Code driving the server): OBS, if the probe works.
