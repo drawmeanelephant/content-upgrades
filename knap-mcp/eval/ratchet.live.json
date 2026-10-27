@@ -1,0 +1,63 @@
+{
+  "about": "Ratchet eval corpus for live backends: knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend <b>. Same rows as eval/ratchet.json minus every case whose 'expect' depends on a per-case mock override — on a live backend those prove nothing (see docs/tracks/D2.md, 'For other lanes'). The mock table stays so the file still runs under --backend mock. Paths resolve against this file's directory, then the cwd.",
+  "mock": "ratchet-mock.json",
+  "cases": [
+    {
+      "id": "release-notes-min",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.min.json",
+      "expect": {"min_gain": 15}
+    },
+    {
+      "id": "reading-note-min",
+      "template_id": "reading-note",
+      "data": "@../data/reading-note.min.json",
+      "expect": {"min_gain": 15}
+    },
+    {
+      "id": "verdict-min",
+      "template_id": "verdict",
+      "data": "@../data/verdict.min.json",
+      "expect": {"min_gain": 15}
+    },
+    {
+      "id": "apparatus-min",
+      "template_id": "apparatus",
+      "data": "@../data/verdict.min.json",
+      "expect": {"min_gain": 10, "stop": "stalled"}
+    },
+    {
+      "id": "release-notes-sample",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.sample.json",
+      "expect": {"min_gain": 0}
+    },
+    {
+      "id": "reading-note-sample",
+      "template_id": "reading-note",
+      "data": "@../data/reading-note.sample.json",
+      "expect": {"min_gain": 0}
+    },
+    {
+      "id": "fixture-callouts",
+      "template_path": "ratchet/callouts.knap",
+      "shape_path": "ratchet/callouts.shape.json",
+      "data": "@ratchet/fixture.json",
+      "expect": {"min_accepted": 2}
+    },
+    {
+      "id": "fixture-footnotes",
+      "template_path": "ratchet/footnotes.knap",
+      "shape_path": "ratchet/footnotes.shape.json",
+      "data": "@ratchet/footnotes.data.json",
+      "expect": {"min_accepted": 2, "min_gain": 1}
+    },
+    {
+      "id": "iteration-cap",
+      "template_id": "reading-note",
+      "data": "@../data/reading-note.min.json",
+      "max_iterations": 2,
+      "expect": {"stop": "max_iterations", "min_accepted": 2}
+    }
+  ]
+}
