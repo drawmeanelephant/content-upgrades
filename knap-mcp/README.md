@@ -131,7 +131,19 @@ iterations; non-convergence returns diagnostics — a feature, not a failure.
 filter, dangling `|`, unexpected text in or after a tag, stray or
 mismatched block closers. Proves the loop with zero API access.
 `spark`/`wonder`/`baseten`: OpenAI-compatible endpoints over curl, gated on
-`MODEL_API_KEY`. `KNAP_BASETEN_URL` overrides the baseten endpoint.
+`MODEL_API_KEY`. `compat` is the same curl path against any
+OpenAI-compatible endpoint: `KNAP_COMPAT_URL` and `KNAP_COMPAT_MODEL` are
+required, `KNAP_COMPAT_KEY` is an optional bearer (unset = no auth header)
+and `MODEL_API_KEY` is never read. `acp` drives a local Agent Client
+Protocol agent over stdio: `KNAP_ACP_AGENT` (e.g. `devin acp`), with
+`KNAP_ACP_TIMEOUT` / `KNAP_ACP_INIT_TIMEOUT` / `KNAP_ACP_CWD`.
+
+Every HTTP kind resolves `KNAP_<KIND>_URL`, `_MODEL`, `_MODELS_URL`
+(default: `_URL` with `/chat/completions` → `/models`) and `_TEMPERATURE`
+(0..2 or `omit`; falls back to `KNAP_TEMPERATURE`, then 0).
+`knap-mcp backends` shows what each kind resolves to and `backends
+--probe` runs `GET /models` per configured live backend. `knap-mcp --help`
+has the full env list.
 
 ## Eval harness
 

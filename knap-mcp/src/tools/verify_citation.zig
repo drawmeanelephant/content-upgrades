@@ -16,7 +16,7 @@ pub const tool: tools.Tool = .{
     .name = "knap_verify_citation",
     .description = "Advisory check of a claim against evidence quotes: entails | neutral | contradicts | unknown. heuristic (default) is verbatim match plus word overlap, not NLI; decision asks a model and falls back to heuristic.",
     .input_schema =
-    \\{"type":"object","properties":{"claim":{"type":"string"},"evidence":{"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string"}]},"verifier":{"type":"string","enum":["none","heuristic","decision"]},"backend":{"type":"string","enum":["mock","spark","wonder","baseten"]}},"required":["claim","evidence"]}
+    \\{"type":"object","properties":{"claim":{"type":"string"},"evidence":{"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string"}]},"verifier":{"type":"string","enum":["none","heuristic","decision"]},"backend":{"type":"string","enum":["mock","spark","wonder","baseten","acp","compat"]}},"required":["claim","evidence"]}
     ,
     .run = run,
 };

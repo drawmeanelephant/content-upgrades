@@ -16,7 +16,7 @@ pub const tool: tools.Tool = .{
     .name = "knap_repair",
     .description = "Bounded repair loop over shipped templates: render -> diag -> region patch -> re-render, max 4.",
     .input_schema =
-    \\{"type":"object","properties":{"template_id":{"type":"string"},"data":{"type":"object"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten","acp"]},"target":{"type":"string","enum":["markdown","oliver","html"]}},"required":["template_id","data"]}
+    \\{"type":"object","properties":{"template_id":{"type":"string"},"data":{"type":"object"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten","acp","compat"]},"target":{"type":"string","enum":["markdown","oliver","html"]}},"required":["template_id","data"]}
     ,
     .run = run,
 };
