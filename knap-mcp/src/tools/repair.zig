@@ -53,11 +53,70 @@ pub fn writeOutcome(ctx: *Ctx, outcome: repair.Outcome, out: *Allocating) !void 
         try std.json.Stringify.value(s.kind, .{}, &out.writer);
         try out.writer.print(",\"line\":{d},\"detail\":", .{s.line});
         try std.json.Stringify.value(s.detail, .{}, &out.writer);
-        try out.writer.print(",\"patch_applied\":{s}}}", .{if (s.patch_applied) "true" else "false"});
+        try out.writer.print(",\"patch_applied\":{s},\"region_start\":{d},\"region_end\":{d},\"region\":", .{
+            if (s.patch_applied) "true" else "false", s.region_start, s.region_end,
+        });
+        try std.json.Stringify.value(s.region, .{}, &out.writer);
+        try out.writer.writeAll(",\"patch\":");
+        try std.json.Stringify.value(s.patch, .{}, &out.writer);
+        try out.writer.writeAll("}");
     }
     try out.writer.writeAll("],");
     try common.writeDiags(out, outcome.diags);
     try out.writer.writeAll("}");
+}
+
+test "writeOutcome steps carry the region and patch the backend saw" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx: Ctx = undefined;
+    ctx.arena = arena.allocator();
+
+    var steps = [_]repair.Step{
+        .{
+            .iteration = 0,
+            .kind = "syntax error",
+            .line = 29,
+            .detail = "unclosed if block (missing '{% endif %}')",
+            .patch_applied = true,
+            .region_start = 29,
+            .region_end = 30,
+            .region = "{% if winner %}\n- {{ winner }}\n",
+            .patch = "{% if winner %}\n- {{ winner }}\n{% endif %}\n",
+        },
+        .{
+            .iteration = 1,
+            .kind = "syntax error",
+            .line = 3,
+            .detail = "backend error: curl: connection refused",
+            .patch_applied = false,
+            .region_start = 1,
+            .region_end = 5,
+            .region = "a\nb\nc\nd\ne\n",
+            .patch = null,
+        },
+    };
+    const outcome: repair.Outcome = .{
+        .target = .markdown,
+        .converged = true,
+        .iterations = 1,
+        .template = "",
+        .document = null,
+        .diags = &.{},
+        .steps = &steps,
+    };
+    var out: Allocating = .init(ctx.arena);
+    try writeOutcome(&ctx, outcome, &out);
+
+    const v = try std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, out.written(), .{});
+    const emitted = v.object.get("steps").?.array.items;
+    try std.testing.expectEqual(2, emitted.len);
+    const s0 = emitted[0].object;
+    try std.testing.expectEqual(29, s0.get("region_start").?.integer);
+    try std.testing.expectEqual(30, s0.get("region_end").?.integer);
+    try std.testing.expectEqualStrings("{% if winner %}\n- {{ winner }}\n", s0.get("region").?.string);
+    try std.testing.expectEqualStrings("{% if winner %}\n- {{ winner }}\n{% endif %}\n", s0.get("patch").?.string);
+    try std.testing.expect(emitted[1].object.get("patch").? == .null);
 }
 
 test "run rejects an unknown backend instead of silently using the default" {
