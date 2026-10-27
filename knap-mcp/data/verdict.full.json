@@ -33,7 +33,7 @@
     {
       "claim": "single-region only",
       "evidence": "cross-region replication is 'on the roadmap'",
-      "source": "AcmeDB issue #412 — cross-region replication",
+      "source": "AcmeDB issue 412 — cross-region replication",
       "confidence": "high",
       "note": "region-gap"
     }
@@ -57,7 +57,7 @@
       ]
     },
     {
-      "name": "AcmeDB issue #412 — cross-region replication",
+      "name": "AcmeDB issue 412 — cross-region replication",
       "url": "https://example.com/acmedb/issues/412",
       "rel": "issue-tracker",
       "reliability": "medium",
