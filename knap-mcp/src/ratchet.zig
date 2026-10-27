@@ -887,7 +887,11 @@ const Run = struct {
 
     fn ask(r: *Run, s: Slot, best: ObjectMap) Error!Reply {
         const a = r.ctx.arena;
+        // Built even on mock so the call counts what a live backend would
+        // receive.
+        const slice = try buildSlice(a, s, r.shape, best, r.evidence, r.opts.tone);
         if (r.kind == .mock) {
+            r.ctx.countCall(enrich_prefix, slice);
             const list = r.opts.mock.get(s.path) orelse return .declined;
             if (list != .array) return .declined;
             const used = try r.mock_used.getOrPut(a, s.path);
@@ -898,7 +902,6 @@ const Run = struct {
             // Through text and back, so mock replies take the live parse path.
             return parseReply(a, try std.json.Stringify.valueAlloc(a, list.array.items[i], .{}));
         }
-        const slice = try buildSlice(a, s, r.shape, best, r.evidence, r.opts.tone);
         if (r.ctx.environ.get("KNAP_DEBUG") != null) std.debug.print("ratchet slice ({d} bytes):\n{s}", .{ slice.len, slice });
         return parseReply(a, try backend.complete(r.ctx, r.kind, .enrich, enrich_prefix, slice));
     }
@@ -1350,6 +1353,9 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
             renders, runs, @as(f64, @floatFromInt(renders)) / n, ms / n,
         });
     }
+    try w.print("calls: {d}  mean slice: {d} B  max: {d} B  prefix: {d} B\n", .{
+        ctx.calls, ctx.meanSlice(), ctx.slice_bytes_max, ctx.prefix_bytes,
+    });
     // Per-case JSON (steps included) lands in the store: a handle, not a paste.
     var rep: std.Io.Writer.Allocating = .init(a);
     try rep.writer.print("{{\"backend\":\"{s}\",\"corpus\":", .{@tagName(kind)});
