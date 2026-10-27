@@ -1,0 +1,49 @@
+# Track DEMO: real flat cold-open doc (#92, built on the acp backend from #130)
+
+Owner files: `demo/fixtures/generic-ai-doc.md`,
+`demo/fixtures/generic-ai-doc.provenance.json`, and this note.
+
+## What landed
+
+- `demo/fixtures/generic-ai-doc.md` is no longer hand-written: it is the
+  verbatim reply of a live model asked to "write a verdict on AcmeDB" from
+  the sources in `knap-mcp/data/verdict.sample.json`, with no template.
+- `demo/fixtures/generic-ai-doc.provenance.json` records the backend, agent
+  command, model id, exact system+user prompt, date, ACP usage, and the
+  `knap-mcp density` score (`density/2` -> 25.7, 479 words).
+
+## Provenance (honest on tape)
+
+- `MODEL_API_KEY` is not available, so per the lane brief the output was
+  produced through knap-mcp's `acp` backend (`acp.zig` driving an ACP
+  agent subprocess, landed via #130), not Spark/Wonder. A sponsor-model re-render can
+  replace the fixture later; that is why the PR says "Part of #92".
+- `KNAP_ACP_AGENT='devin acp --model gpt-5-5-none'`, default agent. The
+  brief's `--agent-type summarizer` was tried first: the summarizer
+  answers with a session-summary envelope (`<summary>` + meta sections
+  describing the request), not a document, so it cannot produce the
+  fixture.
+- ACP has no temperature knob (`acp.prompt` sends one text block).
+  `gpt-5-5-none` (no-thinking) was picked as the lowest-variance stand-in
+  for "temperature as low as the API allows".
+- Selection: same prompt run against `gpt-5-5-none` and
+  `claude-sonnet-4-6`. Claude's reply used footnotes, a sources table,
+  and rules (density 56.4) — closer to knap's own apparatus than to the
+  flat pattern — so the GPT reply (density 25.7, wall paragraph / header /
+  wall paragraph) was picked. Neither was edited.
+
+## How it was produced
+
+No CLI path exposes a raw `backend.complete`, so a throwaway
+`src/ask_once.zig` harness (Ctx.init + `backend.completeReply(.acp,
+.judge, system, user)`, compiled with a stub `build_options` module) made
+the call through the real `--backend acp` code path. The harness is not
+committed; the compiled binary lived outside the tree.
+
+## Left for later
+
+- Sponsor-model re-render (Spark/Wonder) if `MODEL_API_KEY` lands — same
+  prompt, update the fixture and provenance, then this issue can close.
+- Beat 1 tape overlay: the density number on screen is now 25.7
+  (`density/2`), not the old stand-in's score — see `demo/run.sh` and the
+  Kdenlive overlay note in `demo/storyboard.md`.

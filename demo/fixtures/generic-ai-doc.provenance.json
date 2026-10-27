@@ -1,0 +1,45 @@
+{
+  "file": "demo/fixtures/generic-ai-doc.md",
+  "produced": "2026-10-26",
+  "backend": "acp",
+  "acp_agent": "devin acp --model gpt-5-5-none",
+  "model": "gpt-5-5-none",
+  "model_note": "Devin CLI model UID (GPT-5.5 family, no-thinking variant). The ACP backend has no temperature knob; a no-thinking model is the closest to the issue's 'temperature as low as the API allows'.",
+  "prompt_transport": "one ACP session/prompt turn; system + '\\n\\n' + user concatenated into a single text block (backend.acpReply), fresh session per call",
+  "system_prompt": "You are a technology reviewer writing for engineers. Answer directly, in Markdown.",
+  "user_prompt": "Write a verdict on AcmeDB, using these sources:\n\n```json\n{\n  \"title\": \"Verdict: AcmeDB\",\n  \"subject\": \"AcmeDB\",\n  \"date\": \"2026-10-24\",\n  \"tags\": [\"verdict\", \"databases\", \"acmedb\"],\n  \"verdict\": \"give a shit\",\n  \"gaf\": \"high\",\n  \"take\": \"the boring database that actually ships\",\n  \"summary\": \"AcmeDB does one thing \u2014 durable key-value storage \u2014 and does it without an operator PhD. No consensus wizardry, no sharding astrology; just a WAL, a manifest, and docs that answer the question you actually asked.\",\n  \"pull_quote\": {\n    \"text\": \"Point-in-time snapshots are coming soon.\",\n    \"url\": \"https://example.com/acmedb/docs/backups\"\n  },\n  \"blockers\": [\n    \"no managed backup story yet\",\n    \"single-region only\"\n  ],\n  \"receipts\": [\n    {\n      \"claim\": \"p99 reads under 2ms\",\n      \"evidence\": \"vendor benchmark on a laptop, not replicated\",\n      \"source\": \"AcmeDB launch post\",\n      \"confidence\": \"low\",\n      \"note\": \"benchmark\"\n    },\n    {\n      \"claim\": \"no managed backups yet\",\n      \"evidence\": \"the docs list snapshots as 'coming soon'\",\n      \"source\": \"AcmeDB docs \u2014 backups\",\n      \"confidence\": \"high\",\n      \"note\": \"backup-gap\"\n    },\n    {\n      \"claim\": \"single-region only\",\n      \"evidence\": \"cross-region replication is 'on the roadmap'\",\n      \"source\": \"AcmeDB docs \u2014 backups\",\n      \"confidence\": \"high\"\n    }\n  ],\n  \"bottom_line\": \"Ship it behind a cache. Do not put your crown jewels in it.\",\n  \"caveats\": [\n    \"We did not run our own benchmark. The latency number is theirs, not ours.\",\n    \"Checked against the docs on the date above. Roadmaps move.\"\n  ],\n  \"sources\": [\n    {\n      \"name\": \"AcmeDB docs \u2014 backups\",\n      \"url\": \"https://example.com/acmedb/docs/backups\",\n      \"rel\": \"documentation\",\n      \"reliability\": \"high\",\n      \"gaf\": \"high\",\n      \"accessed\": \"2026-10-24\",\n      \"quotes\": [\n        {\"text\": \"Point-in-time snapshots are coming soon.\", \"used_for\": \"the backup blocker\"},\n        {\"text\": \"Cross-region replication is on the roadmap.\", \"used_for\": \"the single-region blocker\"}\n      ]\n    },\n    {\n      \"name\": \"AcmeDB launch post\",\n      \"url\": \"https://example.com/acmedb/launch\",\n      \"rel\": \"self-published\",\n      \"reliability\": \"medium\",\n      \"gaf\": \"low\",\n      \"accessed\": \"2026-10-24\",\n      \"quotes\": [\n        {\"text\": \"p99 read latency under 2ms on a laptop.\", \"used_for\": \"the latency claim, read as a ceiling\"}\n      ]\n    }\n  ],\n  \"related\": [\"AcmeDB docs \u2014 architecture\", \"Claims\"],\n  \"apparatus_page\": \"Sources\",\n  \"footnotes\": {\n    \"benchmark\": \"Benchmark numbers are vendor-reported; treat them as the ceiling, not the floor.\",\n    \"backup-gap\": \"Backup gap confirmed against the docs page on demo-freeze day.\"\n  }\n}\n```",
+  "stop_reason": "end_turn",
+  "usage": {
+    "prompt_tokens": 12583,
+    "completion_tokens": 669,
+    "total_tokens": 13252
+  },
+  "density": {
+    "scorer": "density/2",
+    "total": 25.7,
+    "words": 479
+  },
+  "selection": {
+    "candidates": [
+      {
+        "model": "gpt-5-5-none",
+        "density_total": 25.7,
+        "words": 479,
+        "picked": true
+      },
+      {
+        "model": "claude-sonnet-4-6",
+        "density_total": 56.4,
+        "words": 248,
+        "picked": false,
+        "why_not": "footnotes, a sources table, and horizontal rules put it closer to knap's apparatus-rich output than to the flat pattern"
+      }
+    ],
+    "criterion": "typical flat pattern (wall paragraph, header, wall paragraph); clean, not broken"
+  },
+  "notes": [
+    "Issue #92 asks for Spark and Wonder; MODEL_API_KEY was unavailable, so the output was produced through knap-mcp's acp backend (backend.Kind.acp -> acp.zig -> `devin acp`) per the lane brief.",
+    "The brief's example KNAP_ACP_AGENT, `devin acp --agent-type summarizer`, was tried first; the summarizer agent returns a session-summary envelope (<summary>...</summary>) describing the request rather than a document, so the default agent was used.",
+    "Output is saved verbatim; no post-edits. A re-render on a sponsor model (Spark/Wonder) can replace it if MODEL_API_KEY lands."
+  ]
+}
