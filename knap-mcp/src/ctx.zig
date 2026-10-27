@@ -20,6 +20,9 @@ pub const Ctx = struct {
     /// Set by tool handlers before returning an error so the MCP layer can
     /// surface a real message instead of a bare error name.
     err_msg: []const u8 = "",
+    /// One-shot latch for the "scratch files inside the project tree"
+    /// warning — a repair loop must not repeat it on every call.
+    store_warned: bool = false,
 
     pub fn init(p: std.process.Init) !Ctx {
         const arena = p.arena.allocator();
@@ -47,6 +50,22 @@ pub const Ctx = struct {
     pub fn fail(ctx: *Ctx, comptime fmt: []const u8, args: anytype) error{ToolFailed} {
         ctx.err_msg = std.fmt.allocPrint(ctx.arena, fmt, args) catch "out of memory";
         return error.ToolFailed;
+    }
+
+    /// Seconds-valued env var, or `default` when unset or unparseable.
+    pub fn envSecs(ctx: *Ctx, name: []const u8, default: u64) u64 {
+        const s = ctx.environ.get(name) orelse return default;
+        return std.fmt.parseInt(u64, std.mem.trim(u8, s, " \t"), 10) catch default;
+    }
+
+    /// `.none` for 0, else a hard deadline `secs` from now on the awake
+    /// clock — a cap on the whole child process, not per-I/O idle time.
+    pub fn deadline(ctx: *Ctx, secs: u64) std.Io.Timeout {
+        if (secs == 0) return .none;
+        return .{ .deadline = .fromNow(ctx.io, .{
+            .raw = .fromSeconds(@intCast(secs)),
+            .clock = .awake,
+        }) };
     }
 };
 
