@@ -4,14 +4,16 @@
 //!
 //! `mock` returns canned patches so the whole loop is testable with zero
 //! API access. `spark`/`wonder`/`baseten` hit OpenAI-compatible endpoints
-//! via curl (CLI contracts only, no HTTP client dependency).
+//! via curl (CLI contracts only, no HTTP client dependency). `acp` drives
+//! a local Agent Client Protocol agent over stdio (`acp.zig`).
 
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
 const engine = @import("engine.zig");
 const store = @import("store.zig");
+const acp = @import("acp.zig");
 
-pub const Kind = enum { mock, spark, wonder, baseten };
+pub const Kind = enum { mock, spark, wonder, baseten, acp };
 
 /// What a model call is for. Every task uses the same endpoint and model
 /// per backend today; callers pass it so routing can split per task later
@@ -46,7 +48,23 @@ pub fn repairPatch(ctx: *Ctx, kind: Kind, region: []const u8, first_line: u32, d
     if (kind == .mock) ctx.countCall(repair_prefix, try repairUser(ctx, region, first_line, diag));
     return switch (kind) {
         .mock => mockPatch(ctx, region, first_line, diag),
-        .spark, .wonder, .baseten => remotePatch(ctx, kind, region, first_line, diag),
+        .spark, .wonder, .baseten, .acp => remotePatch(ctx, kind, region, first_line, diag),
+    };
+}
+
+/// One line for `knap-mcp backends`: what `kind` needs, and whether this
+/// environment has it. Nothing is probed.
+pub fn statusLine(ctx: *Ctx, kind: Kind) []const u8 {
+    return switch (kind) {
+        .mock => "always available (canned patches)",
+        .spark, .wonder, .baseten => if (ctx.environ.get("MODEL_API_KEY") != null)
+            "MODEL_API_KEY set — live calls enabled"
+        else
+            "needs MODEL_API_KEY",
+        .acp => if (acp.agentName(ctx)) |name|
+            std.fmt.allocPrint(ctx.arena, "KNAP_ACP_AGENT set — live calls via '{s}'", .{name}) catch "KNAP_ACP_AGENT set"
+        else
+            "needs KNAP_ACP_AGENT (e.g. `devin acp --agent-type summarizer`)",
     };
 }
 
@@ -461,7 +479,7 @@ fn defaultEndpoint(kind: Kind) struct { url: []const u8, model: []const u8 } {
         .spark => .{ .url = "https://api.meta.ai/v1/chat/completions", .model = "muse-spark-1.3" },
         .wonder => .{ .url = "https://api.meta.ai/v1/chat/completions", .model = "muse-wonder-1.0" },
         .baseten => .{ .url = "https://api.baseten.co/v1/chat/completions", .model = "meta-models/muse-spark-open-1026" },
-        .mock => .{ .url = "", .model = "" },
+        .mock, .acp => .{ .url = "", .model = "" },
     };
 }
 
@@ -487,7 +505,7 @@ fn envFor(ctx: *Ctx, kind: Kind, comptime suffix: []const u8) ?[]const u8 {
 /// Resolve `kind`'s endpoint, model and sampling settings. A malformed
 /// temperature fails here, before any request is staged.
 pub fn endpoint(ctx: *Ctx, kind: Kind) error{ToolFailed}!Endpoint {
-    if (kind == .mock) return ctx.fail("backend 'mock' has no endpoint", .{});
+    if (kind == .mock or kind == .acp) return ctx.fail("backend '{s}' has no endpoint", .{@tagName(kind)});
     const d = defaultEndpoint(kind);
     const url = envFor(ctx, kind, "URL") orelse d.url;
     return .{
@@ -564,6 +582,7 @@ pub fn complete(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user: []c
 pub fn completeReply(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user: []const u8) Error!Reply {
     if (kind == .mock)
         return ctx.fail("backend 'mock' has no live completion (task '{s}')", .{@tagName(task)});
+    if (kind == .acp) return acpReply(ctx, task, system, user);
     const key = try apiKey(ctx, kind);
     const ep = try endpoint(ctx, kind);
     ctx.countCall(system, user);
@@ -579,6 +598,35 @@ pub fn completeReply(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user
     return reply;
 }
 
+/// One ACP turn as a Reply. ACP prompts have no system role, so the
+/// system prefix leads the one text block. The agent's text goes through
+/// the same `<think>` split as an HTTP reply, and every caller's own
+/// scrubber after that. `stopReason` stands in for `finish_reason`:
+/// `max_tokens` reads as truncated, and a `refusal` is no answer.
+fn acpReply(ctx: *Ctx, task: Task, system: []const u8, user: []const u8) Error!Reply {
+    _ = try acp.requireAgent(ctx);
+    ctx.countCall(system, user);
+    const turn = try acp.prompt(ctx, try std.fmt.allocPrint(ctx.arena, "{s}\n\n{s}", .{ system, user }));
+    var reasoning: std.Io.Writer.Allocating = .init(ctx.arena);
+    const answer = if (std.mem.eql(u8, turn.stop_reason, "refusal")) "" else try splitThink(&reasoning.writer, turn.text);
+    const r = reasoning.written();
+    const reply: Reply = .{
+        .content = answer,
+        .reasoning = if (r.len > 0) r else null,
+        .finish_reason = if (turn.stop_reason.len > 0) turn.stop_reason else null,
+        .usage = parseUsage(turn.usage),
+    };
+    if (ctx.environ.get("KNAP_DEBUG") != null) {
+        const u = reply.usage;
+        std.debug.print("knap-mcp: acp/{s} agent={s} stop={s} usage prompt={?d} completion={?d} total={?d} reasoning={?d}\n", .{
+            @tagName(task),     acp.agentName(ctx) orelse "-", reply.finish_reason orelse "-",
+            u.prompt_tokens,    u.completion_tokens,           u.total_tokens,
+            u.reasoning_tokens,
+        });
+    }
+    return reply;
+}
+
 fn apiKey(ctx: *Ctx, kind: Kind) error{ToolFailed}![]const u8 {
     const key = ctx.environ.get("MODEL_API_KEY") orelse "";
     if (key.len == 0) return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
@@ -588,7 +636,7 @@ fn apiKey(ctx: *Ctx, kind: Kind) error{ToolFailed}![]const u8 {
 /// The model ids `kind`'s provider serves (`GET /v1/models`), so the
 /// smoke can confirm the KNAP_<KIND>_MODEL to set.
 pub fn listModels(ctx: *Ctx, kind: Kind) Error![]const []const u8 {
-    if (kind == .mock) return ctx.fail("backend 'mock' has no model list", .{});
+    if (kind == .mock or kind == .acp) return ctx.fail("backend '{s}' has no model list", .{@tagName(kind)});
     const key = try apiKey(ctx, kind);
     const ep = try endpoint(ctx, kind);
     const url = ep.models_url orelse
@@ -820,11 +868,14 @@ fn splitThink(reasoning: *std.Io.Writer, content: []const u8) ![]const u8 {
 fn parseUsage(v: ?std.json.Value) Usage {
     const u = v orelse return .{};
     return .{
-        .prompt_tokens = tokens(getPath(u, &.{"prompt_tokens"})) orelse tokens(getPath(u, &.{"input_tokens"})),
-        .completion_tokens = tokens(getPath(u, &.{"completion_tokens"})) orelse tokens(getPath(u, &.{"output_tokens"})),
-        .total_tokens = tokens(getPath(u, &.{"total_tokens"})),
+        .prompt_tokens = tokens(getPath(u, &.{"prompt_tokens"})) orelse tokens(getPath(u, &.{"input_tokens"})) orelse
+            tokens(getPath(u, &.{"inputTokens"})),
+        .completion_tokens = tokens(getPath(u, &.{"completion_tokens"})) orelse tokens(getPath(u, &.{"output_tokens"})) orelse
+            tokens(getPath(u, &.{"outputTokens"})),
+        .total_tokens = tokens(getPath(u, &.{"total_tokens"})) orelse tokens(getPath(u, &.{"totalTokens"})),
         .reasoning_tokens = tokens(getPath(u, &.{ "completion_tokens_details", "reasoning_tokens" })) orelse
-            tokens(getPath(u, &.{ "output_tokens_details", "reasoning_tokens" })),
+            tokens(getPath(u, &.{ "output_tokens_details", "reasoning_tokens" })) orelse
+            tokens(getPath(u, &.{"thoughtTokens"})),
     };
 }
 
@@ -898,7 +949,7 @@ fn runCurl(
 /// Tool errors carry a bounded slice of provider/curl output — a hostile
 /// endpoint can't bloat every response it trips. The cut never splits a
 /// UTF-8 codepoint.
-fn brief(s: []const u8) []const u8 {
+pub fn brief(s: []const u8) []const u8 {
     const t = std.mem.trim(u8, s, " \t\r\n");
     var end = @min(t.len, 300);
     while (end > 0 and end < t.len and (t[end] & 0xC0) == 0x80) end -= 1;
@@ -1340,4 +1391,58 @@ test "live entry points stay compiled without a key" {
     try testing.expectEqualStrings("backend 'spark' needs MODEL_API_KEY", ctx.err_msg);
     try testing.expectError(error.ToolFailed, listModels(&ctx, .wonder));
     try testing.expectEqualStrings("backend 'wonder' needs MODEL_API_KEY", ctx.err_msg);
+}
+
+// --- acp ---------------------------------------------------------------------
+
+test {
+    _ = acp;
+}
+
+test "acp: parseKind, status and the missing-agent error" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx = testCtx(arena.allocator(), &env);
+    ctx.calls = 0;
+    try testing.expectEqual(Kind.acp, parseKind("acp").?);
+    try testing.expect(std.mem.startsWith(u8, statusLine(&ctx, .acp), "needs KNAP_ACP_AGENT"));
+    try testing.expectError(error.ToolFailed, complete(&ctx, .acp, .repair, "s", "u"));
+    try testing.expect(std.mem.startsWith(u8, ctx.err_msg, "backend 'acp' needs KNAP_ACP_AGENT"));
+    try testing.expectEqual(@as(usize, 0), ctx.calls);
+    try testing.expectError(error.ToolFailed, endpoint(&ctx, .acp));
+    try testing.expectError(error.ToolFailed, listModels(&ctx, .acp));
+    try env.put("KNAP_ACP_AGENT", "devin acp --agent-type summarizer");
+    try testing.expectEqualStrings("KNAP_ACP_AGENT set — live calls via 'devin'", statusLine(&ctx, .acp));
+}
+
+test "acp: a turn becomes a Reply with usage, counted like a live call" {
+    var f: acp.FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    var ctx = try f.ctx("ok");
+    const r = try completeReply(&ctx, .acp, .verify, "system", "user");
+    try testing.expectEqualStrings("reply from s1", r.content);
+    try testing.expectEqualStrings("end_turn", r.finish_reason.?);
+    try testing.expect(!r.truncated());
+    try testing.expectEqual(@as(?u64, 40), r.usage.prompt_tokens);
+    try testing.expectEqual(@as(?u64, 3), r.usage.completion_tokens);
+    try testing.expectEqual(@as(?u64, 43), r.usage.total_tokens);
+    try testing.expectEqual(@as(?u64, 1), r.usage.reasoning_tokens);
+    try testing.expectEqual(@as(usize, 1), ctx.calls);
+    try testing.expectEqual(@as(usize, 6), ctx.prefix_bytes);
+}
+
+test "acp: repair runs agent output through sanitizePatch and degrades on a cut-off turn" {
+    var f: acp.FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    const diag: engine.Diag = .{ .kind = "syntax error", .line = 1, .col = 1, .detail = "unclosed if block" };
+    var ctx = try f.ctx("fenced");
+    const patch = try repairPatch(&ctx, .acp, "{% if a %}A\n", 1, diag);
+    try testing.expectEqualStrings("{% if a %}A{% endif %}\n", patch.?);
+    ctx = try f.ctx("maxtok");
+    try testing.expectEqual(@as(?[]const u8, null), try repairPatch(&ctx, .acp, "{% if a %}A\n", 1, diag));
+    ctx = try f.ctx("crash");
+    try testing.expectError(error.ToolFailed, repairPatch(&ctx, .acp, "{% if a %}A\n", 1, diag));
 }
