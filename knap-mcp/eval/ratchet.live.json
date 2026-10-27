@@ -24,7 +24,7 @@
       "id": "apparatus-min",
       "template_id": "apparatus",
       "data": "@../data/verdict.min.json",
-      "expect": {"min_gain": 10, "stop": "stalled"}
+      "expect": {"min_gain": 10}
     },
     {
       "id": "release-notes-sample",

@@ -629,7 +629,11 @@ pub fn completeReply(ctx: *Ctx, kind: Kind, task: Task, system: []const u8, user
 fn acpReply(ctx: *Ctx, task: Task, system: []const u8, user: []const u8) Error!Reply {
     _ = try acp.requireAgent(ctx);
     ctx.countCall(system, user);
-    const turn = try acp.prompt(ctx, try std.fmt.allocPrint(ctx.arena, "{s}\n\n{s}", .{ system, user }));
+    const turn = try acp.prompt(ctx, try std.fmt.allocPrint(
+        ctx.arena,
+        "Do not use any tools or inspect files. Follow the instructions below and answer the request directly.\n\n{s}\n\n## Request\n\n{s}",
+        .{ system, user },
+    ));
     var reasoning: std.Io.Writer.Allocating = .init(ctx.arena);
     const answer = if (std.mem.eql(u8, turn.stop_reason, "refusal")) "" else try splitThink(&reasoning.writer, turn.text);
     const r = reasoning.written();

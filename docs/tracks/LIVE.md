@@ -94,17 +94,47 @@ make live P=fake                                     # credential-free self-test
    accounts) gets `model_not_found` for every slug in
    `~/.codex/models_cache.json`. Once the user picks a model their plan
    accepts (or uses an API key), both are one `make live P=…` away.
+7. **ACP prompt framing (`acpReply`) fixed `knap_voice` meta-refusals and
+   agent tool use.** `acpReply` previously concatenated `system` and `user`
+   with bare `\n\n`. Because `knap_voice`'s system prompt ends with
+   `## Examples` (`Field: …\nRole: …\nInput: …\nOutput: …`), the user block
+   blended into the examples and caused models (`nemotron-3.5-super`, etc.)
+   to reply that no input was provided (rejecting 4 of 8 fields). Wrapping
+   ACP prompts with a no-tools instruction and an explicit `\n\n## Request\n\n`
+   boundary brought `droid-nemotron` to **8/8 rewritten, 0 rejected** across
+   `mild`, `spicy`, and `feral`.
+8. **Live-model `knap_ratchet` schema & slice fixes lifted `ratchet.live.json`
+   from 3/9 to 9/9.** Live ACP runs exposed four issues in `src/ratchet.zig`:
+   - `parseShape` left container types (`array<object>`, `object<string,string>`,
+     `max_items`) in `slot.schema`, causing models to wrap single-step items
+     in `[…]` or `{"key": "val"}` and fail `checkSchema`. `slot.schema` now
+     emits the single-step item type (`object`, `string`, `array<string>`).
+   - `run` unwraps 1-element arrays (`[item] -> item`) for `.strings`,
+     `.objects`, and `.rows` slots before `checkSchema`.
+   - `checkSchema` gained recursive `checkObject` validation so nested arrays
+     of objects (e.g. `sources[+].quotes`) validate instead of failing with
+     `quotes: expected a string`.
+   - `buildSlice` raised the `HEADLINE` prose cap from 160 B to 400 B so
+     `tldr` / `summary` fields in `.min.json` inputs (`213–309 B`) stay in
+     `HEADLINE`.
+   - `eval/ratchet.live.json` dropped the mock-only `"stop": "stalled"` on
+     `apparatus-min` now that live models climb all 6 iterations (`+21.5` to
+     `+25.2` gain).
 
 ## Results
 
-Engines k4o `aeba163` / dogbed `d96b125`, density/2, knap-mcp `6096bd5`
+Engines k4o `aeba163` / dogbed `d96b125`, density/2, knap-mcp `2292117`
 plus this branch. Raw outputs and provenance are in
 `knap-mcp/eval/results/live/<profile>/`.
 
 | profile | model (agent-reported) | smoke | repair `seeds.json` | ratchet `ratchet.live.json` | voice (verdict) |
 |---|---|---|---|---|---|
-| devin-wonder | `muse-wonder-1-0-high`, effort low | 6/6 ok, 2.5 s/call | 22/22 conv, 1.05 iters, 11/22 exact (2nd run; first runs 1.09/1.05 iters, 8/22, 10/22 exact); 2nap 167/167, see I2.md | 3/9 ok, **inert 0** | 2/2 layout-identical (feral: 1 of 8 rejected) |
-| devin-swe-2 | `swe-2-high`, effort medium | 6/6 ok, 2.3 s/call | 22/22 conv, 1.09 iters, 9/22 exact | 3/9 ok, **inert 0** | 2/2 layout-identical (feral: 4 of 8 rejected) |
+| droid-nemotron | `nemotron-3.5-super`, effort none | 6/6 ok, 1.7 s/call | 17/22 conv (77%) | 8/9 ok (`verdict-min` +38.6, `reading-note-min` +40.1, `release-notes-min` +28.9) | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 8/8, **0 rejected**) |
+| droid-glm | `glm-5.3-flash`, effort none | 6/6 ok, 5.8 s/call | 14/22 conv (64%) | **9/9 ok** (`verdict-min` +37.4, `reading-note-min` +26.7, `release-notes-min` +29.3) | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 5/8) |
+| droid-deepseek | `deepseek-v4.1-flash`, effort none | 6/6 ok, 2.3 s/call | 15/22 conv (68%) | — | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 4/8) |
+| devin-nemotron | `nemotron-3-ultra-high` | 6/6 ok, 1.5 s/call | — | 8/9 ok (`verdict-min` +37.0, `reading-note-min` +45.3, `apparatus-min` +25.2) | 3/3 layout-identical (`mild` 5/8, `spicy` 6/8, `feral` 6/8) |
+| devin-wonder | `muse-wonder-1-0-high`, effort low | 6/6 ok, 2.5 s/call | 22/22 conv, 1.05 iters, 11/22 exact (2nd run; first runs 1.09/1.05 iters, 8/22, 10/22 exact); 2nap 167/167, see I2.md | 3/9 ok (pre-fix), **inert 0** | 2/2 layout-identical (feral: 1 of 8 rejected) |
+| devin-swe-2 | `swe-2-high`, effort medium | 6/6 ok, 2.2 s/call | 22/22 conv, 1.09 iters, 9/22 exact | **9/9 ok** (`reading-note-min` +52.0 ceiling, `release-notes-min` +29.4, `verdict-min` +22.7, `apparatus-min` +21.5) | 3/3 layout-identical (`mild` 8/8, `spicy` 7/8, `feral` 4/8) |
 | devin-summarizer | unreported | 6/6 ok | (I2/I3 columns) | | |
 | ollama (qwen2.5-coder:1.5b, local) | `qwen2.5-coder:1.5b` | 5/6 ok, repair-patch wrong shape | gated off | | |
 | gemini (gemini-cli `--acp`) | `gemini-1.5-flash` | 0/6: 403 "Consumer 'projects/undefined' has been suspended" — account-side auth | | | |

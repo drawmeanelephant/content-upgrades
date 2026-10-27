@@ -1,0 +1,41 @@
+{
+  "profile": "devin-nemotron",
+  "profile_source": "scripts/providers.sh",
+  "label": "Nemotron 3 Ultra via ACP (devin)",
+  "backend": "acp",
+  "model": "nemotron-3-ultra-high",
+  "effort": "high",
+  "expect": "nemotron-3-*",
+  "note": null,
+  "started": "2026-10-27T22:20:33Z",
+  "finished": "2026-10-27T22:22:10Z",
+  "knap_mcp": {
+    "version": "0.1.0",
+    "git": "82ae53e+dirty"
+  },
+  "engines": {
+    "k4o": "k4o-aeba163",
+    "dogbed": "dogbed-d96b125"
+  },
+  "host": "Darwin arm64",
+  "runs": [
+    {
+      "suite": "smoke",
+      "command": "knap-mcp smoke --backend acp",
+      "exit": 0,
+      "seconds": 9,
+      "at": "2026-10-27T22:20:42Z",
+      "out": "smoke.out",
+      "err": "smoke.err"
+    },
+    {
+      "suite": "voice",
+      "command": "knap-mcpvoice_suite",
+      "exit": 0,
+      "seconds": 88,
+      "at": "2026-10-27T22:22:10Z",
+      "out": "voice.out",
+      "err": "voice.err"
+    }
+  ]
+}

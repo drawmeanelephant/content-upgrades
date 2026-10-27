@@ -23,7 +23,7 @@
 # (default ~/.config/knap/providers.sh) as a knap_profile_local function
 # with the same contract plus a KNAP_PROFILES_LOCAL list; they're tried first.
 
-KNAP_PROFILES="fake spark wonder baseten compat ollama opencode-spark-1.3 opencode-spark-1.2 opencode-wonder-1.0 devin-wonder devin-swe-2 devin-summarizer gemini codex"
+KNAP_PROFILES="fake spark wonder baseten compat ollama opencode-spark-1.3 opencode-spark-1.2 opencode-wonder-1.0 devin-wonder devin-swe-2 devin-nemotron devin-summarizer droid-nemotron droid-glm droid-deepseek droid-mistral gemini codex"
 
 # opencode acp has no --model flag and defaults to opencode/flint-40b-free,
 # so the model always goes through OPENCODE_CONFIG_CONTENT. The single quotes
@@ -33,6 +33,15 @@ knap_opencode() {
     backend=acp cmds=opencode expect="opencode/$1"
     label="$2 via ACP (opencode)"
     export KNAP_ACP_AGENT="env 'OPENCODE_CONFIG_CONTENT={\"model\":\"opencode/$1\"}' opencode acp"
+}
+
+# droid exec --output-format acp reads its default model from --settings <json>.
+knap_droid() {
+    backend=acp cmds=droid expect="$1"
+    label="$2 via ACP (droid)"
+    droid_cfg="${TMPDIR:-/tmp}/knap-droid-$1.json"
+    printf '{"model":"%s","reasoningEffort":"%s"}\n' "$1" "${3:-none}" >"$droid_cfg"
+    export KNAP_ACP_AGENT="droid exec --output-format acp --settings '$droid_cfg'"
 }
 
 knap_profile() {
@@ -69,11 +78,20 @@ knap_profile() {
         label='SWE-2 via ACP (devin, free tier)'
         export KNAP_ACP_AGENT='devin acp --model swe-2-medium'
         ;;
+    devin-nemotron)
+        backend=acp cmds=devin expect='nemotron-3-*'
+        label='Nemotron 3 Ultra via ACP (devin)'
+        export KNAP_ACP_AGENT='devin acp --model nemotron-3-ultra-high'
+        ;;
     devin-summarizer)
         backend=acp cmds=devin expect='*'
         label='devin summarizer agent via ACP'
         export KNAP_ACP_AGENT='devin acp --agent-type summarizer'
         ;;
+    droid-nemotron) knap_droid nemotron-3.5-super 'Nemotron 3.5 Super' none ;;
+    droid-glm) knap_droid glm-5.3-flash 'GLM 5.3 Flash' none ;;
+    droid-deepseek) knap_droid deepseek-v4.1-flash 'DeepSeek V4.1 Flash' none ;;
+    droid-mistral) knap_droid mistral-medium-3.5 'Mistral Medium 3.5' none ;;
     gemini)
         backend=acp cmds=gemini expect='gemini-*'
         label='Gemini via ACP (gemini-cli, Google account)'
