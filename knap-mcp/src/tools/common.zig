@@ -22,9 +22,15 @@ pub fn requireStr(ctx: *Ctx, args: ?ObjectMap, key: []const u8) Error![]const u8
     return getStr(args, key) orelse ctx.fail("missing required argument '{s}'", .{key});
 }
 
+/// Re-serialize the `data` argument for `--data <file>` staging. Every
+/// schema declares `"data":{"type":"object"}` — anything else is a client
+/// bug, not an engine diagnostic. Numbers keep their request-text form:
+/// the MCP layer parses with .parse_numbers = false, so .number_string
+/// values here stringify verbatim (1.50 stays 1.50).
 pub fn requireData(ctx: *Ctx, args: ?ObjectMap) Error![]const u8 {
     const a = args orelse return ctx.fail("missing arguments", .{});
     const v = a.get("data") orelse return ctx.fail("missing required argument 'data'", .{});
+    if (v != .object) return ctx.fail("data must be a JSON object", .{});
     return std.json.Stringify.valueAlloc(ctx.arena, v, .{}) catch return error.OutOfMemory;
 }
 
@@ -76,4 +82,25 @@ test "getStr ignores missing and non-string values" {
     try std.testing.expect(getStr(m, "n") == null);
     try std.testing.expect(getStr(m, "missing") == null);
     try std.testing.expect(getStr(null, "s") == null);
+}
+
+test "requireData rejects non-objects and keeps number_string verbatim" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var ctx: Ctx = undefined;
+    ctx.arena = arena.allocator();
+    ctx.err_msg = "";
+
+    const args = try std.json.parseFromSliceLeaky(std.json.Value, ctx.arena,
+        \\{"data":{"year":1.50,"n":2}}
+    , .{ .parse_numbers = false });
+    try std.testing.expectEqualStrings(
+        \\{"year":1.50,"n":2}
+    , try requireData(&ctx, args.object));
+
+    const bad = try std.json.parseFromSliceLeaky(std.json.Value, ctx.arena,
+        \\{"data":"x"}
+    , .{});
+    try std.testing.expectError(error.ToolFailed, requireData(&ctx, bad.object));
+    try std.testing.expectEqualStrings("data must be a JSON object", ctx.err_msg);
 }

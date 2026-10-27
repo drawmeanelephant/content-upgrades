@@ -3,6 +3,7 @@
 //! responses carry references, not payloads (context economy rule 4).
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Ctx = @import("ctx.zig").Ctx;
 
 var counter: usize = 0;
@@ -10,6 +11,15 @@ var counter: usize = 0;
 fn stamp(ctx: *Ctx) u64 {
     const ns = std.Io.Timestamp.now(ctx.io, .real).nanoseconds;
     return @intCast(@max(0, ns));
+}
+
+/// Pid without a libc dependency (the linux build is freestanding).
+fn processId() u32 {
+    return switch (builtin.os.tag) {
+        .linux => @intCast(std.os.linux.getpid()),
+        .windows => std.os.windows.GetCurrentProcessId(),
+        else => @intCast(std.c.getpid()),
+    };
 }
 
 pub const Error = error{ ToolFailed, OutOfMemory };
@@ -27,6 +37,7 @@ pub fn put(ctx: *Ctx, extension: []const u8, bytes: []const u8) Error![]const u8
     const rel = try std.fmt.allocPrint(ctx.arena, "{s}/{s}.{s}", .{ artifactsPath(ctx), doc_id, extension });
     std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = rel, .data = bytes }) catch
         return ctx.fail("artifact store write failed", .{});
+    prune(ctx);
     return doc_id;
 }
 
@@ -85,14 +96,126 @@ pub fn scratchDir(ctx: *Ctx) Error![]const u8 {
     return rel;
 }
 
-/// A unique scratch file path inside <store>/tmp.
+/// A unique scratch file path inside <store>/tmp. The pid keeps two
+/// processes sharing a KNAP_MCP_HOME from colliding when their real-clock
+/// stamps and per-process counters line up.
 pub fn scratchFile(ctx: *Ctx, ext: []const u8) Error![]const u8 {
     counter += 1;
-    return std.fmt.allocPrint(ctx.arena, "{s}/scratch-{d}-{d}.{s}", .{
-        try scratchDir(ctx), stamp(ctx), counter, ext,
+    return std.fmt.allocPrint(ctx.arena, "{s}/scratch-{d}-{d}-{d}.{s}", .{
+        try scratchDir(ctx), processId(), stamp(ctx), counter, ext,
     });
+}
+
+/// Delete this process's leftover scratch files. Scratch content is
+/// request-scoped, so the server sweeps after each dispatch; foreign-pid
+/// files (a crashed run, a concurrent CLI) are left alone.
+pub fn sweepScratch(ctx: *Ctx) void {
+    const dir_path = std.fmt.allocPrint(ctx.arena, "{s}/tmp", .{ctx.store_dir}) catch return;
+    const prefix = std.fmt.allocPrint(ctx.arena, "scratch-{d}-", .{processId()}) catch return;
+    var d = std.Io.Dir.openDir(.cwd(), ctx.io, dir_path, .{ .iterate = true }) catch return;
+    defer d.close(ctx.io);
+    var it = d.iterate();
+    while (it.next(ctx.io) catch null) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.startsWith(u8, entry.name, prefix)) continue;
+        const rel = std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ dir_path, entry.name }) catch continue;
+        std.Io.Dir.deleteFile(.cwd(), ctx.io, rel) catch {};
+    }
+}
+
+/// The artifacts FIFO cap: `KNAP_STORE_MAX_ARTIFACTS`, default 256, 0
+/// disables pruning.
+fn maxArtifacts(ctx: *Ctx) usize {
+    const s = ctx.environ.get("KNAP_STORE_MAX_ARTIFACTS") orelse return 256;
+    return std.fmt.parseInt(usize, s, 10) catch 256;
+}
+
+/// Keep the newest `maxArtifacts` `doc-*` files: the server's store lives
+/// as long as the process, so put() cannot grow without bound. Only
+/// put()-named files count toward the cap — foreign files in the dir are
+/// never evicted. Best-effort: any failure leaves the store unpruned.
+fn prune(ctx: *Ctx) void {
+    const cap = maxArtifacts(ctx);
+    if (cap == 0) return;
+    const dir_path = artifactsPath(ctx);
+    const Victim = struct {
+        name: []const u8,
+        key: Key,
+    };
+    var docs: std.ArrayList(Victim) = .empty;
+    var d = std.Io.Dir.openDir(.cwd(), ctx.io, dir_path, .{ .iterate = true }) catch return;
+    defer d.close(ctx.io);
+    var it = d.iterate();
+    while (it.next(ctx.io) catch null) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.startsWith(u8, entry.name, "doc-")) continue;
+        const name = ctx.arena.dupe(u8, entry.name) catch return;
+        docs.append(ctx.arena, .{ .name = name, .key = artifactKey(name) }) catch return;
+    }
+    if (docs.items.len <= cap) return;
+    std.mem.sort(Victim, docs.items, {}, struct {
+        fn less(_: void, a: Victim, b: Victim) bool {
+            if (a.key.ns != b.key.ns) return a.key.ns < b.key.ns;
+            return a.key.counter < b.key.counter;
+        }
+    }.less);
+    for (docs.items[0 .. docs.items.len - cap]) |v| {
+        const rel = std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ dir_path, v.name }) catch continue;
+        std.Io.Dir.deleteFile(.cwd(), ctx.io, rel) catch {};
+    }
+}
+
+const Key = struct { ns: u64, counter: u64 };
+
+/// Sort key parsed from `doc-<ns>-<counter>.<ext>`; unparseable names
+/// sort oldest-first.
+fn artifactKey(name: []const u8) Key {
+    var rest = name["doc-".len..];
+    rest = rest[0 .. std.mem.lastIndexOfScalar(u8, rest, '.') orelse rest.len];
+    var parts = std.mem.splitScalar(u8, rest, '-');
+    return .{
+        .ns = std.fmt.parseInt(u64, parts.next() orelse "", 10) catch 0,
+        .counter = std.fmt.parseInt(u64, parts.next() orelse "", 10) catch 0,
+    };
 }
 
 fn artifactsPath(ctx: *Ctx) []const u8 {
     return std.fmt.allocPrint(ctx.arena, "{s}/artifacts", .{ctx.store_dir}) catch ".knap-mcp/artifacts";
+}
+
+test "scratchFile names carry the pid; put prunes to the newest N" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    try env.put("KNAP_STORE_MAX_ARTIFACTS", "3");
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx: Ctx = .{
+        .arena = a,
+        .gpa = a,
+        .io = std.testing.io,
+        .environ = &env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path[0..]}),
+        .project_root = ".",
+    };
+
+    const scratch = try scratchFile(&ctx, "json");
+    const prefix = try std.fmt.allocPrint(a, "scratch-{d}-", .{processId()});
+    try std.testing.expect(std.mem.indexOf(u8, scratch, prefix) != null);
+    try std.testing.expect(std.mem.endsWith(u8, scratch, ".json"));
+
+    // Foreign files are never counted or evicted.
+    var ids: [5][]const u8 = undefined;
+    ids[0] = try put(&ctx, "md", "x"); // creates the artifacts dir
+    const foreign = try std.fmt.allocPrint(a, "{s}/frozen-report.json", .{artifactsPath(&ctx)});
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = foreign, .data = "{}" });
+    for (ids[1..]) |*id| id.* = try put(&ctx, "md", "x");
+    for (ids[0..2]) |id| try std.testing.expect((try read(&ctx, id)) == null);
+    for (ids[2..]) |id| try std.testing.expect((try read(&ctx, id)) != null);
+    const entries = try list(&ctx);
+    try std.testing.expectEqual(@as(usize, 4), entries.len); // 3 doc-* + frozen
 }

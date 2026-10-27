@@ -21,20 +21,23 @@ pub const tool: tools.Tool = .{
 
 fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     var tpl: []const u8 = undefined;
+    var staged: ?[]const u8 = null;
+    defer if (staged) |p| std.Io.Dir.deleteFile(.cwd(), ctx.io, p) catch {};
     if (common.getStr(args, "template_id")) |id| {
         tpl = try common.templatePath(ctx, id);
     } else if (common.getStr(args, "template_text")) |text| {
         tpl = try store.scratchFile(ctx, "knap");
+        staged = tpl;
         std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = tpl, .data = text }) catch
             return ctx.fail("cannot stage template_text", .{});
     } else return ctx.fail("provide template_id or template_text", .{});
 
-    switch (try engine.lint(ctx, tpl)) {
+    const res = try engine.lint(ctx, tpl);
+    switch (res.outcome) {
         .ok => |findings| {
             try out.writer.writeAll("{\"ok\":");
             // k4o lint: exit 0 = clean, else findings text on stdout.
-            const clean = std.mem.indexOf(u8, findings, "clean") != null;
-            try out.writer.writeAll(if (clean) "true" else "false");
+            try out.writer.writeAll(if (res.exit_code == 0) "true" else "false");
             try out.writer.writeAll(",\"findings\":");
             try std.json.Stringify.value(findings, .{}, &out.writer);
             try out.writer.writeAll("}");

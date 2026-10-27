@@ -16,7 +16,7 @@ pub const tool: tools.Tool = .{
     .name = "knap_verify_citation",
     .description = "Advisory check of a claim against evidence quotes: entails | neutral | contradicts | unknown. heuristic (default) is verbatim match plus word overlap, not NLI; decision asks a model and falls back to heuristic.",
     .input_schema =
-    \\{"type":"object","properties":{"claim":{"type":"string"},"evidence":{"oneOf":[{"type":"array","items":{"type":"string"}},{"type":"string"}]},"verifier":{"type":"string","enum":["none","heuristic","decision"]},"backend":{"type":"string","enum":["mock","spark","wonder","baseten"]}},"required":["claim","evidence"]}
+    \\{"type":"object","properties":{"claim":{"type":"string"},"evidence":{"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string"}]},"verifier":{"type":"string","enum":["none","heuristic","decision"]},"backend":{"type":"string","enum":["mock","spark","wonder","baseten"]}},"required":["claim","evidence"]}
     ,
     .run = run,
 };
@@ -26,10 +26,13 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     const evidence = try evidenceArg(ctx, args);
     const kind = verifier.parseKind(common.getStr(args, "verifier") orelse "heuristic") orelse
         return ctx.fail("verifier must be none|heuristic|decision", .{});
+    // The backend override must not touch the shared ctx: a per-request
+    // copy carries it into the verifier instead.
+    var req_ctx = ctx.*;
     if (common.getStr(args, "backend")) |b|
-        ctx.backend_kind = backend.parseKind(b) orelse return ctx.fail("unknown backend '{s}'", .{b});
+        req_ctx.backend_kind = backend.parseKind(b) orelse return ctx.fail("unknown backend '{s}'", .{b});
 
-    const c = try verifier.checkCitation(ctx, kind, claim, evidence);
+    const c = try verifier.checkCitation(&req_ctx, kind, claim, evidence);
     try out.writer.print("{{\"verifier\":\"{s}\",\"label\":\"{s}\",\"score\":{d:.2},\"reason\":", .{
         @tagName(kind), @tagName(c.label), c.score,
     });
@@ -95,6 +98,14 @@ test "knap_verify_citation: array and string evidence, bad verifier" {
     , try call(&ctx,
         \\{"claim":"a b","evidence":"a b","verifier":"none"}
     ));
+    // A backend override applies to this call only — the shared ctx keeps
+    // the process default.
+    try std.testing.expectEqualStrings(
+        \\{"verifier":"decision","label":"entails","score":1.00,"reason":"decision verifier unavailable (no MODEL_API_KEY); heuristic: verbatim quote of evidence[0]","matched":"Snapshots are coming soon."}
+    , try call(&ctx,
+        \\{"claim":"Snapshots are coming soon.","evidence":"Snapshots are coming soon.","verifier":"decision","backend":"spark"}
+    ));
+    try std.testing.expect(ctx.backend_kind == .mock);
     try std.testing.expectError(error.ToolFailed, call(&ctx,
         \\{"claim":"a","evidence":["a"],"verifier":"nli"}
     ));
