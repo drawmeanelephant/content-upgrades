@@ -1,0 +1,66 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    width: 1920px; height: 1080px;
+    background: #1e1e2e; color: #cdd6f4;
+    font-family: Menlo, monospace;
+    padding: 56px 76px;
+    display: flex; flex-direction: column;
+  }
+  .eyebrow { color: #cba6f7; font-size: 24px; letter-spacing: 3px; }
+  h1 { font-size: 50px; font-weight: 700; margin: 8px 0 4px; }
+  .sub { color: #a6adc8; font-size: 21px; margin-bottom: 26px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 11px 16px; border-top: 1px solid #45475a; vertical-align: top; }
+  thead th { border-top: 0; font-size: 22px; color: #f9e2af; font-weight: 700; }
+  td.metric { width: 30%; }
+  .metric .name { font-size: 24px; }
+  .metric .corpus { font-size: 17px; color: #7f849c; margin-top: 3px; }
+  td.cell { width: 23.3%; }
+  td.cell .v { font-size: 37px; font-weight: 700; color: #a6e3a1; white-space: nowrap; }
+  td.cell .d { font-size: 16px; color: #7f849c; margin-top: 3px; }
+  .facts { display: flex; gap: 56px; margin-top: 26px; }
+  .fact .v { font-size: 34px; color: #fab387; font-weight: 700; }
+  .fact .k { font-size: 19px; color: #a6adc8; margin-top: 2px; }
+  .fact .d { font-size: 15px; color: #7f849c; margin-top: 2px; max-width: 720px; }
+  footer { margin-top: auto; font-size: 15px; color: #6c7086; line-height: 1.55; }
+</style>
+<div class="eyebrow">KNAP-MCP · DEMO BEAT 8</div>
+<h1>the numbers — all measured</h1>
+<div class="sub" id="sub"></div>
+<table id="tbl"></table>
+<div class="facts" id="facts"></div>
+<footer id="foot"></footer>
+<script>
+const DATA = __NUMBERS_JSON__;
+
+document.getElementById('sub').textContent =
+  `engines ${DATA.engines.k4o.pin} (${DATA.engines.k4o.version}) · ${DATA.engines.dogbed.pin}` +
+  ` · scorer ${DATA.scorer} · measured ${DATA.generated.date_utc} @${DATA.generated.git}`;
+
+const tbl = document.getElementById('tbl');
+const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+tbl.innerHTML =
+  '<thead><tr><th></th>' +
+  DATA.columns.map(c => `<th>${esc(c.label)}</th>`).join('') +
+  '</tr></thead><tbody>' +
+  DATA.rows.map(r =>
+    '<tr><td class="metric"><div class="name">' + esc(r.metric) + '</div>' +
+    '<div class="corpus">' + esc(r.corpus) + '</div></td>' +
+    r.cells.map(c =>
+      '<td class="cell"><div class="v">' + esc(c.value) + '</div>' +
+      (c.detail ? '<div class="d">' + esc(c.detail) + '</div>' : '') +
+      '</td>').join('') +
+    '</tr>').join('') +
+  '</tbody>';
+
+document.getElementById('facts').innerHTML = DATA.facts.map(f =>
+  '<div class="fact"><div class="v">' + esc(f.value) + '</div>' +
+  '<div class="k">' + esc(f.label) + '</div>' +
+  '<div class="d">' + esc(f.detail) + '</div></div>').join('');
+
+document.getElementById('foot').textContent = DATA.footnotes.join('  ·  ');
+</script>
