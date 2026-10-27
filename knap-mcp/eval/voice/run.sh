@@ -146,23 +146,81 @@ echo "| negative control | target | orig | drifted | equal | result |"
 echo "|---|---|---|---|---|---|"
 jq '.take = "the **boring** database that actually ships"' data/verdict.sample.json >"$work/neg.markup.json"
 jq '.take = "the boring database\n- that actually ships"' data/verdict.sample.json >"$work/neg.newline-list.json"
-for neg in markup newline-list; do
+jq '.summary |= gsub("durable"; "**durable**")' data/verdict.sample.json >"$work/neg.strip-src.json"
+jq . data/verdict.sample.json >"$work/neg.strip-markup.json"
+for neg in markup newline-list strip-markup; do
+    ctl_field=take
+    [ "$neg" = strip-markup ] && ctl_field=summary
     for tg in $targets; do
-        orig=$(shash "$work/verdict.orig.$tg" "$tg")
+        if [ "$neg" = strip-markup ]; then
+            # The source carries `**`; the drifted value drops it. Removal
+            # must move the hash as surely as injection.
+            if ! render verdict "$work/neg.strip-src.json" "$tg" "$work/neg.strip-src.$tg"; then
+                echo "| verdict $ctl_field: $neg | $tg | render failed | | | FAIL |"
+                failed=1
+                continue
+            fi
+            orig=$(shash "$work/neg.strip-src.$tg" "$tg")
+        else
+            orig=$(shash "$work/verdict.orig.$tg" "$tg")
+        fi
         if ! render verdict "$work/neg.$neg.json" "$tg" "$work/neg.$neg.$tg"; then
-            echo "| verdict take: $neg | $tg | $orig | render failed | | FAIL |"
+            echo "| verdict $ctl_field: $neg | $tg | $orig | render failed | | FAIL |"
             failed=1
             continue
         fi
         h=$(shash "$work/neg.$neg.$tg" "$tg")
         if [ "$h" = "$orig" ]; then
-            echo "| verdict take: $neg | $tg | $orig | $h | yes | FAIL (drift not caught) |"
+            echo "| verdict $ctl_field: $neg | $tg | $orig | $h | yes | FAIL (drift not caught) |"
             failed=1
         else
-            echo "| verdict take: $neg | $tg | $orig | $h | no | pass |"
+            echo "| verdict $ctl_field: $neg | $tg | $orig | $h | no | pass |"
         fi
     done
 done
+
+# --- guard controls: bad replies must be rejected, keeping the original ---
+
+echo
+echo "| guard control | expected | result |"
+echo "|---|---|---|"
+
+if [ "$has_voice" = yes ]; then
+    mkdir -p "$work/prompts/voice/mock"
+    cat >"$work/prompts/voice/mock/spicy.jsonl" <<'EOF'
+{"template": "verdict", "field": "take", "field_role": "one-line hot take", "input": "the **boring** database that actually ships", "output": "the boring database that actually ships"}
+{"template": "verdict", "field": "take", "field_role": "one-line hot take", "input": "the boring database that actually ships", "output": "Sure! Here is the take: the boring database that actually ships."}
+{"template": "release-notes", "field": "breaking[0].fix", "field_role": "what to do about it, 1-3 sentences", "input": "Rename the key in acmedb.toml. 2.0 refuses to boot on the old name instead of quietly ignoring it, which is rude but correct.", "output": "Rename the key in acmedb.toml. 2.0 refuses to boot on the old name instead of quietly ignoring it, which is rude but correct!"}
+EOF
+    jq '.take = "the **boring** database that actually ships"' data/verdict.sample.json >"$work/ctl.markup-in.json"
+
+    # expect_reject <data> <template> <field> <kept value> <reason substring>
+    expect_reject() {
+        KNAP_PROMPTS_DIR="$work/prompts" "$bin" voice "$2" -d "$1" --tone spicy --backend mock >"$work/ctl.out.json" 2>"$work/ctl.err" || return 1
+        jq -e --arg f "$3" --arg v "$4" --arg r "$5" '
+            .fields[] | select(.field == $f)
+            | select(.status == "rejected" and .after == $v and (.reasons | join(" ") | contains($r)))' \
+            "$work/ctl.out.json" | grep -q .
+    }
+
+    for ctl in "strip-markup|$work/ctl.markup-in.json|verdict|take|the **boring** database that actually ships|drops markup character" \
+               "meta-prose-wrap|data/verdict.sample.json|verdict|take|the boring database that actually ships|wraps the input" \
+               "footnote-bang|data/release-notes.sample.json|release-notes|breaking[0].fix|Rename the key in acmedb.toml. 2.0 refuses to boot on the old name instead of quietly ignoring it, which is rude but correct.|ends with !"; do
+        name=${ctl%%|*}; rest=${ctl#*|}
+        cdata=${rest%%|*}; rest=${rest#*|}
+        ctpl=${rest%%|*}; rest=${rest#*|}
+        cfield=${rest%%|*}; rest=${rest#*|}
+        cvalue=${rest%%|*}; creason=${rest#*|}
+        if expect_reject "$cdata" "$ctpl" "$cfield" "$cvalue" "$creason"; then
+            echo "| $name | rejected, original kept | pass |"
+        else
+            echo "| $name | rejected, original kept | FAIL |"
+            failed=1
+        fi
+    done
+else
+    echo "| (skipped: knap-mcp voice not built) | | |"
+fi
 
 echo
 if [ "$has_voice" = yes ]; then

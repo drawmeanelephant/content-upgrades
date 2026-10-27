@@ -11,6 +11,7 @@ const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
 const backend = @import("backend.zig");
 const common = @import("tools/common.zig");
+const structhash = @import("structhash.zig");
 
 const Allocator = std.mem.Allocator;
 const Value = std.json.Value;
@@ -135,7 +136,7 @@ pub fn voiceData(ctx: *Ctx, template_id: []const u8, data_json: []const u8, tone
             try fields.append(a, .{ .field = slot.path, .before = before, .after = before, .status = .unchanged, .reasons = &.{} });
             continue;
         }
-        const check = try guard(a, tone, slot.role, before, reply);
+        const check = try guard(a, tone, slot.role, slot.footnote_abutting, before, reply);
         var reasons: std.ArrayList([]const u8) = .empty;
         try reasons.appendSlice(a, check.hard.items);
         for (check.budget.items) |b| try reasons.append(a, try std.fmt.allocPrint(a, "warning: {s}", .{b}));
@@ -180,6 +181,10 @@ pub const Slot = struct {
     path: []const u8,
     role: []const u8,
     ptr: *Value,
+    /// The template puts a `[^note]` marker straight after this value
+    /// (shape flag `footnote_abutting` + a `note` on the element): a
+    /// trailing `!` in the reply renders as `![^...]`, an image.
+    footnote_abutting: bool = false,
 };
 
 /// Keys that are never sent to the model, whatever a shape says (README,
@@ -204,9 +209,21 @@ pub fn neverRewritten(template_id: []const u8, key: []const u8, sub: ?[]const u8
     // Inside an element: wikilink targets (`sources[*].title`) and
     // verbatim quotes (`sources[*].quotes`).
     if (sub) |s| return neverKey(s) or std.mem.eql(u8, s, "title") or std.mem.eql(u8, s, "quotes");
-    // Page identities in the site.
+    // Page identities in the site, and titles whose kebab-case form is
+    // the frontmatter slug: rewriting one moves the page URL, which
+    // structhash cannot see (it drops frontmatter values).
     return std.mem.eql(u8, key, "title") and
-        (std.mem.eql(u8, template_id, "apparatus") or std.mem.eql(u8, template_id, "reading-note"));
+        (std.mem.eql(u8, template_id, "apparatus") or
+            std.mem.eql(u8, template_id, "reading-note") or
+            std.mem.eql(u8, template_id, "release-notes"));
+}
+
+/// verdict's slug falls back to `title` via ?? when `subject` is absent:
+/// the same slug hazard as release-notes, gated on the data.
+fn slugFallbackTitle(template_id: []const u8, key: []const u8, data: *const Value) bool {
+    if (!std.mem.eql(u8, template_id, "verdict") or !std.mem.eql(u8, key, "title")) return false;
+    const s = data.object.get("subject") orelse return true;
+    return s != .string or s.string.len == 0;
 }
 
 fn isVoice(desc: Value) bool {
@@ -234,7 +251,7 @@ pub fn collect(a: Allocator, template_id: []const u8, shape: Value, data: *Value
     const fields = shape.object.get("fields") orelse return out.items;
     if (fields != .object) return out.items;
     for (fields.object.keys(), fields.object.values()) |key, desc| {
-        if (neverRewritten(template_id, key, null)) continue;
+        if (neverRewritten(template_id, key, null) or slugFallbackTitle(template_id, key, data)) continue;
         const v = data.object.getPtr(key) orelse continue;
         const ty = descStr(desc, "type");
         if (std.mem.eql(u8, ty, "array<object>")) {
@@ -246,26 +263,37 @@ pub fn collect(a: Allocator, template_id: []const u8, shape: Value, data: *Value
                     if (!isVoice(sdesc) or neverRewritten(template_id, key, sub)) continue;
                     const sv = elem.object.getPtr(sub) orelse continue;
                     const prefix = try std.fmt.allocPrint(a, "{s}[{d}].{s}", .{ key, i, sub });
-                    try addValue(a, &out, prefix, sdesc, sv);
+                    try addValue(a, &out, prefix, sdesc, sv, footnoteAbutting(sdesc, elem.*));
                 }
             }
         } else if (isVoice(desc)) {
-            try addValue(a, &out, key, desc, v);
+            try addValue(a, &out, key, desc, v, false);
         }
     }
     return out.items;
 }
 
-fn addValue(a: Allocator, out: *std.ArrayList(Slot), path: []const u8, desc: Value, v: *Value) Allocator.Error!void {
+/// True when the shape flags `footnote_abutting` and the element actually
+/// carries a `note`: the template then emits `[^note]` right after the
+/// value, so a trailing `!` reads as image syntax.
+fn footnoteAbutting(sdesc: Value, elem: Value) bool {
+    if (sdesc != .object or elem != .object) return false;
+    const f = sdesc.object.get("footnote_abutting") orelse return false;
+    if (f != .bool or !f.bool) return false;
+    const note = elem.object.get("note") orelse return false;
+    return note == .string and note.string.len > 0;
+}
+
+fn addValue(a: Allocator, out: *std.ArrayList(Slot), path: []const u8, desc: Value, v: *Value, footnote_abutting: bool) Allocator.Error!void {
     const ty = descStr(desc, "type");
     const role = descStr(desc, "role");
     if (std.mem.eql(u8, ty, "string")) {
-        if (eligible(v)) try out.append(a, .{ .path = path, .role = role, .ptr = v });
+        if (eligible(v)) try out.append(a, .{ .path = path, .role = role, .ptr = v, .footnote_abutting = footnote_abutting });
     } else if (std.mem.eql(u8, ty, "array<string>") and v.* == .array) {
         const item_role = try std.fmt.allocPrint(a, "{s} (one item)", .{role});
         for (v.array.items, 0..) |*e, i| {
             if (!eligible(e)) continue;
-            try out.append(a, .{ .path = try std.fmt.allocPrint(a, "{s}[{d}]", .{ path, i }), .role = item_role, .ptr = e });
+            try out.append(a, .{ .path = try std.fmt.allocPrint(a, "{s}[{d}]", .{ path, i }), .role = item_role, .ptr = e, .footnote_abutting = footnote_abutting });
         }
     }
 }
@@ -579,9 +607,92 @@ fn hasSymbol(s: []const u8) bool {
     return false;
 }
 
+// Content-word sets and stemming: verifier.zig's tokenizer, re-implemented
+// here because its helpers are private. `verifier.normalize` is reused.
+const verifier = @import("verifier.zig");
+
+const stopwords = [_][]const u8{
+    "a",     "an",    "the",   "and",   "or",    "but",   "of",    "to",    "in",
+    "on",    "at",    "for",   "by",    "with",  "from",  "as",    "is",    "are",
+    "was",   "were",  "be",    "been",  "being", "it",    "its",   "this",  "that",
+    "these", "those", "has",   "have",  "had",   "do",    "does",  "did",   "will",
+    "would", "can",   "could", "should", "may",  "might", "must",  "so",    "than",
+    "then",  "there", "their", "they",  "them",  "we",    "our",   "you",   "your",
+    "he",    "she",   "his",   "her",   "i",     "me",    "my",    "if",    "into",
+    "about", "just",  "also",  "any",   "some",  "each",  "very",  "too",   "which",
+    "who",   "whom",  "what",  "when",  "where", "how",   "why",   "s",     "t",
+};
+
+const negations = [_][]const u8{
+    "no", "not", "never", "without", "cannot", "none", "nobody", "nothing", "neither", "nor",
+};
+
+const number_words = [_][]const u8{
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
+};
+
+/// Crude suffix stripping so light inflection still overlaps (verifier.zig).
+fn stem(w: []const u8) []const u8 {
+    var s = w;
+    if (s.len > 3 and s[s.len - 1] == 's' and s[s.len - 2] != 's') s = s[0 .. s.len - 1];
+    if (s.len > 4 and s[s.len - 1] == 'e') s = s[0 .. s.len - 1];
+    if (s.len > 5 and std.mem.endsWith(u8, s, "ing")) s = s[0 .. s.len - 3];
+    if (s.len > 5 and std.mem.endsWith(u8, s, "ed")) s = s[0 .. s.len - 2];
+    return s;
+}
+
+/// Deduped, stemmed content words of `s`, in order.
+fn contentWords(a: Allocator, s: []const u8) ![]const []const u8 {
+    const text = try verifier.normalize(a, s);
+    var content: std.ArrayList([]const u8) = .empty;
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    var i: usize = 0;
+    while (i < text.len) {
+        const c = text[i];
+        if (!isAlnum(c)) {
+            i += 1;
+            continue;
+        }
+        const start = i;
+        const digits = std.ascii.isDigit(c);
+        while (i < text.len) : (i += 1) {
+            const d = text[i];
+            if (digits and std.ascii.isDigit(d)) continue;
+            if (!digits and std.ascii.isAlphabetic(d)) continue;
+            if (!digits and d == '\'' and i + 1 < text.len and std.ascii.isAlphabetic(text[i + 1])) continue;
+            break;
+        }
+        var w = text[start..i];
+        if (!digits) {
+            if (std.mem.endsWith(u8, w, "n't")) continue;
+            if (std.mem.endsWith(u8, w, "'s")) w = w[0 .. w.len - 2];
+            if (std.mem.indexOfScalar(u8, w, '\'') != null) continue;
+            if (listed(&negations, w)) continue;
+            if (listed(&stopwords, w)) continue;
+            w = for (number_words, 0..) |nw, n| {
+                if (std.mem.eql(u8, nw, w)) break try std.fmt.allocPrint(a, "{d}", .{n});
+            } else stem(w);
+            if (w.len < 2 and !std.ascii.isDigit(w[0])) continue;
+        }
+        const gop = try seen.getOrPut(a, w);
+        if (!gop.found_existing) try content.append(a, w);
+    }
+    return content.items;
+}
+
+/// Same inline-structure token stream, kind and depth. The hash ignores
+/// depth but the guard wants the same comparison the renderer sees.
+fn sameSkeleton(x: []const structhash.Token, y: []const structhash.Token) bool {
+    if (x.len != y.len) return false;
+    for (x, y) |a_tok, b_tok|
+        if (a_tok.depth != b_tok.depth or !std.mem.eql(u8, a_tok.kind, b_tok.kind)) return false;
+    return true;
+}
+
 pub const Check = struct {
-    /// Hard rules 1-6, plus profanity in a mild reply. Any entry keeps the
-    /// original value.
+    /// Hard rules (facts, markup both directions, structure, overlap,
+    /// length, UTF-8), plus profanity in a mild reply. Any entry keeps
+    /// the original value.
     hard: std.ArrayList([]const u8) = .empty,
     /// The other tone budgets: advisory at runtime, failures in check.sh.
     budget: std.ArrayList([]const u8) = .empty,
@@ -598,7 +709,8 @@ pub const Check = struct {
 
 /// Every way `out` breaks the voice contract for `in_` (README, "The
 /// guard"). Inputs are assumed eligible: non-empty, one line.
-pub fn guard(a: Allocator, tone: Tone, role: []const u8, in_: []const u8, out: []const u8) Allocator.Error!Check {
+/// `footnote_abutting` marks slots the template follows with `[^note]`.
+pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool, in_: []const u8, out: []const u8) Allocator.Error!Check {
     var c: Check = .{};
     const H = struct {
         fn add(al: Allocator, list: *std.ArrayList([]const u8), comptime fmt: []const u8, args: anytype) !void {
@@ -610,6 +722,7 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, in_: []const u8, out: [
         return c;
     }
     if (hasControl(out)) try H.add(a, &c.hard, "control character or line break", .{});
+    if (!std.unicode.utf8ValidateSlice(out)) try H.add(a, &c.hard, "invalid UTF-8", .{});
 
     const fi = try facts(a, in_);
     const fo = try facts(a, out);
@@ -620,9 +733,18 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, in_: []const u8, out: [
     }
 
     for (markup) |m| {
-        if (std.mem.indexOfScalar(u8, out, m) != null and std.mem.indexOfScalar(u8, in_, m) == null)
-            try H.add(a, &c.hard, "adds markup character {c}", .{m});
+        const ni = std.mem.count(u8, in_, &[1]u8{m});
+        const no = std.mem.count(u8, out, &[1]u8{m});
+        if (no > ni) try H.add(a, &c.hard, "adds markup character {c}", .{m});
+        if (no < ni) try H.add(a, &c.hard, "drops markup character {c}", .{m});
     }
+    // Same token stream means the value renders with the same structure
+    // hash; a dropped `**` changes it as surely as an injected one.
+    const si = try structhash.skeletonOpts(a, in_, .markdown, .{});
+    const so = try structhash.skeletonOpts(a, out, .markdown, .{});
+    if (!sameSkeleton(si, so)) try H.add(a, &c.hard, "changes inline structure", .{});
+    if (footnote_abutting and std.mem.endsWith(u8, out, "!"))
+        try H.add(a, &c.hard, "ends with ! where a footnote marker follows (renders as image syntax)", .{});
     inline for (.{ "!!", "??" }) |pair| {
         if (std.mem.indexOf(u8, out, pair) != null and std.mem.indexOf(u8, in_, pair) == null)
             try H.add(a, &c.hard, "adds " ++ pair, .{});
@@ -640,6 +762,25 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, in_: []const u8, out: [
         var it = std.mem.tokenizeAny(u8, out, " \t\n");
         while (it.next()) |_| nw += 1;
         if (nw > 4) try H.add(a, &c.hard, "word-limited role, {d} words, max 4", .{nw});
+    }
+
+    // A rewrite must reword the value, not abandon it or wrap it in meta
+    // prose: keep at least half the input's content words, and no reply
+    // that contains the input verbatim may lead with two or more content
+    // words the input lacks ("Sure! Here is the take: ...").
+    const ci = try contentWords(a, in_);
+    const co = try contentWords(a, out);
+    if (ci.len >= 3) {
+        var kept: usize = 0;
+        for (ci) |w| kept += @intFromBool(listed(co, w));
+        if (kept * 2 < ci.len)
+            try H.add(a, &c.hard, "keeps only {d} of {d} input content words", .{ kept, ci.len });
+    }
+    if (std.mem.indexOf(u8, out, in_)) |p| {
+        const lead = try contentWords(a, out[0..p]);
+        var extra: usize = 0;
+        for (lead) |w| extra += @intFromBool(!listed(ci, w));
+        if (extra >= 2) try H.add(a, &c.hard, "wraps the input with extra prose", .{});
     }
 
     const max = budgetOf(tone);
@@ -697,9 +838,9 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 19), lines.len);
+    try testing.expectEqual(@as(usize, 21), lines.len);
     for (lines) |l| {
-        const c = try guard(a, parseTone(l.tone).?, l.field_role, l.input, l.output);
+        const c = try guard(a, parseTone(l.tone).?, l.field_role, false, l.input, l.output);
         const all = try joined(a, c.hard.items);
         const budget = try joined(a, c.budget.items);
         if (std.mem.indexOf(u8, all, l.expect) == null and std.mem.indexOf(u8, budget, l.expect) == null) {
@@ -720,7 +861,7 @@ test "every example and mock reply passes the guard, budgets included" {
             const lines = try parseLines(a, try readTest(a, "prompts/voice/" ++ kind ++ "/" ++ tone ++ ".jsonl"));
             try testing.expect(lines.len > 0);
             for (lines) |l| {
-                const c = try guard(a, parseTone(tone).?, l.field_role, l.input, l.output);
+                const c = try guard(a, parseTone(tone).?, l.field_role, false, l.input, l.output);
                 if (!c.strict()) {
                     std.debug.print("{s}/{s}.jsonl {s} {s}: [{s}] [{s}]\n", .{ kind, tone, l.template, l.field, try joined(a, c.hard.items), try joined(a, c.budget.items) });
                     return error.TestUnexpectedResult;
@@ -773,7 +914,7 @@ test "never-rewritten keys win over a shape's voice flag" {
         \\"quotes":{"type":"array<string>","role":"q","voice":true}}}}}
     , .{});
     var data = try std.json.parseFromSliceLeaky(Value, a,
-        \\{"title":"T","url":"https://x","take":"hot","blank":"","items":["one","two\nlines",3],
+        \\{"title":"T","subject":"S","url":"https://x","take":"hot","blank":"","items":["one","two\nlines",3],
         \\"sources":[{"name":"N","title":"W","why":"because","quotes":["q"]}]}
     , .{});
     const want = [_][2][]const u8{ .{ "take", "k" }, .{ "items[0]", "bullets (one item)" }, .{ "sources[0].why", "y" } };
@@ -783,8 +924,61 @@ test "never-rewritten keys win over a shape's voice flag" {
         try testing.expectEqualStrings(w[0], s.path);
         try testing.expectEqualStrings(w[1], s.role);
     }
-    // verdict's title is flagged and not a page identity.
+    // verdict's title is flagged and safe while `subject` carries the slug;
+    // without a subject the slug falls back to `title`, so it drops out.
     try testing.expectEqual(want.len + 1, (try collect(a, "verdict", shape, &data)).len);
+    _ = data.object.orderedRemove("subject");
+    try testing.expectEqual(want.len, (try collect(a, "verdict", shape, &data)).len);
+    // release-notes title is a slug too, whatever the shape says.
+    try testing.expectEqual(want.len, (try collect(a, "release-notes", shape, &data)).len);
+}
+
+test "collect flags footnote-abutting slots only when the element has a note" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const shape = try std.json.parseFromSliceLeaky(Value, a,
+        \\{"fields":{"items":{"type":"array<object>","role":"rows","fields":{
+        \\"what":{"type":"string","role":"w","voice":true,"footnote_abutting":true},
+        \\"note":{"type":"string","role":"n","optional":true}}}}}
+    , .{});
+    var data = try std.json.parseFromSliceLeaky(Value, a,
+        \\{"items":[{"what":"one","note":"n1"},{"what":"two"}]}
+    , .{});
+    const slots = try collect(a, "release-notes", shape, &data);
+    try testing.expectEqual(@as(usize, 2), slots.len);
+    try testing.expect(slots[0].footnote_abutting);
+    try testing.expect(!slots[1].footnote_abutting);
+}
+
+test "guard rejects markup removal, wrappers, bad UTF-8 and a footnote-abutting bang" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Markup removal trips both the count rule and the skeleton check.
+    var c = try guard(a, .mild, "r", false, "the **boring** database", "the boring database");
+    const all = try joined(a, c.hard.items);
+    try testing.expect(std.mem.indexOf(u8, all, "drops markup character *") != null);
+    try testing.expect(std.mem.indexOf(u8, all, "changes inline structure") != null);
+
+    // Meta prose around the verbatim input is not a rewrite.
+    c = try guard(a, .spicy, "one-line hot take", false, "the boring database that actually ships", "Sure! Here is the take: the boring database that actually ships.");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "wraps the input") != null);
+
+    // Topic drift keeps too few content words.
+    c = try guard(a, .spicy, "r", false, "the boring database that actually ships", "an entirely unrelated remark about the weather");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "keeps only") != null);
+
+    // Invalid UTF-8 must never reach the result object.
+    c = try guard(a, .spicy, "r", false, "the boring database", "the \xf0\x28 boring database");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "invalid UTF-8") != null);
+
+    // A trailing `!` is fine mid-table, fatal right before a footnote marker.
+    c = try guard(a, .feral, "r", false, "it just works", "it just works, dammit!");
+    try testing.expect(c.passes());
+    c = try guard(a, .feral, "r", true, "it just works", "it just works, dammit!");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "ends with ! where a footnote marker follows") != null);
 }
 
 test "mock voice pass changes every sample, keeps structure and other values" {

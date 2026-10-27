@@ -4,7 +4,7 @@
   "fields": {
     "product":          {"type": "string", "role": "product name; frontmatter `product`, and the page heading when `title` is absent"},
     "version":          {"type": "string", "role": "version string, rendered as inline code, e.g. 2.0.0"},
-    "title":            {"type": "string", "role": "page heading; falls back to `product` via ??. Its kebab-case form becomes frontmatter `slug`", "optional": true, "voice": true},
+    "title":            {"type": "string", "role": "page heading; falls back to `product` via ??. Its kebab-case form becomes frontmatter `slug`, so it is never rewritten", "optional": true},
     "codename":         {"type": "string", "role": "release codename, frontmatter only; falls back to a stock line via ??", "optional": true},
     "date":             {"type": "string", "role": "release date, YYYY-MM-DD; frontmatter `released` and the meta line"},
     "verdict":          {"type": "string", "role": "two-to-four word upgrade verdict, rendered bold, e.g. upgrade now|wait for .1|skip it", "voice": true},
@@ -18,12 +18,12 @@
     "breaking_warning": {"type": "string", "role": "body of the 'Read this before you upgrade' danger callout; falls back to a stock warning via ??. Only shown when `breaking` is non-empty", "optional": true, "voice": true},
     "breaking":         {"type": "array<object>", "role": "breaking changes, one h3 each", "optional": true, "apparatus": "callout", "max_items": 3, "words": 12, "fields": {
       "change": {"type": "string", "role": "what broke, one line, h3 heading", "voice": true},
-      "fix":    {"type": "string", "role": "what to do about it, 1-3 sentences", "voice": true},
+      "fix":    {"type": "string", "role": "what to do about it, 1-3 sentences", "voice": true, "footnote_abutting": true},
       "note":   {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref. Must match a `notes` key exactly", "optional": true, "ref": "notes"}
     }},
     "highlights":       {"type": "array<object>", "role": "what actually changed, one h3 each", "fields": {
       "name":  {"type": "string", "role": "feature name, one line, h3 heading"},
-      "what":  {"type": "string", "role": "what it does and why you care, 1-3 sentences", "voice": true},
+      "what":  {"type": "string", "role": "what it does and why you care, 1-3 sentences", "voice": true, "footnote_abutting": true},
       "claim": {"type": "string", "role": "the vendor's own words, copied verbatim from the page at `changelog_url`, one line. Rendered in a 'Their words, not ours' quote callout with a #:~:text= deep link, so it must match the changelog text exactly", "optional": true, "evidence": true},
       "note":  {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref", "optional": true, "ref": "notes"}
     }},

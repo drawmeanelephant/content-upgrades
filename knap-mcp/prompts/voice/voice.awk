@@ -186,8 +186,15 @@ function facts(s, T) {
 
 function why(m) { REASONS = REASONS (REASONS == "" ? "" : "; ") m }
 
+# Occurrences of a single literal character (MARKUP chars are regex metas).
+function countchar(s, c,    n, p, rest) {
+	n = 0; rest = s
+	while ((p = index(rest, c)) > 0) { n++; rest = substr(rest, p + 1) }
+	return n
+}
+
 # Sets REASONS to every way `out` breaks the voice contract for `in_`.
-function guard(tone, role, in_, out,    t, i, c, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang) {
+function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang) {
 	REASONS = ""
 	if (in_ == "") why("empty input")
 	if (out == "") { why("empty output"); return }
@@ -201,7 +208,9 @@ function guard(tone, role, in_, out,    t, i, c, L, O, lo, hi, nw, words, tmp, n
 
 	for (i = 1; i <= length(MARKUP); i++) {
 		c = substr(MARKUP, i, 1)
-		if (index(out, c) && !index(in_, c)) why("adds markup character " c)
+		ni = countchar(in_, c); no = countchar(out, c)
+		if (no > ni) why("adds markup character " c)
+		else if (no < ni) why("drops markup character " c)
 	}
 	if (index(out, "!!") && !index(in_, "!!")) why("adds !!")
 	if (index(out, "??") && !index(in_, "??")) why("adds ??")
