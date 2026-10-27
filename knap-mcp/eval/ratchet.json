@@ -15,6 +15,18 @@
       "expect": {"min_gain": 15}
     },
     {
+      "id": "verdict-min",
+      "template_id": "verdict",
+      "data": "@../data/verdict.min.json",
+      "expect": {"min_gain": 15}
+    },
+    {
+      "id": "apparatus-min",
+      "template_id": "apparatus",
+      "data": "@../data/verdict.min.json",
+      "expect": {"min_gain": 10, "stop": "stalled"}
+    },
+    {
       "id": "release-notes-sample",
       "template_id": "release-notes",
       "data": "@../data/release-notes.sample.json",

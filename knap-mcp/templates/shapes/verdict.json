@@ -5,7 +5,7 @@
     "title":      {"type": "string", "role": "page heading and frontmatter `title`", "voice": true},
     "subject":    {"type": "string", "role": "the thing being judged; frontmatter `subject`, and its kebab-case form becomes frontmatter `slug`. Falls back to `title` via ??", "optional": true},
     "date":       {"type": "string", "role": "review date, YYYY-MM-DD; frontmatter `date` and the meta line (falls back to 'press time')", "optional": true},
-    "tags":       {"type": "array<string>", "role": "frontmatter tags, lowercase kebab-case", "optional": true},
+    "tags":       {"type": "array<string>", "role": "frontmatter tags, lowercase kebab-case", "optional": true, "apparatus": "frontmatter", "max_items": 5, "words": 1},
     "verdict":    {"type": "string", "role": "two-to-four word verdict, rendered bold, e.g. give a shit|skip it", "voice": true},
     "gaf":        {"type": "string", "role": "give-a-shit level: high|medium|low; falls back to unrated via ??", "optional": true},
     "take":       {"type": "string", "role": "one-line hot take after the verdict", "voice": true},
@@ -14,17 +14,17 @@
       "text": {"type": "string", "role": "verbatim quote copied from the page at `url`, one line. Rendered with a #:~:text= deep link, so it must match the source text exactly; no unbalanced parentheses"},
       "url":  {"type": "string", "role": "deep link target (http/https, no #fragment; fragment_link adds the fragment)"}
     }},
-    "blockers":   {"type": "array<string>", "role": "dealbreakers, bulleted inside the 'Dealbreakers' danger callout", "optional": true},
-    "receipts":   {"type": "array<object>", "role": "claim/evidence rows of the 'Receipts' pipe table; header row is fixed in the template", "optional": true, "fields": {
+    "blockers":   {"type": "array<string>", "role": "dealbreakers, bulleted inside the 'Dealbreakers' danger callout", "optional": true, "apparatus": "list", "max_items": 3, "words": 6},
+    "receipts":   {"type": "array<object>", "role": "claim/evidence rows of the 'Receipts' pipe table; header row is fixed in the template", "optional": true, "apparatus": "table", "max_items": 3, "words": 4, "fields": {
       "claim":      {"type": "string", "role": "the claim, one line", "voice": true},
-      "evidence":   {"type": "string", "role": "what backs it, one line", "voice": true},
+      "evidence":   {"type": "string", "role": "what backs it, one line; verbatim from a source quote", "voice": true, "evidence": true},
       "source":     {"type": "string", "role": "name of a page in `sources`, rendered as a [[wikilink]]; omit for an unsourced row", "optional": true},
       "confidence": {"type": "string", "role": "high|medium|low (apparatus claim map; falls back to unrated)", "optional": true},
-      "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the evidence cell. Must match a `footnotes` key exactly", "optional": true}
+      "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the evidence cell. Must match a `footnotes` key exactly", "optional": true, "ref": "footnotes"}
     }},
     "bottom_line": {"type": "string", "role": "closing verdict, 1-2 sentences, under the 'Verdict' heading", "voice": true},
-    "caveats":    {"type": "array<string>", "role": "fine print, bulleted inside the collapsed 'Fine print' warning callout", "optional": true},
-    "sources":    {"type": "array<object>", "role": "cited sources, names rendered as [[wikilinks]]; also the data behind apparatus.knap", "optional": true, "fields": {
+    "caveats":    {"type": "array<string>", "role": "fine print, bulleted inside the collapsed 'Fine print' warning callout", "optional": true, "apparatus": "list", "max_items": 3, "words": 6},
+    "sources":    {"type": "array<object>", "role": "cited sources, names rendered as [[wikilinks]]; also the data behind apparatus.knap", "optional": true, "apparatus": "wikilink", "max_items": 4, "words": 4, "fields": {
       "name":        {"type": "string", "role": "target name for [[wikilink]]; name only pages that exist, an invented name is a dangling wikilink"},
       "url":         {"type": "string", "role": "deep link target (http/https, no #fragment)"},
       "rel":         {"type": "string", "role": "relationship tag, rendered as inline code, e.g. documentation|self-published|benchmark"},
@@ -36,8 +36,8 @@
         "used_for": {"type": "string", "role": "what the quote backs, one line", "optional": true, "voice": true}
       }}
     }},
-    "related":    {"type": "array<string>", "role": "names of existing site pages; rendered as [[wikilinks]] in frontmatter `related` and the 'See also' link cloud. Name only pages that exist; an invented name is a dangling wikilink", "optional": true},
-    "apparatus_page": {"type": "string", "role": "name of the companion apparatus page; a [[wikilink]] in frontmatter `apparatus` and an ![[embed]] inside the collapsed 'The full apparatus' info callout", "optional": true},
+    "related":    {"type": "array<string>", "role": "names of existing site pages; rendered as [[wikilinks]] in frontmatter `related` and the 'See also' link cloud. Name only pages that exist; an invented name is a dangling wikilink", "optional": true, "apparatus": "wikilink", "max_items": 3, "words": 3},
+    "apparatus_page": {"type": "string", "role": "name of the companion apparatus page; a [[wikilink]] in frontmatter `apparatus` and an ![[embed]] inside the collapsed 'The full apparatus' info callout", "optional": true, "apparatus": "embed", "words": 4},
     "footnotes":  {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key should be referenced by some receipt `note`, and every `note` must be a key here; format_check flags strays", "optional": true}
   }
 }

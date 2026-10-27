@@ -84,6 +84,41 @@
         "Still single-region, so a region loss is still an outage no matter how good the snapshots get.",
         "Drivers older than 1.8 can no longer connect at all."
       ]
+    },
+    "verdict": {
+      "apparatus_page": ["Apparatus: AcmeDB verdict"],
+      "sources[+]": [
+        {"name": "AcmeDB docs — architecture", "url": "https://example.com/acmedb/docs/architecture", "rel": "documentation", "reliability": "high", "gaf": "medium", "accessed": "2026-10-24"}
+      ],
+      "related[+]": ["Apparatus: AcmeDB verdict", "AcmeDB 2.0 migration guide", "AcmeDB docs — architecture"],
+      "tags[+]": ["verdict", "databases", "acmedb", "taste-verdict"],
+      "blockers[+]": [
+        "No managed backups yet; snapshots are still listed as coming soon.",
+        "Single-region only, so a region loss is an outage.",
+        "The v1 wire protocol is gone; drivers older than 1.8 cannot connect."
+      ],
+      "caveats[+]": [
+        "The p99 latency number is vendor-reported on a laptop; we did not replicate it.",
+        "Checked against the docs at press time. Roadmaps move.",
+        "Pricing, limits, and support tiers were not reviewed."
+      ],
+      "receipts[+]": [
+        {"claim": "Managed backups are still a promise", "evidence": "Point-in-time snapshots are coming soon.", "source": "AcmeDB docs — backups", "confidence": "high"},
+        {"claim": "Single-region keeps it simple and keeps it fragile", "evidence": "Cross-region replication is on the roadmap.", "source": "AcmeDB docs — backups", "confidence": "high"},
+        {"claim": "The 2 ms p99 is real but self-reported", "evidence": "p99 read latency under 2ms on a laptop.", "source": "AcmeDB launch post", "confidence": "low"}
+      ]
+    },
+    "apparatus": {
+      "receipts[+]": [
+        {"claim": "p99 reads under 2ms", "evidence": "p99 read latency under 2ms on a laptop.", "source": "AcmeDB launch post", "confidence": "low"},
+        {"claim": "no managed backups yet", "evidence": "Point-in-time snapshots are coming soon.", "source": "AcmeDB docs — backups", "confidence": "high"},
+        {"claim": "single-region only", "evidence": "Cross-region replication is on the roadmap.", "source": "AcmeDB docs — backups", "confidence": "high"}
+      ],
+      "caveats[+]": [
+        "Open: do the planned snapshots cover point-in-time restore, or only full backups.",
+        "Open: how wal_dir data migrates when the WAL lives on a separate volume.",
+        "Open: whether the roadmap dates in the tracker still hold."
+      ]
     }
   }
 }

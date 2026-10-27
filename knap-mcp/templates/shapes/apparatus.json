@@ -5,7 +5,7 @@
     "title":    {"type": "string", "role": "page heading and frontmatter `title`; the apparatus page name when `apparatus_page` is absent"},
     "subtitle": {"type": "string", "role": "deck line, rendered italic; falls back to a stock line via ??", "optional": true, "voice": true},
     "apparatus_page": {"type": "string", "role": "name of this apparatus page; wins over `title` for the heading via ??", "optional": true},
-    "verdict_page":   {"type": "string", "role": "name of the verdict page this apparatus backs; a [[wikilink]] in frontmatter `verdict` and the 'receipts behind' line. Omit (or equal to the heading) to drop the back-link", "optional": true},
+    "verdict_page":   {"type": "string", "role": "name of the verdict page this apparatus backs; a [[wikilink]] in frontmatter `verdict` and the 'receipts behind' line. Omit (or equal to the heading) to drop the back-link", "optional": true, "apparatus": "wikilink", "words": 4},
     "date":     {"type": "string", "role": "curation date, YYYY-MM-DD; frontmatter `date`", "optional": true},
     "sources":  {"type": "array<object>", "role": "citation list: one ledger row and one h3 section each, names rendered as [[wikilinks]]", "fields": {
       "name":        {"type": "string", "role": "target name for [[wikilink]]; name only pages that exist, an invented name is a dangling wikilink"},
@@ -19,14 +19,14 @@
         "used_for": {"type": "string", "role": "what the quote backs, one line", "optional": true, "voice": true}
       }}
     }},
-    "receipts": {"type": "array<object>", "role": "the claim map: one pipe-table row per claim; header row is fixed in the template", "optional": true, "fields": {
+    "receipts": {"type": "array<object>", "role": "the claim map: one pipe-table row per claim; header row is fixed in the template", "optional": true, "apparatus": "table", "max_items": 3, "words": 8, "fields": {
       "claim":      {"type": "string", "role": "the claim, one line", "voice": true},
       "evidence":   {"type": "string", "role": "what backs it (verdict page only)", "optional": true, "voice": true},
       "source":     {"type": "string", "role": "name of a page in `sources`, rendered as a [[wikilink]]; omit for 'nothing yet'", "optional": true},
       "confidence": {"type": "string", "role": "high|medium|low; falls back to unrated via ??", "optional": true},
-      "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the claim. Must match a `footnotes` key exactly", "optional": true}
+      "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the claim. Must match a `footnotes` key exactly", "optional": true, "ref": "footnotes"}
     }},
-    "caveats":  {"type": "array<string>", "role": "open questions, bulleted inside the collapsed 'Open questions' warning callout", "optional": true},
+    "caveats":  {"type": "array<string>", "role": "open questions, bulleted inside the collapsed 'Open questions' warning callout", "optional": true, "apparatus": "list", "max_items": 3, "words": 12},
     "footnotes": {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key should be referenced by some receipt `note`, and every `note` must be a key here; format_check flags strays", "optional": true}
   }
 }
