@@ -29,14 +29,14 @@ Status key:
 
 | # | Beat | Target | Last render | Tape | Depends on | Status |
 |---|---|---|---|---|---|---|
-| 1 | Cold open: the generic AI doc | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
+| 1 | Cold open: the generic AI doc (density/2 25.7) | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
 | 2 | Ask for a verdict: model drafts data only | 20s | 20.7s | `02-verdict-data.tape` | frozen drafted take (I5); `boris_ask` (B3); MCP-client footage: #88 (human) | ready |
-| 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.2s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
+| 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 25.0s | `03-repair.tape` | frozen live take (I5); seed + diag: main | ready |
 | 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
 | 6 | Same template, mild vs feral | 20s | 21.8s | `06-voice.tape` | C3 (mock replies), `knap_voice`: C1; structure hash: C2 | ready (mock) |
-| 7 | One source -> md + html + apparatus | 15s | 18.6s | `07-one-source.tape` | main; oliver target: P1; one shared data file: cut (T2/I5 deferred) | partial |
+| 7 | One source -> md + html + apparatus | 15s | 15.2s | `07-one-source.tape` | main; oliver target: P1; one shared data file: cut (T2/I5 deferred) | ready |
 | 8 | Numbers card, measured only | 10s | 12.0s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
 
 **Runtime.** SPEC calls the demo "~2 min", but its per-beat targets add up to 2:20
@@ -54,22 +54,23 @@ screen it is verdict.html — oliver renders byte-identical to markdown for this
 template, so html is what makes "several views" visible. The k4o main markdown
 target emits pipe tables, so glow renders the receipts table properly.
 
-**Retakes.** Inputs are fixed, so every take prints the same text. The one exception is
-the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timestamp.
+**Retakes.** Inputs are fixed, so every take prints the same text. Beat 3's repair
+result is a frozen file (I5), so even its `doc_id` handle no longer varies.
 
 ## Beats
 
 ### 1. Cold open (5s): ready
 
-- **On screen:** a flat AI-style review of AcmeDB rendered by glow. It is clean
-  markdown with no callouts, footnotes, deep links, or table, and the voice is ironed
-  out. No typing; the doc is already up when the clip starts.
-- **Commands (hidden):** `glow fixtures/generic-ai-doc.md`
-- **Depends on:** `demo/fixtures/generic-ai-doc.md`, a hand-written stand-in for flat model output.
-- **Open:** once M1 lands, replace the fixture with a real flat output from a model,
-  freeze it (I5), and label it as model output. The density score overlay is no
-  longer blocked: `knap-mcp density <file>` takes a file path, and the fixture
-  scores 3.7 on density/1 — an overlay could go on screen now (human, Kdenlive).
+- **On screen:** the frozen real flat doc — a verbatim model reply
+  (`gpt-5-5-none` via ACP (devin), provenance in
+  `demo/fixtures/generic-ai-doc.provenance.json`) rendered by glow, with a dim
+  caption row labeling it as model output. It is clean markdown with no callouts,
+  footnotes, deep links, or table, and the voice is ironed out. No typing; the doc
+  and its label are already up when the clip starts.
+- **Commands (hidden):** `glow fixtures/generic-ai-doc.md` with a dim `printf`
+  caption row chained on the same line: `model output: gpt-5-5-none via ACP (devin)`.
+- **Depends on:** `demo/fixtures/generic-ai-doc.md`, the frozen real flat output
+  (I5/#140; density/2 25.7, 479 words — the number for the Kdenlive overlay).
 
 ### 2. Ask for a verdict (20s): ready
 
@@ -105,29 +106,40 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 
 - **On screen:** `diff` shows the seeded break, one `{% endif %}` removed from the
   shipped verdict template. `validate` returns the pinned k4o diagnostic
-  (`syntax error`, line 1, `unclosed if block`). One `repair` call returns
-  `converged: true`, `iterations: 1`, and the step it took. The clip ends on the
-  repaired doc in glow's pager.
+  (`syntax error`, line 29, `unclosed if block`). The repair shown is the frozen
+  live take (I5), labeled `Muse Wonder 1.0 via ACP (devin)`: `converged: true`,
+  `iterations: 1`. `steps[0].patch` is shown as the diff it makes against the
+  seeded region it replaces — the missing `{% endif %}` comes back, folded onto
+  the `{% if %}` line. The clip ends on the frozen repaired doc in glow's pager.
 - **Commands:**
   ```sh
   diff templates/verdict.knap seeded/verdict.knap
-  export KNAP_TEMPLATES_DIR=seeded
-  knap-mcp validate verdict -d data/verdict.sample.json | jq '.diagnostics[0]'
-  knap-mcp repair verdict -d data/verdict.sample.json --target markdown --backend mock --out repaired.md | jq
+  KNAP_TEMPLATES_DIR=seeded knap-mcp validate verdict -d data/verdict.sample.json | jq -c '.diagnostics[0]'
+  echo '# frozen live take: Muse Wonder 1.0 via ACP (devin)'
+  jq -c '{converged,iterations,step:.steps[0]|{line,detail}}' repair.json
+  diff <(tail -n +$RS seeded/verdict.knap) <(jq -j '.steps[0].patch' repair.json)
   glow -p repaired.md
   ```
   `seeded/verdict.knap` is derived at take time by `demo_seed_unclosed_if` in
-  `demo/lib/env.sh`, so it follows template edits.
-- **Template not byte-exact:** the mock closes the block at EOF, so the repaired
-  template differs from the shipped one and E1's eval does not count this seed as
-  `exact`. On k4o `aeba163` the repaired doc is byte-identical to a clean render
-  (checked with `diff`), so nothing differs on screen.
+  `demo/lib/env.sh`, so it follows template edits. `repair.json` /
+  `repaired.md` are copies of `demo/frozen/03-repair.json` /
+  `demo/frozen/03-repaired.md` made in the hidden preamble; `RS` is
+  `steps[0].region_start` (29 on the frozen take).
+- **Patch display:** `jq '.steps[0] | {line, detail, patch}'` prints the patch
+  as one JSON-escaped line (~2 KB), far past the 121-column frame, so the tape
+  diffs the same `steps[0].patch` against the seeded region it replaces instead:
+  `1c1`, the `{% endif %}` restored. `jq -j` keeps jq from appending a newline
+  the model did not emit.
+- **Template not byte-exact:** the live patch folds `{% if subject %}` and its
+  `{% endif %}` onto one line, so the patched template differs from the shipped
+  one and E1's eval does not count this seed as `exact`. On k4o `aeba163` the
+  repaired doc is byte-identical to a clean render (checked with `cmp` in
+  `demo/run.sh`), so nothing differs on screen.
 - **Why this seed:** the unknown-filter seed also converges with mock, but the mock
   patch deletes `| head2` instead of fixing it to `| h2`, so "The case" loses its
   heading. Converged is not the same as correct, and that should not be on screen.
-- **Open:** SPEC says "show diagnostic, patch, re-render visibly". The CLI reports
-  steps but not the patch text, so the patch itself is not visible yet. Once M1 lands,
-  try `--backend spark` on this seed; GAMEPLAN's fallback is to keep the mock take.
+- **Open:** none — the converging live take the freeze issue captured is what
+  SPEC asks for: diagnostic, patch, re-render, all visible.
 
 ### 4. The doc (30s): partial
 
@@ -215,20 +227,24 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   `demo_seed_voice` used to apply, so the take is fixed.
 - **Missing:** only a live-backend voice pass (M1).
 
-### 7. One source -> several views (15s): partial
+### 7. One source -> several views (15s): ready
 
-- **On screen:** three renders from the CLI (verdict markdown, verdict html, apparatus
-  html), then `grep -c '<script'` printing 0 for each file.
+- **On screen:** one typed line loops the verdict renders (markdown, oliver,
+  html), one more renders apparatus html, then `grep -c '<script'` prints
+  `:0` for `verdict.md`, `verdict.oliver`, `verdict.html` and
+  `apparatus.html` — SPEC's list plus the html view, zero JavaScript.
 - **Commands:**
   ```sh
-  knap-mcp render verdict -d data/verdict.sample.json --target markdown --out verdict.md | jq -c '{ok, bytes}'
-  knap-mcp render verdict -d data/verdict.sample.json --target html --out verdict.html | jq -c '{ok, bytes}'
-  knap-mcp render apparatus -d data/apparatus.sample.json --target html --out apparatus.html | jq -c '{ok, bytes}'
-  grep -c '<script' verdict.md verdict.html apparatus.html
+  for t in markdown oliver html; do knap-mcp render verdict -d v --target $t --out verdict.$t | jq -c '{ok}'; done
+  knap-mcp render apparatus -d a --target html --out apparatus.html | jq -c '{ok}'
+  mv verdict.markdown verdict.md; grep -c '<script' verdict.md verdict.oliver verdict.html apparatus.html
   ```
-- **Changed from SPEC:** SPEC's beat 7 names `verdict.oliver`; the tape shows
-  verdict.html instead, because oliver renders byte-identical to markdown for
-  this template and html makes the second view visible.
+  `v` / `a` are copies of `data/verdict.sample.json` / `data/apparatus.sample.json`
+  made in the hidden preamble, and the `mv` gives the markdown render its SPEC
+  file name — both keep every typed line under the 121-column frame.
+- **Changed from SPEC:** nothing — `verdict.oliver` is on screen now. Oliver
+  renders byte-identical to markdown for this template, so html is still the
+  view that makes "several views" visible.
 - **Cut:** "one source" — one data file behind both templates (T2/I5) is
   deferred. apparatus keeps its own `data/apparatus.sample.json`; the take
   shows verdict and apparatus rendered from their own sample files.
