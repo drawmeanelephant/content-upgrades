@@ -1,10 +1,26 @@
-# EVAL: slice-economy counters (issue #80)
+# EVAL: eval corpora, fixtures, and expectations
 
-Lane EVAL. Owner files: counter fields in `knap-mcp/src/ctx.zig`, the
-counting lines in `backend.zig` / `ratchet.zig` / `voice.zig`, the summary
-printers in `eval.zig` / `ratchet.zig`, this note.
+## Issue #114 — plateau-dilution (landed)
 
-## What landed
+`plateau-dilution` stopped `ceiling` under density/2 because the scorer's
+new `min(1, words/200)` positive-credit scale changed what the stub climb
+sees: `stubCeiling` climbs with short stub values, so the fixture rendered
+under the word floor and the ceiling collapsed to 44.1 (density/1: 56.5).
+The 167-word `box` mock reply then pushed the real run's length scale to
+full credit and the run crossed the stub ceiling after only 4 accepts.
+
+Fix: `eval/ratchet/ladder.data.json` `intro` is now ~200 words of plain
+prose. Every render — stub climb included — sits above the floor, so the
+ceiling is 54.8 and the diluted run stalls at 45.6 with every remaining
+probe below eps: a genuine `plateau`, not a re-labeled `ceiling`.
+
+**Load-bearing:** keep `intro` at ≥ ~200 words (the scorer floor is
+`min_words = 200`). Shortening it drops both ladder cases (`budget-burn`
+shares the data file) back under the word floor and re-breaks this case.
+The `intro` is prose only, so it adds no apparatus to the start state.
+
+## Issue #80 — slice-economy counters (#121)
+
 
 - **`Ctx` counters**: `calls`, `slice_bytes_total`, `slice_bytes_max`,
   `prefix_bytes`, plus `countCall(prefix, slice)` and `meanSlice()`. The
@@ -25,14 +41,14 @@ printers in `eval.zig` / `ratchet.zig`, this note.
   `--listen=-` protocol (deterministic on a fresh cache, silent pass on
   reruns — looked flaky).
 
-## Recorded mock numbers
+### Recorded mock numbers
 
 - `eval --corpus eval/seeds.json`: `calls: 25  mean slice: 475 B  max: 2057 B  prefix: 331 B`
 - `eval --corpus eval/seeds.2nap.json`: `calls: 193  mean slice: 149 B  max: 232 B  prefix: 331 B`
 - `ratchet-eval` (eval/ratchet.json): `calls: 70  mean slice: 815 B  max: 1435 B  prefix: 372 B`
 - `voice verdict --backend mock`: `calls: 5  mean slice: 144 B  max: 286 B`; prefix 5752 B (mild), 5803 B (spicy), 6457 B (feral).
 
-## Left for another lane
+### Left for another lane
 
 `make voice-eval`'s printed summary comes from `knap-mcp/eval/voice/run.sh`,
 which is outside this lane's file list — the script captures each `voice`
