@@ -7,7 +7,9 @@
    Spacing: optional blocks open with a blank line and close flush against
    the next block, and loop separators sit behind "not loop.last", so
    markdown (which trims one trailing newline per loop body) and textile
-   come out with identical single blank lines. #}{% set byline = author ?? "Anonymous" %}
+   come out with identical single blank lines. Engine note: fragment_link
+   links only arrays of two or more items, so each lone quote is padded
+   with merge and unwrapped with first (see verdict.knap). #}{% set byline = author ?? "Anonymous" %}
 {% set state = status ?? "read" %}
 {% set slug = title | kebab %}
 ---
@@ -38,7 +40,7 @@ Give-a-shit level: {{ gaf | bold }} · status: {{ state }}
 {{ "Receipts" | h2 }}
 
 {% for q in quotes %}
-{{ q.text | fragment_link:source_url | callout:("quote", "Receipt") }}
+{{ q.text | merge:"" | fragment_link:source_url | first | callout:("quote", "Receipt") }}
 
 {{ q.why }}{% if q.note %}[^{{ q.note | kebab }}]{% endif %}{% if not loop.last %}
 
