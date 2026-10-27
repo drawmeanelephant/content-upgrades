@@ -43,21 +43,20 @@ Drivers older than 1.8 can no longer connect. Bump the driver first, then the se
 acmedb snapshot create takes a consistent snapshot without pausing writes, and restore replays the WAL to any second inside the retention window. This is the feature we yelled about. It is real.[^retention]
 
 > [!quote] Their words, not ours
-> Snapshots are online, incremental, and restorable to any point in the last seven days.
+> Snapshots are online, incremental, and restorable to any point in the last seven days. [link](https://example.com/acmedb/releases/2.0.0#:~:text=Snapshots%20are%20online%2C%20incremental%2C%20and%20restorable%20to%20any%20point%20in%20the%20last%20seven%20days.)
 ### Manifest compaction
 
 The manifest no longer grows forever, so cold starts on old databases drop from minutes to seconds. Nobody will tweet about it. Everybody will feel it.
 > [!quote] Their words, not ours
-> Cold start on a 500 GB database fell from 4 minutes to 9 seconds.
+> Cold start on a 500 GB database fell from 4 minutes to 9 seconds. [link](https://example.com/acmedb/releases/2.0.0#:~:text=Cold%20start%20on%20a%20500%20GB%20database%20fell%20from%204%20minutes%20to%209%20seconds.)
 ### acmedb doctor
 
 A health check that tells you what is wrong in plain English instead of a hex dump. Petty? Yes. Useful? Also yes.
 
 ## Upgrade math
 
-|  |  |  |  |
-| - | - | - | - |
 | you are on | effort | downtime | should you bother |
+| --- | --- | --- | --- |
 | 1.9.x | rename one config key | one restart | yes, today |
 | 1.8.x | config key plus driver bump | one restart | yes, this week |
 | 1.7 or older | dump and reload | plan a window | yes, but bring snacks |

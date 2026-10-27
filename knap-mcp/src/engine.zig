@@ -51,7 +51,7 @@ pub fn render(ctx: *Ctx, target: Target, template_path: []const u8, data_path: [
         },
     };
     const result = try runEngine(ctx, argv, .limited(64 * 1024 * 1024));
-    return finishRun(ctx, result);
+    return finishRun(ctx, std.fs.path.basename(argv[0]), result);
 }
 
 /// `k4o lint` outcome plus the process exit code, so handlers can key
@@ -69,7 +69,7 @@ pub fn lint(ctx: *Ctx, template_path: []const u8) Error!LintResult {
     const result = try runEngine(ctx, &.{ ctx.engines.k4o, "lint", template_path }, .limited(16 * 1024 * 1024));
     const exit_code: u8 = switch (result.term) {
         .exited => |code| code,
-        else => std.math.maxInt(u8),
+        else => return abnormal(ctx, std.fs.path.basename(ctx.engines.k4o), result),
     };
     if (exit_code == 0) return .{ .outcome = .{ .ok = result.stdout }, .exit_code = exit_code };
     // Lint findings go to stdout on exit 1; real failures go to stderr.
@@ -82,29 +82,22 @@ pub fn lint(ctx: *Ctx, template_path: []const u8) Error!LintResult {
 /// surfaces as a normal tool error, never a hung server.
 fn runEngine(ctx: *Ctx, argv: []const []const u8, stdout_limit: std.Io.Limit) Error!std.process.RunResult {
     const secs = ctx.envSecs("KNAP_ENGINE_TIMEOUT", 60);
-    // A spawn-time signal kill is transient (CI runners reap children
-    // spuriously); a nonzero exit is a real diagnostic and is not retried.
-    var attempt: usize = 0;
-    while (true) {
-        const result = std.process.run(ctx.arena, ctx.io, .{
-            .argv = argv,
-            .stdout_limit = stdout_limit,
-            .stderr_limit = .limited(4 * 1024 * 1024),
-            .timeout = ctx.deadline(secs),
-        }) catch |e| switch (e) {
-            error.OutOfMemory => return error.OutOfMemory,
-            error.Timeout => return ctx.fail("engine '{s}' timed out after {d}s", .{ argv[0], secs }),
-            else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ argv[0], @errorName(e) }),
-        };
-        if (result.term == .exited or attempt == max_engine_attempts - 1) return result;
-        attempt += 1;
-    }
+    // No retry on a signal kill: the CI "flake" was a deterministic SIGILL
+    // (AVX-512 binary on a non-AVX-512 runner, see docs/tracks/CI2.md), so a
+    // rerun on the same machine only doubles the cost of a real crash.
+    return std.process.run(ctx.arena, ctx.io, .{
+        .argv = argv,
+        .stdout_limit = stdout_limit,
+        .stderr_limit = .limited(4 * 1024 * 1024),
+        .timeout = ctx.deadline(secs),
+    }) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.Timeout => return ctx.fail("engine '{s}' timed out after {d}s", .{ argv[0], secs }),
+        else => return ctx.fail("engine not runnable: '{s}' ({s})", .{ argv[0], @errorName(e) }),
+    };
 }
 
-/// One retry after the first abnormal termination, then fail.
-const max_engine_attempts = 2;
-
-fn finishRun(ctx: *Ctx, result: std.process.RunResult) Error!Outcome {
+fn finishRun(ctx: *Ctx, name: []const u8, result: std.process.RunResult) Error!Outcome {
     switch (result.term) {
         .exited => |code| {
             if (code == 0) return .{ .ok = result.stdout };
@@ -113,12 +106,36 @@ fn finishRun(ctx: *Ctx, result: std.process.RunResult) Error!Outcome {
                 return ctx.fail("engine exited {d} with no diagnostics", .{code});
             return .{ .diags = diags };
         },
-        else => return ctx.fail("engine terminated abnormally ({s}){s}{s}", .{
-            @tagName(result.term),
-            if (result.stderr.len > 0) ": " else "",
-            result.stderr[0..@min(result.stderr.len, 300)],
-        }),
+        else => return abnormal(ctx, name, result),
     }
+}
+
+/// `engine 'k4o' killed by signal 4 (SIGILL): <stderr head>`. Timeouts never
+/// get here; `runEngine` reports them as `timed out after Ns`.
+fn abnormal(ctx: *Ctx, name: []const u8, result: std.process.RunResult) error{ToolFailed} {
+    var buf: [64]u8 = undefined;
+    const head = std.mem.trim(u8, result.stderr[0..@min(result.stderr.len, 300)], " \r\n\t");
+    return ctx.fail("engine '{s}' {s}{s}{s}", .{
+        name,
+        describeTerm(&buf, result.term),
+        if (head.len > 0) ": " else "",
+        head,
+    });
+}
+
+/// Human wording for a child's termination, with the raw signal number so
+/// a CI log names the cause (SIGILL = wrong-CPU binary, SIGKILL = OOM, …).
+fn describeTerm(buf: []u8, term: std.process.Child.Term) []const u8 {
+    return switch (term) {
+        .exited => |code| std.fmt.bufPrint(buf, "exited {d}", .{code}),
+        .signal => |sig| std.fmt.bufPrint(buf, "killed by signal {d} (SIG{s})", .{
+            @intFromEnum(sig), std.enums.tagName(std.posix.SIG, sig) orelse "?",
+        }),
+        .stopped => |sig| std.fmt.bufPrint(buf, "stopped by signal {d} (SIG{s})", .{
+            @intFromEnum(sig), std.enums.tagName(std.posix.SIG, sig) orelse "?",
+        }),
+        .unknown => |status| std.fmt.bufPrint(buf, "terminated abnormally (wait status {d})", .{status}),
+    } catch "terminated abnormally";
 }
 
 /// Engine stderr contract: `<prog>: <kind> at line <L>, column <C>: <detail>`
@@ -170,6 +187,14 @@ test "targets are markdown, oliver, html" {
     try std.testing.expectEqual(@as(?Target, null), targetFromName("latex"));
     try std.testing.expectEqualStrings("md", extension(.oliver));
     try std.testing.expectEqualStrings("html", extension(.html));
+}
+
+test "describeTerm names the signal number" {
+    var buf: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("killed by signal 4 (SIGILL)", describeTerm(&buf, .{ .signal = .ILL }));
+    try std.testing.expectEqualStrings("killed by signal 9 (SIGKILL)", describeTerm(&buf, .{ .signal = .KILL }));
+    try std.testing.expectEqualStrings("terminated abnormally (wait status 7)", describeTerm(&buf, .{ .unknown = 7 }));
+    try std.testing.expectEqualStrings("exited 3", describeTerm(&buf, .{ .exited = 3 }));
 }
 
 test "parseDiags reads k4o main's stderr shape" {
