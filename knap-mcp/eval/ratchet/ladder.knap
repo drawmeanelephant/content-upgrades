@@ -1,0 +1,32 @@
+{# ladder.knap: ratchet eval fixture (next-phase plan section 2.3). A spread
+   of distinct-apparatus slots, so corpus cases can reach the two stops the
+   other fixtures can't: "budget" (a permanently-rejected top candidate keeps
+   burning calls while lower candidates accept) and "plateau" (prose-heavy
+   values land below the stub ceiling while the growable slots run out). #}
+---
+{{ title | yaml_property:"title" }}
+{% if terms %}{{ terms | yaml_property:"terms" }}
+{% endif %}---
+{{ title | h1 }}
+
+{{ intro }}
+{% if box %}
+
+{{ box | callout:("warning", "Watch out") }}{% endif %}{% if matrix %}
+
+| on | effort |
+|---|---|
+{% for r in matrix %}| {{ r | join:" | " }} |
+{% endfor %}{% endif %}{% if pull %}
+
+{{ pull | blockquote }}{% endif %}{% if see_also %}
+
+See also {{ see_also | wikilink }}.{% endif %}{% if docs %}
+
+{{ docs | link:"Read the docs" }}{% endif %}{% if guide %}
+
+{{ guide | embed }}{% endif %}{% if shot %}
+
+{{ shot | image:title }}{% endif %}{% if items %}
+{% for i in items %}
+- {{ i }}{% endfor %}{% endif %}

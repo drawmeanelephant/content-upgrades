@@ -151,8 +151,23 @@ pub fn run(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: anytype) !
     const corpus_dir = std.fs.path.dirname(corpus_path) orelse ".";
     const corpus = try loadCorpus(ctx, corpus_path);
 
+    // Probe the engine once before the loop: a missing binary would
+    // otherwise turn every seed into an errored row and the table would
+    // still read "converged 0/N" with exit 0.
+    try probeEngine(ctx);
+
     var rows: std.ArrayList(Row) = .empty;
-    for (corpus.seeds) |seed| try rows.append(ctx.arena, try runSeed(ctx, corpus_dir, seed, kind));
+    for (corpus.seeds) |seed| {
+        const row = runSeed(ctx, corpus_dir, seed, kind) catch |e| blk: {
+            if (e == error.OutOfMemory) return error.OutOfMemory;
+            var r: Row = .{ .id = seed.id, .class = seed.class, .mutation = @tagName(seed.mutation) };
+            r.status = if (seed.isControl()) .control_broken else .errored;
+            r.residual_diag = if (e == error.ToolFailed) ctx.err_msg else @errorName(e);
+            std.debug.print("knap-mcp eval: seed '{s}' failed: {s}\n", .{ seed.id, r.residual_diag });
+            break :blk r;
+        };
+        try rows.append(ctx.arena, row);
+    }
     const sum = try tally(ctx.arena, rows.items, corpus.classes);
 
     // Convergence tables — stdout is the slide factory's display surface.
@@ -175,16 +190,45 @@ pub fn run(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: anytype) !
         a.converged, a.breaks, ratio(a.iters, a.converged), a.exact, a.exact_known, a.noop, sum.controls_clean, sum.controls,
     });
 
+    // The gate must be able to fail: an errored seed or a broken control
+    // means the table measured nothing for that row.
+    var errored: usize = 0;
+    for (rows.items) |r| errored += @intFromBool(r.status == .errored);
+    const gate_fail = errored > 0 or sum.controls_clean < sum.controls;
+    if (gate_fail)
+        try w.print("FAIL: {d} seed(s) errored, controls {d}/{d} clean\n", .{ errored, sum.controls_clean, sum.controls });
+
     // JSON report lands in the store — a handle, not a paste.
     const doc_id = try store.put(ctx, "eval.json", try reportJson(ctx, corpus_path, kind, rows.items, sum));
     try w.print("report: knap://docs/{s}\n", .{doc_id});
-    return 0;
+    return @intFromBool(gate_fail);
+}
+
+/// One render of a trivial template proves the engine binary is runnable
+/// before every seed reports the same spawn error. Diagnostics on a
+/// one-word template count as a broken engine too.
+fn probeEngine(ctx: *Ctx) Error!void {
+    const tpl = try store.scratchFile(ctx, "knap");
+    defer std.Io.Dir.deleteFile(.cwd(), ctx.io, tpl) catch {};
+    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = tpl, .data = "probe\n" }) catch
+        return ctx.fail("cannot stage engine probe", .{});
+    const data = try store.scratchFile(ctx, "json");
+    defer std.Io.Dir.deleteFile(.cwd(), ctx.io, data) catch {};
+    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = data, .data = "{}\n" }) catch
+        return ctx.fail("cannot stage engine probe data", .{});
+    switch (try engine.render(ctx, .markdown, tpl, data)) {
+        .ok => {},
+        .diags => |d| return ctx.fail("engine probe failed: {s}", .{if (d.len > 0) d[0].detail else "clean template diagnosed"}),
+    }
 }
 
 fn runSeed(ctx: *Ctx, corpus_dir: []const u8, seed: Seed, kind: backend.Kind) Error!Row {
     const base = try sourceText(ctx, corpus_dir, seed);
     const broken = try applyMutation(ctx, base, seed.mutation);
     const data_path = try resolveData(ctx, corpus_dir, seed.data);
+    // resolveData stages inline data to a scratch file; an "@path" ref is
+    // a corpus file and must not be deleted.
+    defer if (seed.data != .string) std.Io.Dir.deleteFile(.cwd(), ctx.io, data_path) catch {};
     var row: Row = .{ .id = seed.id, .class = seed.class, .mutation = @tagName(seed.mutation) };
 
     const outcome = repair.run(ctx, .markdown, broken, data_path, kind, repair.default_max_iterations) catch |e| {
@@ -224,6 +268,7 @@ fn statusOf(control: bool, converged: bool, iterations: usize) Status {
 
 fn baseRender(ctx: *Ctx, seed_id: []const u8, base: []const u8, data_path: []const u8) Error!?[]const u8 {
     const path = try store.scratchFile(ctx, "knap");
+    defer std.Io.Dir.deleteFile(.cwd(), ctx.io, path) catch {};
     std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = base }) catch
         return ctx.fail("cannot stage base template", .{});
     switch (try engine.render(ctx, .markdown, path, data_path)) {
@@ -416,8 +461,8 @@ fn parseMutation(ctx: *Ctx, v: ?std.json.Value) Error!Mutation {
     const kind = strOf(obj, "kind") orelse "none";
     const occ_v = obj.get("occurrence") orelse std.json.Value{ .integer = 0 };
     const occ: usize = switch (occ_v) {
-        .integer => |n| @intCast(@max(0, n)),
-        else => 0,
+        .integer => |n| if (n >= 0) @intCast(n) else return ctx.fail("break 'occurrence' must be a non-negative integer", .{}),
+        else => return ctx.fail("break 'occurrence' must be a non-negative integer", .{}),
     };
     if (std.mem.eql(u8, kind, "none")) return .none;
     const find = strOf(obj, "find") orelse return ctx.fail("break needs 'find'", .{});
@@ -612,6 +657,20 @@ test "parseCorpus rejects ambiguous sources and duplicate ids" {
     ));
     try std.testing.expectError(error.ToolFailed, parseCorpus(&ctx, "t.json",
         \\{"seeds": [{"id": "a", "template": "x"}, {"id": "a", "template": "y"}]}
+    ));
+}
+
+test "parseCorpus rejects a non-integer break occurrence" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var ctx = testCtx(arena_state.allocator());
+    try std.testing.expectError(error.ToolFailed, parseCorpus(&ctx, "t.json",
+        \\{"seeds": [{"id": "a", "template": "x",
+        \\  "break": {"kind": "remove", "find": "x", "occurrence": 2.5}}]}
+    ));
+    try std.testing.expectError(error.ToolFailed, parseCorpus(&ctx, "t.json",
+        \\{"seeds": [{"id": "a", "template": "x",
+        \\  "break": {"kind": "remove", "find": "x", "occurrence": -1}}]}
     ));
 }
 
