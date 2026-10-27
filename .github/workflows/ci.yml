@@ -76,6 +76,12 @@ jobs:
       - name: Eval (mock convergence)
         run: KNAP_MCP_HOME=$(mktemp -d) KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" make eval
 
+      - name: Ratchet eval (mock)
+        run: KNAP_MCP_HOME=$(mktemp -d) KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" make ratchet-eval
+
+      - name: Voice eval (mock)
+        run: KNAP_MCP_HOME=$(mktemp -d) KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" make voice-eval
+
       - name: Voice contract check
         run: sh knap-mcp/prompts/voice/check.sh
 
