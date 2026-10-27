@@ -1,0 +1,134 @@
+{
+  "label": "Muse Wonder 1.0 via ACP (devin, low thinking)",
+  "note": "Every call went through `devin acp --model muse-wonder-1-0-low`; the devin agent's own system prompt rides on every call, so ACP usage figures measure model plus agent, not a direct API.",
+  "probe": {
+    "command": "knap-mcp backends --probe",
+    "model": "muse-wonder-1-0-high",
+    "effort": "low",
+    "agent_reported": true
+  },
+  "date_utc": "2026-10-27",
+  "git": "69dddf2",
+  "engines": {
+    "k4o": "k4o-aeba163",
+    "dogbed": "dogbed-d96b125"
+  },
+  "takes": [
+    {
+      "beat": "2",
+      "name": "drafted verdict data",
+      "files": [
+        "demo/frozen/02-draft.system.txt",
+        "demo/frozen/02-draft.user.txt",
+        "demo/frozen/02-ask.json",
+        "demo/frozen/02-verdict.drafted.json",
+        "demo/frozen/02-verdict.drafted.md"
+      ],
+      "commands": [
+        "knap-mcp templates | jq '.templates[] | select(.id==\"verdict\") | .shape'  # into 02-draft.user.txt",
+        "jq '.sources' data/verdict.sample.json  # into 02-draft.user.txt",
+        "knap-mcp ask --backend acp --task enrich --system ../demo/frozen/02-draft.system.txt --user ../demo/frozen/02-draft.user.txt > ../demo/frozen/02-ask.json",
+        "jq -r .content ../demo/frozen/02-ask.json | jq . > ../demo/frozen/02-verdict.drafted.json",
+        "knap-mcp validate verdict -d ../demo/frozen/02-verdict.drafted.json",
+        "knap-mcp render verdict -d ../demo/frozen/02-verdict.drafted.json --out ../demo/frozen/02-verdict.drafted.md"
+      ],
+      "wall_seconds": 11,
+      "tokens": {
+        "prompt_tokens": 15616,
+        "completion_tokens": 1686,
+        "total_tokens": 17302
+      },
+      "finish_reason": "end_turn",
+      "check": "pass: validate ok (0 diagnostics), render ok (1990 bytes)",
+      "content_note": "model returned a bare JSON object, no code fence; only pretty-printed",
+      "attempts": [
+        {"n": 1, "result": "kept"}
+      ]
+    },
+    {
+      "beat": "3",
+      "name": "live repair take",
+      "files": [
+        "demo/frozen/03-repair.json",
+        "demo/frozen/03-repaired.md"
+      ],
+      "commands": [
+        "mkdir -p /tmp/seeded && awk '!done && /^\\{% endif %\\}$/ {done=1; next} {print}' templates/verdict.knap > /tmp/seeded/verdict.knap",
+        "KNAP_TEMPLATES_DIR=/tmp/seeded knap-mcp repair verdict -d data/verdict.sample.json --target markdown --backend acp --out ../demo/frozen/03-repaired.md > ../demo/frozen/03-repair.json",
+        "knap-mcp render verdict -d data/verdict.sample.json --target markdown --out /tmp/clean.md",
+        "cmp ../demo/frozen/03-repaired.md /tmp/clean.md"
+      ],
+      "wall_seconds": 5,
+      "tokens": null,
+      "check": "pass: converged true, 1 iteration, steps[0].patch present, repaired doc byte-identical to clean render",
+      "attempts": [
+        {"n": 1, "result": "kept"}
+      ]
+    },
+    {
+      "beat": "4b",
+      "name": "live ratchet take",
+      "files": [
+        "demo/frozen/04b-ratchet.json",
+        "demo/frozen/04b-ratchet.md",
+        "demo/frozen/04b-ratchet.data.json"
+      ],
+      "commands": [
+        "knap-mcp ratchet verdict -d data/verdict.min.json --backend acp > ../demo/frozen/04b-ratchet.json",
+        "cp $KNAP_MCP_HOME/artifacts/doc-1793125799873035000-43.md ../demo/frozen/04b-ratchet.md",
+        "cp $KNAP_MCP_HOME/artifacts/doc-1793125799872730000-42.json ../demo/frozen/04b-ratchet.data.json"
+      ],
+      "wall_seconds": 6,
+      "tokens": null,
+      "result": {
+        "stop": "stalled",
+        "iterations": 1,
+        "calls": 2,
+        "scorer": "density/2",
+        "score": {"start": 24.2, "final": 24.2, "ceiling": 62.0},
+        "slot_fill": {"start": "1/7", "final": "1/7"},
+        "accepted": 0,
+        "rejections": {"parse": 0, "schema": 1, "inert": 0, "render": 0, "verifier": 0, "no-gain": 0, "new-warnings": 0, "declined": 1},
+        "doc_id": "doc-1793125799873035000-43",
+        "data_id": "doc-1793125799872730000-42"
+      },
+      "check": "take recorded as-run; both candidates in iteration 1 rejected (apparatus_page declined, receipts[+] schema), ratchet stalled with no accepted change",
+      "attempts": [
+        {"n": 1, "result": "kept"}
+      ]
+    },
+    {
+      "beat": "6",
+      "name": "live voice, mild and feral",
+      "files": [
+        "demo/frozen/06-voice-mild.json",
+        "demo/frozen/06-voice-feral.json",
+        "demo/frozen/06-verdict.mild.json",
+        "demo/frozen/06-verdict.feral.json",
+        "demo/frozen/06-verdict.orig.md",
+        "demo/frozen/06-verdict.mild.md",
+        "demo/frozen/06-verdict.feral.md",
+        "demo/frozen/06-structhash.txt"
+      ],
+      "commands": [
+        "knap-mcp voice verdict -d data/verdict.sample.json --tone mild --backend acp > ../demo/frozen/06-voice-mild.json",
+        "knap-mcp voice verdict -d data/verdict.sample.json --tone feral --backend acp > ../demo/frozen/06-voice-feral.json",
+        "jq .data ../demo/frozen/06-voice-$t.json > ../demo/frozen/06-verdict.$t.json",
+        "knap-mcp render verdict -d <data> --target markdown --out ../demo/frozen/06-verdict.{orig,mild,feral}.md",
+        "knap-mcp structhash ../demo/frozen/06-verdict.orig.md ../demo/frozen/06-verdict.mild.md ../demo/frozen/06-verdict.feral.md > ../demo/frozen/06-structhash.txt"
+      ],
+      "wall_seconds": {"mild": 26, "feral": 46},
+      "tokens": null,
+      "result": {
+        "mild": {"changed": 8, "rejected": 0, "rewritten": 8},
+        "feral": {"changed": 8, "rejected": 0, "rewritten": 8},
+        "structhash": "6a738a8906ac2273 (all three renders equal)"
+      },
+      "check": "pass: one layout hash across orig/mild/feral renders",
+      "attempts": [
+        {"n": 1, "tone": "mild", "result": "kept"},
+        {"n": 1, "tone": "feral", "result": "kept"}
+      ]
+    }
+  ]
+}
