@@ -113,6 +113,7 @@ const usage_tail =
     \\  --limit <n>             boris-ask hits (default 5)
     \\  --max-iters <n>         ratchet iteration cap (default 6)
     \\  --probe                 backends: GET /models per live backend, acp handshake
+    \\  -h, --help              this text; <command> -h shows that command's usage
     \\
     \\Environment:
     \\  KNAP_K4O_PATH / KNAP_DOGBED_PATH   engine binaries (default: PATH)
@@ -177,6 +178,10 @@ pub fn main(init: std.process.Init) !u8 {
 
     for (&commands) |*c| {
         if (!std.mem.eql(u8, c.name, argv[0])) continue;
+        for (argv[1..]) |a| {
+            if (std.mem.eql(u8, a, "-h") or std.mem.eql(u8, a, "--help"))
+                return cmdUsage(&ctx, c);
+        }
         return switch (c.run) {
             .tool => |t| runTool(&ctx, c.name, t, argv[1..]),
             .custom => |f| f(&ctx, argv[1..]),
@@ -272,6 +277,20 @@ fn optValue(ctx: *Ctx, args: [][]const u8, i: *usize, comptime opt: []const u8) 
     return null;
 }
 
+/// Schema property name for a `tool_flags` entry: the arguments object
+/// keeps the CLI spelling, schemas use snake_case (`--max-iters` fills
+/// `max_iterations`; every other flag's name is already its property).
+fn flagProp(flag: []const u8) []const u8 {
+    return if (std.mem.eql(u8, flag, "max-iters")) "max_iterations" else flag;
+}
+
+/// True when a tool's input_schema declares `prop` in its properties.
+fn schemaHasProp(schema: []const u8, prop: []const u8) bool {
+    var buf: [64]u8 = undefined;
+    const needle = std.fmt.bufPrint(&buf, "\"{s}\":{{", .{prop}) catch unreachable;
+    return std.mem.indexOf(u8, schema, needle) != null;
+}
+
 /// `-` reads all of stdin; anything else is a file path of JSON.
 fn readData(ctx: *Ctx, path: []const u8) !std.json.Value {
     const bytes = if (std.mem.eql(u8, path, "-")) blk: {
@@ -298,6 +317,15 @@ fn readData(ctx: *Ctx, path: []const u8) !std.json.Value {
 /// it through the same dispatcher MCP uses — one code path, two surfaces.
 fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
     const o = parseOpts(ctx, args) catch return usageErr(ctx);
+    // A shared flag the tool's schema doesn't declare is a user error, not
+    // an argument the handler would silently drop.
+    const schema = for (&tools.all) |*reg| {
+        if (std.mem.eql(u8, reg.name, t.tool)) break reg.input_schema;
+    } else "";
+    for (o.flags, 0..) |v, i| {
+        if (v != null and !schemaHasProp(schema, flagProp(tool_flags[i])))
+            return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "{s}: unused option '--{s}'", .{ cmd, tool_flags[i] }));
+    }
     const pos = o.positional.items;
     if (t.exactly_one) |what| {
         if (pos.len != 1)
@@ -359,6 +387,10 @@ fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
 
 fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     const o = parseOpts(ctx, args) catch return usageErr(ctx);
+    for (tool_flags, o.flags) |name, v| {
+        if (v != null and !std.mem.eql(u8, name, "backend"))
+            return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "eval: unused option '--{s}'", .{name}));
+    }
     const kind = if (o.flag("backend")) |b|
         backend.parseKind(b) orelse return fail(ctx, "unknown backend")
     else
@@ -420,6 +452,18 @@ fn cmdHelp(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     return 0;
 }
 
+/// `<command> -h|--help`: the command's usage row plus the shared
+/// options block. Rows with no usage fall back to the full help.
+fn cmdUsage(ctx: *Ctx, c: *const Command) !u8 {
+    const u = c.usage orelse return cmdHelp(ctx, &.{});
+    var out: std.Io.Writer.Allocating = .init(ctx.arena);
+    try out.writer.print("knap-mcp {s}", .{u});
+    if (c.summary.len > 0) try out.writer.print("   {s}", .{c.summary});
+    try out.writer.writeAll("\n" ++ usage_tail);
+    try printStdout(ctx, out.written());
+    return 0;
+}
+
 fn cmdVersion(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     _ = args;
     var buf: [64]u8 = undefined;
@@ -460,6 +504,24 @@ fn printStdout(ctx: *Ctx, text: []const u8) !void {
 
 fn report(comptime fmt: []const u8, args: anytype) void {
     std.debug.print("knap-mcp: " ++ fmt ++ "\n", args);
+}
+
+test "tool_flags checked against tool input_schema" {
+    const render = for (&tools.all) |*t| {
+        if (std.mem.eql(u8, t.name, "knap_render")) break t.input_schema;
+    } else unreachable;
+    try std.testing.expect(schemaHasProp(render, flagProp("target")));
+    try std.testing.expect(!schemaHasProp(render, flagProp("backend")));
+    try std.testing.expect(!schemaHasProp(render, flagProp("tone")));
+
+    const ratchet = for (&tools.all) |*t| {
+        if (std.mem.eql(u8, t.name, "knap_ratchet")) break t.input_schema;
+    } else unreachable;
+    // --max-iters is spelled max_iterations in the schema.
+    try std.testing.expect(schemaHasProp(ratchet, flagProp("max-iters")));
+    try std.testing.expect(schemaHasProp(ratchet, flagProp("verifier")));
+    try std.testing.expect(!schemaHasProp(ratchet, flagProp("limit")));
+    try std.testing.expect(!schemaHasProp(ratchet, flagProp("target")));
 }
 
 // Test discovery: `zig build test` only runs tests in files listed here,
