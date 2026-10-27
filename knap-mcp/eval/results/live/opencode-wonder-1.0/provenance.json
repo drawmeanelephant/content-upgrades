@@ -1,0 +1,31 @@
+{
+  "profile": "opencode-wonder-1.0",
+  "profile_source": "scripts/providers.sh",
+  "label": "Muse Wonder 1.0 via ACP (opencode)",
+  "backend": "acp",
+  "model": "opencode/muse-wonder-1.0",
+  "effort": "default",
+  "expect": "opencode/muse-wonder-1.0",
+  "note": null,
+  "started": "2026-10-27T13:27:26Z",
+  "finished": "2026-10-27T13:27:29Z",
+  "knap_mcp": {
+    "version": "0.1.0",
+    "git": "6096bd5+dirty"
+  },
+  "engines": {
+    "k4o": "k4o-aeba163",
+    "dogbed": "dogbed-d96b125"
+  },
+  "host": "Darwin arm64",
+  "runs": [
+    {
+      "suite": "smoke",
+      "command": "knap-mcp smoke --backend acp",
+      "exit": 1,
+      "seconds": 3,
+      "out": "smoke.out",
+      "err": "smoke.err"
+    }
+  ]
+}

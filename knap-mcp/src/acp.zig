@@ -97,19 +97,30 @@ pub fn agentName(ctx: *Ctx) ?[]const u8 {
     return if (argv.len == 0) null else argv[0];
 }
 
+/// What the agent selected for a session, as it reports it.
+pub const Selection = struct {
+    model: ?[]const u8 = null,
+    effort: ?[]const u8 = null,
+};
+
+/// Start the agent if needed and open one session without prompting it,
+/// so no tokens are spent. Returns the model and effort the agent picked.
+/// Agents can fall back to a default model without saying so
+/// (`opencode acp` uses `flint-40b-free` unless configured), so a live
+/// run checks this before it starts.
+pub fn probe(ctx: *Ctx) Error!Selection {
+    try ensure(ctx, try requireAgent(ctx));
+    _, const sel = try newSession(ctx, ctx.deadline(ctx.envSecs("KNAP_ACP_TIMEOUT", 180)));
+    return sel;
+}
+
 /// Run one prompt turn in a fresh session on the (lazily started) agent.
 pub fn prompt(ctx: *Ctx, text: []const u8) Error!Turn {
     try ensure(ctx, try requireAgent(ctx));
     const deadline = ctx.deadline(ctx.envSecs("KNAP_ACP_TIMEOUT", 180));
+    const sid, _ = try newSession(ctx, deadline);
 
     var params: std.Io.Writer.Allocating = .init(ctx.arena);
-    try params.writer.writeAll("{\"cwd\":");
-    try std.json.Stringify.value(try sessionCwd(ctx), .{}, &params.writer);
-    try params.writer.writeAll(",\"mcpServers\":[]}");
-    const session = try call(ctx, "session/new", params.written(), deadline, null);
-    const sid = str(get(session, "sessionId")) orelse return gone(ctx, "answered session/new without a sessionId");
-
-    params = .init(ctx.arena);
     try params.writer.writeAll("{\"sessionId\":");
     try std.json.Stringify.value(sid, .{}, &params.writer);
     try params.writer.writeAll(",\"prompt\":[{\"type\":\"text\",\"text\":");
@@ -120,6 +131,33 @@ pub fn prompt(ctx: *Ctx, text: []const u8) Error!Turn {
     const stop = str(get(result, "stopReason")) orelse "";
     if (std.mem.eql(u8, stop, "cancelled")) return ctx.fail("acp agent '{s}' cancelled the turn", .{agent.name});
     return .{ .text = reply.written(), .stop_reason = stop, .usage = get(result, "usage") };
+}
+
+/// `session/new` on the running agent: the session id, and the selection
+/// it reports.
+fn newSession(ctx: *Ctx, deadline: std.Io.Timeout) Error!struct { []const u8, Selection } {
+    var params: std.Io.Writer.Allocating = .init(ctx.arena);
+    try params.writer.writeAll("{\"cwd\":");
+    try std.json.Stringify.value(try sessionCwd(ctx), .{}, &params.writer);
+    try params.writer.writeAll(",\"mcpServers\":[]}");
+    const session = try call(ctx, "session/new", params.written(), deadline, null);
+    const sid = str(get(session, "sessionId")) orelse return gone(ctx, "answered session/new without a sessionId");
+    return .{ sid, selection(session) };
+}
+
+/// The model and effort from a `session/new` result: the `configOptions`
+/// entries in category `model` / `thought_level`, else the older
+/// `models.currentModelId`.
+fn selection(session: std.json.Value) Selection {
+    var sel: Selection = .{};
+    if (get(session, "configOptions")) |opts| if (opts == .array) for (opts.array.items) |o| {
+        const category = str(get(o, "category")) orelse str(get(o, "id")) orelse continue;
+        const current = str(get(o, "currentValue")) orelse continue;
+        if (std.mem.eql(u8, category, "model")) sel.model = current;
+        if (std.mem.eql(u8, category, "thought_level")) sel.effort = current;
+    };
+    if (sel.model == null) sel.model = str(get(get(session, "models") orelse .null, "currentModelId"));
+    return sel;
 }
 
 /// Stop the agent subprocess, if one is running.
@@ -403,6 +441,10 @@ pub const FakeAgent = struct {
         c.slice_bytes_total = 0;
         c.slice_bytes_max = 0;
         c.prefix_bytes = 0;
+        c.prompt_tokens = 0;
+        c.completion_tokens = 0;
+        c.total_tokens = 0;
+        c.reasoning_tokens = 0;
         return c;
     }
 };
@@ -421,6 +463,25 @@ test "prompt collects only its session's message chunks and refuses capabilities
     const t2 = try prompt(&ctx, "again");
     try testing.expectEqualStrings("reply from s2", t2.text);
     try testing.expectEqual(pid, agent.child.id);
+}
+
+test "probe reports the agent's selection without prompting" {
+    var f: FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    var ctx = try f.ctx("echo");
+    const sel = try probe(&ctx);
+    try testing.expectEqualStrings("fake-model-1", sel.model.?);
+    try testing.expectEqualStrings("low", sel.effort.?);
+    // The probe's agent is reused, and a prompt after it gets a new session.
+    const pid = agent.child.id;
+    const t = try prompt(&ctx, "say knap-smoke-verify");
+    try testing.expectEqualStrings("knap-smoke-verify", t.text);
+    try testing.expectEqual(pid, agent.child.id);
+    ctx = try f.ctx("legacy");
+    const old = try probe(&ctx);
+    try testing.expectEqualStrings("fake-legacy", old.model.?);
+    try testing.expect(old.effort == null);
 }
 
 test "a changed KNAP_ACP_AGENT respawns the agent" {

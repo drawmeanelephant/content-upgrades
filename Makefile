@@ -1,4 +1,4 @@
-.PHONY: all test eval ratchet-eval voice-eval demo engines clean
+.PHONY: all test eval ratchet-eval voice-eval live demo engines clean
 
 # Pinned engine binaries; the pins live in scripts/engines.sh. Override for
 # one run with `make eval KNAP_K4O_PATH=...`.
@@ -20,6 +20,13 @@ ratchet-eval: all engines
 
 voice-eval: all engines
 	knap-mcp/eval/voice/run.sh
+
+# Live providers: `make live P="devin-swe-2 opencode-spark-1.3" SUITE=all`.
+# Profiles and readiness: `scripts/live.sh --list`. P=fake needs no account.
+P ?= fake
+SUITE ?= smoke
+live: all engines
+	scripts/live.sh --suite $(SUITE) $(P)
 
 # Every storyboard beat as one scripted run on the mock backend; transcript
 # and artifacts land in demo/out/demo/ (see demo/run.sh).

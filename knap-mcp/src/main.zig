@@ -10,6 +10,7 @@
 //!     knap-mcp format-check <doc_id>        advisory structure lint on a doc
 //!     knap-mcp eval [--corpus <seeds.json>] [--backend <b>]
 //!     knap-mcp backends [--probe]           backend availability + models
+//!     knap-mcp smoke [--backend <b>]        one live call per backend.Task
 //!     knap-mcp --help | --version
 //!
 //! Subcommands are rows in `commands`: a registry tool (argv becomes its
@@ -24,6 +25,7 @@ const ctx_mod = @import("ctx.zig");
 const mcp = @import("mcp.zig");
 const tools = @import("tools.zig");
 const backend = @import("backend.zig");
+const acp = @import("acp.zig");
 const eval_mod = @import("eval.zig");
 const store = @import("store.zig");
 
@@ -76,6 +78,7 @@ const commands = [_]Command{
     .{ .name = "ratchet-eval", .usage = "ratchet-eval [--corpus f]", .summary = "ratchet climb table (eval/ratchet.json)", .run = .{ .custom = @import("ratchet.zig").cmdEval } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
     .{ .name = "backends", .usage = "backends [--probe]", .summary = "backend availability + resolved models", .run = .{ .custom = cmdBackends } },
+    .{ .name = "smoke", .usage = "smoke [--backend k]", .summary = "one live call per task; exit 1 on a bad row", .run = .{ .custom = @import("smoke.zig").cmd } },
     .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
     .{ .name = "-h", .run = .{ .custom = cmdHelp } },
     .{ .name = "--version", .run = .{ .custom = cmdVersion } },
@@ -107,7 +110,7 @@ const usage_tail =
     \\  --verifier <v>          heuristic (default) | none | decision
     \\  --limit <n>             boris-ask hits (default 5)
     \\  --max-iters <n>         ratchet iteration cap (default 6)
-    \\  --probe                 backends: GET /models per live backend
+    \\  --probe                 backends: GET /models per live backend, acp handshake
     \\
     \\Environment:
     \\  KNAP_K4O_PATH / KNAP_DOGBED_PATH   engine binaries (default: PATH)
@@ -378,25 +381,15 @@ fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     }
     var buf: [4096]u8 = undefined;
     var w = std.Io.File.stdout().writerStreaming(ctx.io, &buf);
-    const has_key = ctx.environ.get("MODEL_API_KEY") != null;
     try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "backend", "model", "status" });
-    try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "mock", "-", "always available (canned patches)" });
+    try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "mock", "-", backend.statusLine(ctx, .mock) });
     for ([_]backend.Kind{ .spark, .wonder, .baseten, .compat }) |k| {
         ctx.err_msg = "";
         const ep = backend.endpoint(ctx, k) catch {
             try w.interface.print("{s: <10} {s}\n", .{ @tagName(k), ctx.err_msg });
             continue;
         };
-        try w.interface.print("{s: <10} {s: <32} {s}\n", .{
-            @tagName(k),
-            ep.model,
-            if (k == .compat)
-                backend.statusLine(ctx, k)
-            else if (has_key)
-                "MODEL_API_KEY set — live calls enabled"
-            else
-                "needs MODEL_API_KEY",
-        });
+        try w.interface.print("{s: <10} {s: <32} {s}\n", .{ @tagName(k), ep.model, backend.statusLine(ctx, k) });
         if (!probe) continue;
         ctx.err_msg = "";
         const ids = backend.listModels(ctx, k) catch {
@@ -408,6 +401,12 @@ fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
         try w.interface.writeAll("\n");
     }
     try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "acp", "-", backend.statusLine(ctx, .acp) });
+    if (probe and acp.agentLine(ctx) != null) {
+        ctx.err_msg = "";
+        if (acp.probe(ctx)) |sel| {
+            try w.interface.print("  probe: model {s}, effort {s} (agent-reported, no prompt sent)\n", .{ sel.model orelse "unreported", sel.effort orelse "-" });
+        } else |_| try w.interface.print("  probe: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "failed"});
+    }
     try w.interface.print("default    {s} (KNAP_BACKEND)\n", .{@tagName(ctx.backend_kind)});
     try w.flush();
     return 0;
@@ -475,6 +474,7 @@ test {
     _ = @import("mcp.zig");
     _ = @import("ratchet.zig");
     _ = @import("repair.zig");
+    _ = @import("smoke.zig");
     _ = @import("store.zig");
     _ = @import("structhash.zig");
     _ = @import("tools.zig");

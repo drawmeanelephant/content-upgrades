@@ -1,0 +1,31 @@
+{
+  "profile": "devin-summarizer",
+  "profile_source": "scripts/providers.sh",
+  "label": "devin summarizer agent via ACP",
+  "backend": "acp",
+  "model": "unreported",
+  "effort": null,
+  "expect": "*",
+  "note": null,
+  "started": "2026-10-27T13:24:50Z",
+  "finished": "2026-10-27T13:25:06Z",
+  "knap_mcp": {
+    "version": "0.1.0",
+    "git": "6096bd5+dirty"
+  },
+  "engines": {
+    "k4o": "k4o-aeba163",
+    "dogbed": "dogbed-d96b125"
+  },
+  "host": "Darwin arm64",
+  "runs": [
+    {
+      "suite": "smoke",
+      "command": "knap-mcp smoke --backend acp",
+      "exit": 0,
+      "seconds": 16,
+      "out": "smoke.out",
+      "err": "smoke.err"
+    }
+  ]
+}
