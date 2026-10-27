@@ -1,0 +1,3 @@
+6a738a8906ac2273  ../demo/frozen/06-verdict.orig.md
+6a738a8906ac2273  ../demo/frozen/06-verdict.mild.md
+6a738a8906ac2273  ../demo/frozen/06-verdict.feral.md

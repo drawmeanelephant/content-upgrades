@@ -11,6 +11,7 @@
 //!     knap-mcp eval [--corpus <seeds.json>] [--backend <b>]
 //!     knap-mcp backends [--probe]           backend availability + models
 //!     knap-mcp smoke [--backend <b>]        one live call per backend.Task
+//!     knap-mcp ask --system f --user f      one raw live completion, as JSON
 //!     knap-mcp --help | --version
 //!
 //! Subcommands are rows in `commands`: a registry tool (argv becomes its
@@ -78,6 +79,7 @@ const commands = [_]Command{
     .{ .name = "ratchet-eval", .usage = "ratchet-eval [--corpus f]", .summary = "ratchet climb table (eval/ratchet.json)", .run = .{ .custom = @import("ratchet.zig").cmdEval } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
     .{ .name = "backends", .usage = "backends [--probe]", .summary = "backend availability + resolved models", .run = .{ .custom = cmdBackends } },
+    .{ .name = "ask", .usage = "ask --system f --user f", .summary = "one raw live completion, as JSON", .run = .{ .custom = @import("ask.zig").cmd } },
     .{ .name = "smoke", .usage = "smoke [--backend k]", .summary = "one live call per task; exit 1 on a bad row", .run = .{ .custom = @import("smoke.zig").cmd } },
     .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
     .{ .name = "-h", .run = .{ .custom = cmdHelp } },
@@ -463,6 +465,7 @@ fn report(comptime fmt: []const u8, args: anytype) void {
 // Test discovery: `zig build test` only runs tests in files listed here,
 // one line per file under src/.
 test {
+    _ = @import("ask.zig");
     _ = @import("backend.zig");
     _ = @import("boris.zig");
     _ = @import("borisrag.zig");
