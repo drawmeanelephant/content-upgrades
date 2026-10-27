@@ -32,8 +32,16 @@ Checker used: flag any non-blank line directly before `^#{1,6} `,
 `^> \[!`, or a table start. Zero violations across all 14 renders
 (10 template/data pairs + apparatus rendered from each verdict file).
 
-## Pre-existing, not in scope
+## #133 separator-space fix (this lane)
 
-- `reading-note.min` renders `by Anonymous·` — a silent inline
-  `{% if author %}` arms the strip and eats the space before `·`.
-  Same engine rule as the note-if; cosmetic.
+- `reading-note.min` rendered `by Anonymous·` — a silent inline
+  `{% if year %}` armed the strip and ate the space before `·`.
+  Fixed with the footnote-ref idiom:
+  `{{ year | replace:"/(.+)/":", $1" }}` — an output node never arms
+  the strip, so spacing is identical with or without a year.
+- Audited the other three templates for the same pattern (silent
+  inline if followed by a same-line literal). None found:
+  `{% if docs_url %} · ...{% endif %}` and the
+  `{% if not loop.first %} · {% endif %}` loop separators keep the
+  literal inside the conditional, and every remaining inline if has an
+  `{% else %}` so it can never go silent.
