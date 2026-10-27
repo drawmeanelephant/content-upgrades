@@ -31,7 +31,7 @@ Status key:
 |---|---|---|---|---|---|---|
 | 1 | Cold open: the generic AI doc (density/2 25.7) | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
 | 2 | Ask for a verdict: model drafts data only | 20s | 20.8s | `02-verdict-data.tape` | main; `boris_ask`: B3 (B1's `ask.sh` works now); live drafting: M1 + MCP client | partial |
-| 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.2s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
+| 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 25.0s | `03-repair.tape` | frozen live take (I5); seed + diag: main | ready |
 | 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
@@ -54,8 +54,8 @@ screen it is verdict.html — oliver renders byte-identical to markdown for this
 template, so html is what makes "several views" visible. The k4o main markdown
 target emits pipe tables, so glow renders the receipts table properly.
 
-**Retakes.** Inputs are fixed, so every take prints the same text. The one exception is
-the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timestamp.
+**Retakes.** Inputs are fixed, so every take prints the same text. Beat 3's repair
+result is a frozen file (I5), so even its `doc_id` handle no longer varies.
 
 ## Beats
 
@@ -99,29 +99,40 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 
 - **On screen:** `diff` shows the seeded break, one `{% endif %}` removed from the
   shipped verdict template. `validate` returns the pinned k4o diagnostic
-  (`syntax error`, line 1, `unclosed if block`). One `repair` call returns
-  `converged: true`, `iterations: 1`, and the step it took. The clip ends on the
-  repaired doc in glow's pager.
+  (`syntax error`, line 29, `unclosed if block`). The repair shown is the frozen
+  live take (I5), labeled `Muse Wonder 1.0 via ACP (devin)`: `converged: true`,
+  `iterations: 1`. `steps[0].patch` is shown as the diff it makes against the
+  seeded region it replaces — the missing `{% endif %}` comes back, folded onto
+  the `{% if %}` line. The clip ends on the frozen repaired doc in glow's pager.
 - **Commands:**
   ```sh
   diff templates/verdict.knap seeded/verdict.knap
-  export KNAP_TEMPLATES_DIR=seeded
-  knap-mcp validate verdict -d data/verdict.sample.json | jq '.diagnostics[0]'
-  knap-mcp repair verdict -d data/verdict.sample.json --target markdown --backend mock --out repaired.md | jq
+  KNAP_TEMPLATES_DIR=seeded knap-mcp validate verdict -d data/verdict.sample.json | jq -c '.diagnostics[0]'
+  echo '# frozen live take: Muse Wonder 1.0 via ACP (devin)'
+  jq -c '{converged,iterations,step:.steps[0]|{line,detail}}' repair.json
+  diff <(tail -n +$RS seeded/verdict.knap) <(jq -j '.steps[0].patch' repair.json)
   glow -p repaired.md
   ```
   `seeded/verdict.knap` is derived at take time by `demo_seed_unclosed_if` in
-  `demo/lib/env.sh`, so it follows template edits.
-- **Template not byte-exact:** the mock closes the block at EOF, so the repaired
-  template differs from the shipped one and E1's eval does not count this seed as
-  `exact`. On k4o `aeba163` the repaired doc is byte-identical to a clean render
-  (checked with `diff`), so nothing differs on screen.
+  `demo/lib/env.sh`, so it follows template edits. `repair.json` /
+  `repaired.md` are copies of `demo/frozen/03-repair.json` /
+  `demo/frozen/03-repaired.md` made in the hidden preamble; `RS` is
+  `steps[0].region_start` (29 on the frozen take).
+- **Patch display:** `jq '.steps[0] | {line, detail, patch}'` prints the patch
+  as one JSON-escaped line (~2 KB), far past the 121-column frame, so the tape
+  diffs the same `steps[0].patch` against the seeded region it replaces instead:
+  `1c1`, the `{% endif %}` restored. `jq -j` keeps jq from appending a newline
+  the model did not emit.
+- **Template not byte-exact:** the live patch folds `{% if subject %}` and its
+  `{% endif %}` onto one line, so the patched template differs from the shipped
+  one and E1's eval does not count this seed as `exact`. On k4o `aeba163` the
+  repaired doc is byte-identical to a clean render (checked with `cmp` in
+  `demo/run.sh`), so nothing differs on screen.
 - **Why this seed:** the unknown-filter seed also converges with mock, but the mock
   patch deletes `| head2` instead of fixing it to `| h2`, so "The case" loses its
   heading. Converged is not the same as correct, and that should not be on screen.
-- **Open:** SPEC says "show diagnostic, patch, re-render visibly". The CLI reports
-  steps but not the patch text, so the patch itself is not visible yet. Once M1 lands,
-  try `--backend spark` on this seed; GAMEPLAN's fallback is to keep the mock take.
+- **Open:** none — the converging live take the freeze issue captured is what
+  SPEC asks for: diagnostic, patch, re-render, all visible.
 
 ### 4. The doc (30s): partial
 
