@@ -17,11 +17,13 @@ related:
   - "[[H. G. Wells]]"
   - "[[The Eternal Moment and Other Stories]]"
 ---
+
 # The Machine Stops
 
 by [[E. M. Forster]], 1909 · [read it free](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html)
 
 ![The Machine Stops](https://example.com/covers/the-machine-stops.jpg)
+
 **read it tonight** — a 1909 short story that called video calls, content about content, and the outage nobody knows how to fix
 
 Give-a-shit level: **high** · status: finished
@@ -35,14 +37,17 @@ Give-a-shit level: **high** · status: finished
 > Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee. [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=Imagine%2C%20if%20you%20can%2C%20a%20small%20room%2C%20hexagonal%20in%20shape%2C%20like%20the%20cell%20of%20a%20bee.)
 
 The opening line. Swap hexagonal for open-plan and it is a co-working listing.[^publication]
+
 > [!quote] Receipt
 > I see something like you in this plate, but I do not see you. [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=I%20see%20something%20like%20you%20in%20this%20plate%2C%20but%20I%20do%20not%20see%20you.)
 
 Kuno on video calls, a century before the webcam. Every remote team's retro in one sentence.
+
 > [!quote] Receipt
 > Beware of first-hand ideas! [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=Beware%20of%20first-hand%20ideas!)
 
 The lecturers' motto: only trust an idea once it has been through ten other people. Sound like any feed you know?
+
 > [!quote] Receipt
 > The Machine is much, but it is not everything. [link](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html#:~:text=The%20Machine%20is%20much%2C%20but%20it%20is%20not%20everything.)
 
@@ -57,13 +62,16 @@ Kuno's whole thesis in nine words. Men made it, he reminds his mother. Great men
 | the Book of the Machine | terms of service nobody reads | close enough |
 | the Mending Apparatus | a status page that says all systems operational | painfully |
 | everyone living underground | everyone living indoors | give it time |
+
 ## Marginalia
 
 - Vashti is not a villain. She is just very, very comfortable, which is scarier.
 - The Machine never turns evil. It just decays, and nobody remembers how it works. No robot uprising required.
 - Forster wrote this before radio broadcasting existed. Before. Radio.
+
 > [!warning]- Spoilers (open only if you have read it)
 > The Machine stops. Nobody can restart it, because nobody has understood it for generations, and even the Mending Apparatus is broken. Kuno and Vashti finally meet face to face as the cities collapse, with no plate between them, and it is the only real conversation in the whole story.
+
 ## Verdict
 
 Read it tonight. It is free, it takes about an hour, and it will make your next outage feel personal.

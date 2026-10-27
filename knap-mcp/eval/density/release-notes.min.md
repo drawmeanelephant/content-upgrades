@@ -7,6 +7,7 @@ verdict: "upgrade now"
 gaf: "high"
 slug: "acme-db"
 ---
+
 # AcmeDB
 
 **upgrade now** — the boring database finally learned how to save your ass
@@ -21,9 +22,11 @@ slug: "acme-db"
 ### Point-in-time snapshots
 
 acmedb snapshot create takes a consistent snapshot without pausing writes, and restore replays the WAL to any second inside the retention window. This is the feature we yelled about. It is real.
+
 ### Manifest compaction
 
 The manifest no longer grows forever, so cold starts on old databases drop from minutes to seconds. Nobody will tweet about it. Everybody will feel it.
+
 ### acmedb doctor
 
 A health check that tells you what is wrong in plain English instead of a hex dump. Petty? Yes. Useful? Also yes.
