@@ -1,7 +1,8 @@
-# Design note — ACP as a model backend (later goal)
+# Design note — ACP as a model backend
 
-Status: captured, not scheduled. Lives behind `backend.repairPatch()` in
-`knap-mcp/src/backend.zig` — add it as `Kind.acp` and nothing upstream changes.
+Status: shipped as `Kind.acp` (`knap-mcp/src/acp.zig`); this note is the
+original design rationale. The transport lives behind `backend.complete()`
+in `knap-mcp/src/backend.zig`.
 
 ## What ACP is
 
@@ -40,11 +41,12 @@ a Zig client reuses `mcp.zig`'s framing almost verbatim.
 
 ## Why it's worth it
 
-- **Judge-pluggable demo**: the repair loop runs on whatever ACP agent the
-  judge has configured — no key wrangling, no hardcoded provider.
-- **Muse Code dogfood beat**: if the sponsor's agent speaks ACP, it becomes
-  our repair backend over a standard protocol — the "their agent drives our
-  server" beat from GAMEPLAN gets a second leg.
+- **Pluggable iteration tier**: the repair and voice loops run on whatever
+  ACP-speaking agent the user has installed — no API-key wrangling, no
+  hardcoded provider.
+- **Agents as just another backend**: any agent that speaks ACP becomes a
+  model source over a standard protocol, behind the same
+  `backend.complete()` contract as the HTTP providers.
 - **keeps the story clean**: models write patches; agents are just another
   way to get model output. The broker contract doesn't care.
 
@@ -54,12 +56,12 @@ a Zig client reuses `mcp.zig`'s framing almost verbatim.
   the numbers card still wants the raw HTTP path.
 - Not something knap-mcp *serves*. knap-mcp is a tool server; MCP stays its
   upstream surface. ACP here is strictly downstream (us as client).
-- Not on the Oct 26–30 critical path. Mock covers plumbing; spark covers
-  real numbers. This lands after freeze or not at all.
+- Not a required backend. `mock` covers plumbing in tests; the HTTP
+  providers cover metered calls.
 
-## Open questions when it lands
+## Open questions
 
-1. Which ACP agents to smoke first (Muse Code? Zed-ecosystem agents?)
+1. Which ACP agents to smoke first (`devin acp`? Zed-ecosystem agents?)
 2. Session lifecycle: one session per repair call vs. per server lifetime.
 3. Permission/terminal capabilities — we want agents in read-none/write-none
    mode (prompt in, text out); confirm the protocol supports refusing

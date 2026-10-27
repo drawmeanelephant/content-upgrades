@@ -490,7 +490,7 @@ pub const Endpoint = struct {
     temperature: ?f64,
 };
 
-/// The built-in ids are the plan's best guess (next-phase-plan §3) and
+/// The built-in ids are the plan's best guess (docs/tracks/next-phase-plan.md §3) and
 /// are UNCONFIRMED until the live smoke (#89) runs `GET /v1/models`.
 fn defaultEndpoint(kind: Kind) struct { url: []const u8, model: []const u8 } {
     return switch (kind) {

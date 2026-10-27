@@ -1,7 +1,7 @@
 # Density calibration fixtures
 
 Markdown docs that pin the ordering of `src/density.zig`. The unit tests in
-that file load them and assert `flat-barf < generic < verdict < cunty`,
+that file load them and assert `flat-barf < generic < verdict < dense-ideal`,
 `flat-barf < apparatus`, `confetti < verdict`, that the pipe-table and
 HTML-table renders of the pre-T2 verdict score within 2 points of each
 other, and
@@ -20,7 +20,7 @@ below its full sample.
 | `release-notes.md` / `reading-note.md` | rendered template | `knap-mcp render <t> -d data/<t>.sample.json --target markdown` |
 | `release-notes.min.md` / `reading-note.min.md` | rendered template, required fields only | `knap-mcp render <t> -d data/<t>.min.json --target markdown` |
 | `confetti.md` | over-formatted | Hand-written: stacked callouts, bold on everything, emoji headings |
-| `cunty.md` | dense ideal | Hand-written: the verdict content with full apparatus (callouts, resolved footnotes, pipe table, wikilinks, deep links, embed, pull quote) |
+| `dense-ideal.md` | dense ideal | Hand-written: the verdict content with full apparatus (callouts, resolved footnotes, pipe table, wikilinks, deep links, embed, pull quote) |
 
 The rendered fixtures came from k4o `bdfb838` (the main-line pin in
 `scripts/engines.sh`); the two `verdict-v1.*` files are frozen (see above). The
