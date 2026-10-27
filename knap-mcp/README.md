@@ -2,8 +2,8 @@
 
 AI can't do layout. So we don't let it.
 
-One Zig binary: a stdio JSON-RPC MCP server **and** a CLI for judges
-without an MCP client. The server is a dispatcher + orchestration layer —
+One Zig binary: a stdio JSON-RPC MCP server **and** a direct CLI — same
+tools either way. The server is a dispatcher + orchestration layer —
 rendering goes through `k4o` (markdown/oliver) and `dogbed` (html) as
 external binaries. The model writes JSON values and repair patches only;
 templates are shipped, server-side, human-authored. Nothing ships
@@ -20,9 +20,37 @@ zig build test
 
 Engines resolve from `KNAP_K4O_PATH` / `KNAP_DOGBED_PATH`, else `PATH`.
 The pins live in `../scripts/engines.sh`: k4o `aeba163` (k4o main;
-markdown or oliver) and dogbed `188ccac` (html). `make engines` builds a
+markdown or oliver) and dogbed `d96b125` (html). `make engines` builds a
 missing pin into `~/.cache/knap-engines/`; the root `Makefile` exports
-both paths for every target.
+both paths for every target. Outside make:
+`eval "$(../scripts/engines.sh env)"`.
+
+## MCP client
+
+`knap-mcp` with no arguments (or `serve`) is the stdio server. Point a
+client at the binary and give it absolute paths — templates and the
+artifact store default to `./templates` and `./.knap-mcp` relative to the
+server's cwd:
+
+```json
+{
+  "mcpServers": {
+    "knap": {
+      "command": "/abs/path/to/knap-mcp/zig-out/bin/knap-mcp",
+      "env": {
+        "KNAP_TEMPLATES_DIR": "/abs/path/to/knap-mcp/templates",
+        "KNAP_MCP_HOME": "/abs/path/to/.knap-mcp",
+        "KNAP_K4O_PATH": "/abs/home/.cache/knap-engines/k4o-aeba163/k4o",
+        "KNAP_DOGBED_PATH": "/abs/home/.cache/knap-engines/dogbed-d96b125/dogbed",
+        "KNAP_BACKEND": "mock"
+      }
+    }
+  }
+}
+```
+
+`KNAP_BACKEND` defaults to `mock` anyway; set `KNAP_ACP_AGENT` or the
+`KNAP_COMPAT_*` vars (see Backends) to put the loop on a real model.
 
 ## CLI
 
@@ -44,8 +72,10 @@ knap-mcp density doc-<id>                       # formatting-density score (mark
 knap-mcp ratchet release-notes -d data/release-notes.min.json --backend mock
 knap-mcp ratchet-eval                           # ratchet climb table (eval/ratchet.json)
 knap-mcp eval --corpus eval/seeds.json --backend mock   # convergence table
-knap-mcp backends                               # backend availability
-knap-mcp                                        # MCP stdio server
+knap-mcp backends [--probe]                     # backend availability + models
+knap-mcp smoke --backend acp                    # one live call per task; exit 1 on a bad row
+knap-mcp ask --system prompts/sys.txt --user u.txt  # one raw live completion, as JSON
+knap-mcp                                        # MCP stdio server (or `serve`)
 ```
 
 Exit 0 on success, 1 on any error — including a `render` or `validate`
@@ -89,7 +119,7 @@ resolve to a page — embeds are checked as links. Diagnostics map back to
 line:column in the rendered doc; `ok` is false on any error.
 
 `knap_density(doc_id)` is the deterministic formatting-density score
-(density/1, 0–100) of a rendered markdown doc: per-signal breakdown plus
+(density/2, 0–100) of a rendered markdown doc: per-signal breakdown plus
 format_check penalties. Markdown only; no model call.
 
 `knap_ratchet(template_id, data)` is the values-only ratchet: probe which
@@ -151,12 +181,11 @@ has the full env list.
 (shipped templates mutated through the pinned error classes) and
 `eval/seeds.2nap.json` (the same classes over the 2nap corpus). Output is
 a per-seed and per-class convergence table plus a JSON report in the
-artifact store. This is the slide-number factory — "backend fixes N/M
-seeded breaks, mean iters X".
+artifact store — "backend fixes N/M seeded breaks, mean iters X".
 
 Mock convergence today: **12/22** on seeds.json (mean iters 1.25, exact
-4/12, controls 3/3 clean) and **120/167** on seeds.2nap.json (mean iters
-1.19, exact 58/115, controls 2/2 clean), with zero no-op seeds in either
+6/12, controls 3/3 clean) and **120/167** on seeds.2nap.json (mean iters
+1.19, exact 66/115, controls 2/2 clean), with zero no-op seeds in either
 corpus. The class table breaks convergence down by error class, so the
 classes the mock cannot patch (unknown-tag, missing-value,
 bad-filter-arg, unclosed-comment) read as honest NO rows, not bugs.
@@ -178,7 +207,7 @@ with the pin.
 - `src/backend.zig` — backend interface: mock patches + `complete()` for live models
 - `src/repair.zig` — bounded repair loop
 - `src/formatcheck.zig` — advisory structure lint (9 pinned rules)
-- `src/density.zig` — formatting-density scorer (density/1)
+- `src/density.zig` — formatting-density scorer (density/2)
 - `src/structhash.zig` — layout-skeleton tokenizer + hash (markdown, html)
 - `src/voice.zig` — voice rewrite logic (eligibility, guard, call assembly)
 - `src/verifier.zig` — citation verifier slot (none | heuristic | decision)
