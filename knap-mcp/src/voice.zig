@@ -274,19 +274,41 @@ pub fn collect(a: Allocator, template_id: []const u8, shape: Value, data: *Value
             const sub_fields = if (desc == .object) desc.object.get("fields") else null;
             if (v.* != .array or sub_fields == null or sub_fields.? != .object) continue;
             for (v.array.items, 0..) |*elem, i| {
-                if (elem.* != .object) continue;
-                for (sub_fields.?.object.keys(), sub_fields.?.object.values()) |sub, sdesc| {
-                    if (!isVoice(sdesc) or neverRewritten(template_id, key, sub)) continue;
-                    const sv = elem.object.getPtr(sub) orelse continue;
-                    const prefix = try std.fmt.allocPrint(a, "{s}[{d}].{s}", .{ key, i, sub });
-                    try addValue(a, &out, prefix, sdesc, sv, footnoteAbutting(sdesc, elem.*));
-                }
+                const prefix = try std.fmt.allocPrint(a, "{s}[{d}]", .{ key, i });
+                try collectFields(a, &out, template_id, key, prefix, sub_fields.?, elem);
             }
         } else if (isVoice(desc)) {
             try addValue(a, &out, key, desc, v, false);
         }
     }
     return out.items;
+}
+
+/// The `fields` of one array<object> element, applied to `elem`: a flagged
+/// leaf becomes a slot at `prefix.sub`; a nested array<object> recurses
+/// into its own fields (`sources[0].quotes[0].used_for`). The never-list
+/// guards values, not containers: it is checked on the leaf's key, so
+/// walking `quotes` still leaves each verbatim `text` untouched, while a
+/// whole subtree named by a never-key (`receipts`, `frontmatter`) stays
+/// off-limits.
+fn collectFields(a: Allocator, out: *std.ArrayList(Slot), template_id: []const u8, key: []const u8, prefix: []const u8, fields: Value, elem: *Value) Allocator.Error!void {
+    if (elem.* != .object or fields != .object) return;
+    for (fields.object.keys(), fields.object.values()) |sub, sdesc| {
+        const sv = elem.object.getPtr(sub) orelse continue;
+        const path = try std.fmt.allocPrint(a, "{s}.{s}", .{ prefix, sub });
+        if (std.mem.eql(u8, descStr(sdesc, "type"), "array<object>")) {
+            if (neverKey(sub)) continue;
+            const sub_fields = if (sdesc == .object) sdesc.object.get("fields") else null;
+            if (sv.* != .array or sub_fields == null) continue;
+            for (sv.array.items, 0..) |*inner, j| {
+                const inner_prefix = try std.fmt.allocPrint(a, "{s}[{d}]", .{ path, j });
+                try collectFields(a, out, template_id, key, inner_prefix, sub_fields.?, inner);
+            }
+            continue;
+        }
+        if (!isVoice(sdesc) or neverRewritten(template_id, key, sub)) continue;
+        try addValue(a, out, path, sdesc, sv, footnoteAbutting(sdesc, elem.*));
+    }
 }
 
 /// True when the shape flags `footnote_abutting` and the element actually
@@ -975,6 +997,31 @@ test "collect flags footnote-abutting slots only when the element has a note" {
     try testing.expectEqual(@as(usize, 2), slots.len);
     try testing.expect(slots[0].footnote_abutting);
     try testing.expect(!slots[1].footnote_abutting);
+}
+
+test "collect reaches flagged leaves inside a nested array<object>" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const shape = try std.json.parseFromSliceLeaky(Value, a,
+        \\{"fields":{"sources":{"type":"array<object>","role":"s","fields":{
+        \\"name":{"type":"string","role":"n","voice":true},
+        \\"receipts":{"type":"array<object>","role":"r","fields":{
+        \\"claim":{"type":"string","role":"c","voice":true}}},
+        \\"quotes":{"type":"array<object>","role":"q","fields":{
+        \\"text":{"type":"string","role":"t","voice":true},
+        \\"used_for":{"type":"string","role":"u","voice":true}}}}}}}
+    , .{});
+    var data = try std.json.parseFromSliceLeaky(Value, a,
+        \\{"sources":[{"name":"N","receipts":[{"claim":"c"}],
+        \\"quotes":[{"text":"q1","used_for":"u1"},{"text":"q2","used_for":"u2"}]}]}
+    , .{});
+    // name is a never-keyed leaf, text is verbatim, and a nested subtree
+    // under a never-key name stays untouched; only used_for is a slot.
+    const slots = try collect(a, "verdict", shape, &data);
+    try testing.expectEqual(@as(usize, 2), slots.len);
+    try testing.expectEqualStrings("sources[0].quotes[0].used_for", slots[0].path);
+    try testing.expectEqualStrings("sources[0].quotes[1].used_for", slots[1].path);
 }
 
 test "guard rejects markup removal, wrappers, bad UTF-8 and a footnote-abutting bang" {

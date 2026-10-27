@@ -16,8 +16,8 @@
     }},
     "blockers":   {"type": "array<string>", "role": "dealbreakers, bulleted inside the 'Dealbreakers' danger callout", "optional": true, "apparatus": "list", "max_items": 3, "words": 6},
     "receipts":   {"type": "array<object>", "role": "claim/evidence rows of the 'Receipts' pipe table; header row is fixed in the template", "optional": true, "apparatus": "table", "max_items": 3, "words": 4, "fields": {
-      "claim":      {"type": "string", "role": "the claim, one line", "voice": true},
-      "evidence":   {"type": "string", "role": "what backs it, one line; verbatim from a source quote", "voice": true, "evidence": true},
+      "claim":      {"type": "string", "role": "the claim, one line"},
+      "evidence":   {"type": "string", "role": "what backs it, one line; verbatim from a source quote", "evidence": true},
       "source":     {"type": "string", "role": "name of a page in `sources`, rendered as a [[wikilink]]; omit for an unsourced row", "optional": true},
       "confidence": {"type": "string", "role": "high|medium|low (apparatus claim map; falls back to unrated)", "optional": true},
       "note":       {"type": "string", "role": "key into `footnotes`; renders a [^key] footnote ref after the evidence cell. Must match a `footnotes` key exactly", "optional": true, "ref": "footnotes"}
