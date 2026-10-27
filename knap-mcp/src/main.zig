@@ -116,8 +116,8 @@ const usage_tail =
     \\
     \\Environment:
     \\  KNAP_K4O_PATH / KNAP_DOGBED_PATH   engine binaries (default: PATH)
-    \\  KNAP_TEMPLATES_DIR                 shipped template dir (default ./templates)
-    \\  KNAP_MCP_HOME                      artifact store dir (default .knap-mcp)
+    \\  KNAP_TEMPLATES_DIR                 shipped template dir (default <exe>/../../templates)
+    \\  KNAP_MCP_HOME                      artifact store dir (default ./.knap-mcp in the server cwd)
     \\  KNAP_BACKEND                       default backend kind
     \\  MODEL_API_KEY                      enables spark/wonder/baseten
     \\  KNAP_<KIND>_URL                    chat endpoint (KIND = SPARK|WONDER|BASETEN|COMPAT)
