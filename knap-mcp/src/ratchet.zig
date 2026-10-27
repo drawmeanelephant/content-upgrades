@@ -22,6 +22,7 @@ const density = @import("density.zig");
 const formatcheck = @import("formatcheck.zig");
 const store = @import("store.zig");
 const verifier = @import("verifier.zig");
+const borisrag = @import("borisrag.zig");
 
 const Value = std.json.Value;
 const ObjectMap = std.json.ObjectMap;
@@ -474,6 +475,16 @@ pub fn dataEvidence(arena: std.mem.Allocator, data: ObjectMap) ![]const []const 
     return out.items;
 }
 
+/// Evidence quotes from `boris_ask` hits on `subject ?? title`: the top
+/// snippets, best first. Null when the data names neither.
+pub fn borisEvidence(arena: std.mem.Allocator, art: *const borisrag.Artifact, data: ObjectMap) !?[]const []const u8 {
+    const query = str(data, "subject") orelse str(data, "title") orelse return null;
+    const hits = try borisrag.ask(arena, art, query, borisrag.default_limit, false);
+    var out: std.ArrayList([]const u8) = .empty;
+    for (hits) |h| try out.append(arena, h.snippet);
+    return out.items;
+}
+
 /// The evidence-flagged strings in a value: the value itself for an
 /// evidence scalar or item, else the item fields marked `evidence`.
 fn evidenceClaims(arena: std.mem.Allocator, s: Slot, value: Value) ![]const []const u8 {
@@ -569,12 +580,18 @@ pub const Step = struct {
     detail: []const u8 = "",
 };
 
+/// Where evidence-gated slots' quotes come from: `data` reads
+/// `data.sources`, `boris` is `boris_ask` snippets for `subject ?? title`.
+pub const Evidence = enum { data, boris };
+
 pub const Options = struct {
     max_iterations: usize = default_max_iterations,
     epsilon: f64 = epsilon,
     tone: ?[]const u8 = null,
     /// Gate for `evidence` slots; `none` skips it.
     verifier: verifier.Kind = .heuristic,
+    /// Evidence pool for gated slots and the enrich slice.
+    evidence: Evidence = .data,
     /// Mock backend table: slot path -> array of canned values, used in
     /// order. A slot with no (or no more) values declines.
     mock: ObjectMap = .empty,
@@ -718,7 +735,14 @@ pub fn run(
         return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
     const a = ctx.arena;
     const t0 = std.Io.Timestamp.now(ctx.io, .awake);
-    var r: Run = .{ .ctx = ctx, .kind = kind, .tpl = tpl_path, .shape = shape, .opts = opts, .evidence = try dataEvidence(a, data0) };
+    var r: Run = .{ .ctx = ctx, .kind = kind, .tpl = tpl_path, .shape = shape, .opts = opts, .evidence = switch (opts.evidence) {
+        .data => try dataEvidence(a, data0),
+        .boris => blk: {
+            const art = try borisrag.load(ctx);
+            break :blk try borisEvidence(a, &art, data0) orelse
+                return ctx.fail("evidence \"boris\" needs a 'subject' or 'title' string in data", .{});
+        },
+    } };
     const slots = shape.slots;
 
     var best = switch (try r.render(data0)) {
@@ -1466,4 +1490,51 @@ test "warnsSubset compares rule counts, not lines" {
     const more = [_]W{ .{ .rule = "raw-url-count", .line = 9, .detail = "" }, .{ .rule = "skipped-heading", .line = 1, .detail = "" } };
     try testing.expect(warnsSubset(&moved, &old));
     try testing.expect(!warnsSubset(&more, &old));
+}
+
+const boris_fixture_search =
+    \\{"format":"boris-rendered-search-index","schema_version":1,"documents":[
+    \\ {"path":"claims/backups.html","title":"AcmeDB has managed backups","sections":[
+    \\  {"level":1,"heading":"AcmeDB has managed backups","fragment":"h","text":"","code":""},
+    \\  {"level":2,"heading":"Claim","fragment":"claim","text":"AcmeDB takes a snapshot every hour and keeps thirty days of them.","code":""}]}]}
+;
+
+const boris_fixture_completion =
+    \\{"format":"boris-completion-index","schema_version":1,"entities":[
+    \\ {"id":"claims/backups","title":"AcmeDB has managed backups","tags":["claim","supported"],"relations":[]}]}
+;
+
+test "boris evidence: snippets gate a slot; verbatim accepted, paraphrase rejected" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var msg: []const u8 = "";
+    const art = try borisrag.parse(a, boris_fixture_search, boris_fixture_completion, &msg);
+    const ev = (try borisEvidence(a, &art, try testData(a,
+        \\{"title":"acmedb backups"}
+    ))).?;
+    try testing.expect(ev.len > 0);
+
+    var env: std.process.Environ.Map = .init(a);
+    var ctx: Ctx = .{
+        .arena = a,
+        .gpa = a,
+        .io = std.testing.io,
+        .environ = &env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = ".knap-mcp",
+        .project_root = ".",
+    };
+    const pull = slotNamed(try parseShape(a, test_shape), "pull");
+    // A verbatim snippet entails; a paraphrase of it does not.
+    try testing.expectEqual(@as(?[]const u8, null), try checkEvidence(&ctx, .heuristic, pull, .{ .string = ev[0] }, ev));
+    const paraphrase = "Snapshots of AcmeDB run every hour with thirty days kept.";
+    try testing.expect((try checkEvidence(&ctx, .heuristic, pull, .{ .string = paraphrase }, ev)) != null);
+    // subject beats title as the query.
+    const subj = (try borisEvidence(a, &art, try testData(a,
+        \\{"subject":"acmedb backups","title":"zz nothing matches this"}
+    ))).?;
+    try testing.expect(subj.len > 0);
 }
