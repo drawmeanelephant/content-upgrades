@@ -16,6 +16,7 @@ make test
 
 Put `~/.local/bin` on `PATH` for the bare `knap-mcp` commands below, or call `knap-mcp/zig-out/bin/knap-mcp` directly. An installed binary still resolves templates and its artifact store from the cwd — point `KNAP_TEMPLATES_DIR` at `<repo>/knap-mcp/templates` and `KNAP_MCP_HOME` where you want artifacts when running it elsewhere (install-aware defaults are tracked in #176).
 
+
 Engine pins live in `scripts/engines.sh` (k4o `aeba163`, dogbed `d96b125`). The Makefile exports `KNAP_K4O_PATH` / `KNAP_DOGBED_PATH` for every `make` target; for direct CLI runs outside make, `eval "$(scripts/engines.sh env)"`.
 
 ## Quickstart — no accounts needed
