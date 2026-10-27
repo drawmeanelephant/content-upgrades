@@ -64,6 +64,53 @@
       "expect": {"reject": {"schema": 1}, "min_accepted": 1}
     },
     {
+      "id": "fixture-footnotes",
+      "template_path": "ratchet/footnotes.knap",
+      "shape_path": "ratchet/footnotes.shape.json",
+      "data": "@ratchet/footnotes.data.json",
+      "expect": {"min_accepted": 2, "min_gain": 1}
+    },
+    {
+      "id": "adv-dangling-ref",
+      "template_path": "ratchet/footnotes.knap",
+      "shape_path": "ratchet/footnotes.shape.json",
+      "data": "@ratchet/footnotes.data.json",
+      "mock": {"notes{+}": [], "extras[+]": [
+        {"what": "acmedb doctor explains what is wrong in plain English.", "note": "doctor-receipt"}
+      ]},
+      "expect": {"reject": {"schema": 1, "declined": 1}, "stop": "stalled"}
+    },
+    {
+      "id": "adv-model-picks-key",
+      "template_path": "ratchet/footnotes.knap",
+      "shape_path": "ratchet/footnotes.shape.json",
+      "data": "@ratchet/footnotes.data.json",
+      "mock": {"notes{+}": [
+        {"key": "my-key", "text": "Snapshots are online, incremental, and restorable to any point in the last seven days."}
+      ], "extras[+]": []},
+      "expect": {"reject": {"schema": 1, "declined": 1}, "stop": "stalled"}
+    },
+    {
+      "id": "adv-footnote-markup",
+      "template_path": "ratchet/footnotes.knap",
+      "shape_path": "ratchet/footnotes.shape.json",
+      "data": "@ratchet/footnotes.data.json",
+      "mock": {"notes{+}": [
+        "Snapshots are online, incremental, and restorable[^1] to any point in the last seven days."
+      ], "extras[+]": []},
+      "expect": {"reject": {"inert": 1, "declined": 1}, "stop": "stalled"}
+    },
+    {
+      "id": "adv-footnote-paraphrase",
+      "template_path": "ratchet/footnotes.knap",
+      "shape_path": "ratchet/footnotes.shape.json",
+      "data": "@ratchet/footnotes.data.json",
+      "mock": {"notes{+}": [
+        "Snapshots are online and restorable to any point in the last week."
+      ], "extras[+]": []},
+      "expect": {"reject": {"verifier": 1, "declined": 1}, "stop": "stalled"}
+    },
+    {
       "id": "adv-no-gain-wall",
       "template_id": "release-notes",
       "data": "@../data/release-notes.min.json",
