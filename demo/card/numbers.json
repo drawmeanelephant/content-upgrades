@@ -2,7 +2,7 @@
   "card": "knap-mcp: the numbers, measured",
   "generated": {
     "date_utc": "2026-10-27",
-    "git": "e2ab381",
+    "git": "6a1ddc1",
     "by": "demo/card/build.sh"
   },
   "engines": {
@@ -46,7 +46,7 @@
         },
         {
           "value": "22/22",
-          "detail": "exact 10/22 · mean 1.05 iters",
+          "detail": "exact 11/22 · mean 1.05 iters",
           "source": "eval/results/live/devin-wonder/repair-seeds.out"
         }
       ]
@@ -87,8 +87,8 @@
           "source": "eval/results/live/acp.txt"
         },
         {
-          "value": "2/9",
-          "detail": "best +14.3 reading-note-min",
+          "value": "3/9",
+          "detail": "best +15.9 release-notes-min",
           "source": "eval/results/live/devin-wonder/ratchet.out"
         }
       ]
@@ -124,7 +124,7 @@
           "source": "eval/results/live/acp.txt"
         },
         {
-          "value": "19 × 955 B",
+          "value": "18 × 981 B",
           "source": "eval/results/live/devin-wonder/ratchet.out"
         }
       ]

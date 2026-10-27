@@ -1,0 +1,32 @@
+{
+  "profile": "ollama",
+  "profile_source": "scripts/providers.sh",
+  "label": "qwen2.5-coder:1.5b via ollama (local)",
+  "backend": "compat",
+  "model": "qwen2.5-coder:1.5b",
+  "effort": null,
+  "expect": "*",
+  "note": "smoke repair-patch: wrong shape",
+  "started": "2026-10-27T19:47:12Z",
+  "finished": "2026-10-27T19:47:19Z",
+  "knap_mcp": {
+    "version": "0.1.0",
+    "git": "6a1ddc1"
+  },
+  "engines": {
+    "k4o": "k4o-aeba163",
+    "dogbed": "dogbed-d96b125"
+  },
+  "host": "Darwin arm64",
+  "runs": [
+    {
+      "suite": "smoke",
+      "command": "knap-mcp smoke --backend compat",
+      "exit": 1,
+      "seconds": 7,
+      "at": "2026-10-27T19:47:19Z",
+      "out": "smoke.out",
+      "err": "smoke.err"
+    }
+  ]
+}

@@ -4,7 +4,7 @@ backend: acp   corpus: eval/seeds.json   max_iters: 4
 |---|---|---|---|---|---|---|
 | unclosed-if | unclosed-if | remove | yes | 1 | 0 | no |
 | unclosed-for | unclosed-for | remove | yes | 1 | 0 | yes |
-| unclosed-var | unclosed-output | remove | yes | 1 | 0 | no |
+| unclosed-var | unclosed-output | remove | yes | 1 | 0 | yes |
 | unknown-filter | unknown-filter | replace | yes | 1 | 0 | yes |
 | dangling-filter | dangling-pipe | replace | yes | 1 | 0 | no |
 | clean-control | control | none | clean | 0 | 0 | - |
@@ -32,7 +32,7 @@ backend: acp   corpus: eval/seeds.json   max_iters: 4
 |---|---|---|---|---|---|---|
 | unclosed-if | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
 | unclosed-for | 2 | 2 | 100% | 1.50 | 1/2 | 0 |
-| unclosed-output | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
+| unclosed-output | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
 | unknown-filter | 2 | 2 | 100% | 1.00 | 1/2 | 0 |
 | dangling-pipe | 2 | 2 | 100% | 1.00 | 0/2 | 0 |
 | orphan-endif | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
@@ -45,9 +45,9 @@ backend: acp   corpus: eval/seeds.json   max_iters: 4
 | missing-filter-arg | 2 | 2 | 100% | 1.00 | 1/2 | 0 |
 | empty-filter-arg | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
 | unclosed-tuple | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
-| all | 22 | 22 | 100% | 1.05 | 10/22 | 0 |
+| all | 22 | 22 | 100% | 1.05 | 11/22 | 0 |
 
-converged 22/22 breaks   mean iters 1.05   exact 10/22   no-op seeds 0   controls 3/3 clean
+converged 22/22 breaks   mean iters 1.05   exact 11/22   no-op seeds 0   controls 3/3 clean
 calls: 23  mean slice: 422 B  max: 2058 B  prefix: 331 B
-report: knap://docs/doc-1793108800789656000-73
-tokens: prompt 314065  completion 11019  total 325084  reasoning 0
+report: knap://docs/doc-1793129586885263000-73
+tokens: prompt 314065  completion 10560  total 324625  reasoning 0

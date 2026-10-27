@@ -76,6 +76,16 @@ make live P=fake                                     # credential-free self-test
    `live.sh spark` reported `served: yes` and smoke 6/6. `compat` did the
    same. When the real key lands, only the URL/model defaults are
    unconfirmed, and smoke's `served:` column checks them.
+5. **Re-verified keyless 2026-10-27 (second run).** `make test`,
+   `make eval` (mock, seeds + 2nap), `make ratchet-eval`,
+   `make voice-eval` and `make demo` all green; `live.sh` re-ran
+   devin-wonder, devin-swe-2 and devin-summarizer end to end. The
+   `ollama` profile also ran against a local `qwen2.5(-coder):1.5b`:
+   `served: yes`, correct model resolution, metered usage — the whole
+   compat HTTP path works — but the repair-patch smoke row gets a wrong
+   shape at 1.5B (12-token replies, no patch), so the fail-fast gate
+   correctly stopped it before the evals. Use a bigger local model for
+   real numbers.
 
 ## Results
 
@@ -85,9 +95,10 @@ plus this branch. Raw outputs and provenance are in
 
 | profile | model (agent-reported) | smoke | repair `seeds.json` | ratchet `ratchet.live.json` | voice (verdict) |
 |---|---|---|---|---|---|
-| devin-wonder | `muse-wonder-1-0-high`, effort low | 6/6 ok, 2.9 s/call | 22/22 conv, 1.05 iters, 10/22 exact (rerun in #157; first run 1.09 iters, 8/22 exact); 2nap 167/167, see I2.md | 2/9 ok, **inert 0** | 2/2 layout-identical (feral: 1 of 8 rejected) |
-| devin-swe-2 | `swe-2-high`, effort medium | 6/6 ok, 2.1 s/call | 22/22 conv, 1.05 iters, 8/22 exact | 3/9 ok, **inert 0** | 2/2 layout-identical (feral: 4 of 8 rejected) |
+| devin-wonder | `muse-wonder-1-0-high`, effort low | 6/6 ok, 2.5 s/call | 22/22 conv, 1.05 iters, 11/22 exact (2nd run; first runs 1.09/1.05 iters, 8/22, 10/22 exact); 2nap 167/167, see I2.md | 3/9 ok, **inert 0** | 2/2 layout-identical (feral: 1 of 8 rejected) |
+| devin-swe-2 | `swe-2-high`, effort medium | 6/6 ok, 2.3 s/call | 22/22 conv, 1.09 iters, 9/22 exact | 3/9 ok, **inert 0** | 2/2 layout-identical (feral: 4 of 8 rejected) |
 | devin-summarizer | unreported | 6/6 ok | (I2/I3 columns) | | |
+| ollama (qwen2.5-coder:1.5b, local) | `qwen2.5-coder:1.5b` | 5/6 ok, repair-patch wrong shape | gated off | | |
 | opencode-spark-1.3 / -1.2 / wonder-1.0 | correct model | 0/6: insufficient account funds | | | |
 | spark / wonder / baseten | | skipped: needs `MODEL_API_KEY` | | | |
 

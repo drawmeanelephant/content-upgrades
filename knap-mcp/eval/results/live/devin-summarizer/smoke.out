@@ -2,13 +2,13 @@ backend: acp   model: unreported   effort: -   served: n/a
 
 | row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
 |---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
-| repair | yes | 2043 | end_turn | 17 | 0 | 2827 | 30 | 2857 | - | exact |  |
-| voice | yes | 2838 | end_turn | 16 | 0 | 2827 | 22 | 2849 | - | exact |  |
-| verify | yes | 2050 | end_turn | 17 | 0 | 2827 | 22 | 2849 | - | exact |  |
-| judge | yes | 2669 | end_turn | 16 | 0 | 2827 | 66 | 2893 | - | exact |  |
-| enrich | yes | 1929 | end_turn | 17 | 0 | 2828 | 22 | 2850 | - | exact |  |
-| repair-patch | yes | 3321 | - | 49 | - | 2904 | 95 | 2999 | - | exact |  |
+| repair | yes | 1911 | end_turn | 17 | 0 | 2824 | 22 | 2846 | - | exact |  |
+| voice | yes | 1924 | end_turn | 16 | 0 | 2824 | 22 | 2846 | - | exact |  |
+| verify | yes | 1927 | end_turn | 17 | 0 | 2824 | 22 | 2846 | - | exact |  |
+| judge | yes | 1862 | end_turn | 16 | 0 | 2824 | 22 | 2846 | - | exact |  |
+| enrich | yes | 2900 | end_turn | 17 | 0 | 2825 | 45 | 2870 | - | exact |  |
+| repair-patch | yes | 1712 | - | 49 | - | 2901 | 18 | 2919 | - | exact |  |
 
-smoke: 6/6 ok   wall 14850 ms   mean 2475 ms/call
+smoke: 6/6 ok   wall 12236 ms   mean 2039 ms/call
 calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
-tokens: prompt 17040  completion 257  total 17297  reasoning 0
+tokens: prompt 17022  completion 151  total 17173  reasoning 0
