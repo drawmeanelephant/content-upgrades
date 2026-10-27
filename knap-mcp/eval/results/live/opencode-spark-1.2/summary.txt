@@ -1,0 +1,9 @@
+profile: opencode-spark-1.2
+label:   Muse Spark 1.2 via ACP (opencode)
+backend: acp   model: opencode/muse-spark-1.2   effort: default
+smoke:   0/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   -
+

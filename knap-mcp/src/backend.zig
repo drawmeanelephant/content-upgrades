@@ -639,6 +639,7 @@ fn acpReply(ctx: *Ctx, task: Task, system: []const u8, user: []const u8) Error!R
         .finish_reason = if (turn.stop_reason.len > 0) turn.stop_reason else null,
         .usage = parseUsage(turn.usage),
     };
+    ctx.countUsage(reply.usage);
     if (ctx.environ.get("KNAP_DEBUG") != null) {
         const u = reply.usage;
         std.debug.print("knap-mcp: acp/{s} agent={s} stop={s} usage prompt={?d} completion={?d} total={?d} reasoning={?d}\n", .{
@@ -1512,6 +1513,8 @@ test "acp: a turn becomes a Reply with usage, counted like a live call" {
     try testing.expectEqual(@as(?u64, 1), r.usage.reasoning_tokens);
     try testing.expectEqual(@as(usize, 1), ctx.calls);
     try testing.expectEqual(@as(usize, 6), ctx.prefix_bytes);
+    try testing.expectEqual(@as(u64, 43), ctx.total_tokens);
+    try testing.expectEqual(@as(u64, 1), ctx.reasoning_tokens);
 }
 
 test "acp: repair runs agent output through sanitizePatch and degrades on a cut-off turn" {

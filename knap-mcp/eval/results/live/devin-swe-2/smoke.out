@@ -1,0 +1,14 @@
+backend: acp   model: swe-2-high   effort: medium   served: n/a
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | yes | 1881 | end_turn | 17 | 0 | 12877 | 23 | 12900 | - | exact |  |
+| voice | yes | 1753 | end_turn | 16 | 0 | 12877 | 26 | 12903 | - | exact |  |
+| verify | yes | 1724 | end_turn | 17 | 0 | 12876 | 23 | 12899 | - | exact |  |
+| judge | yes | 1442 | end_turn | 16 | 0 | 12878 | 32 | 12910 | - | exact |  |
+| enrich | yes | 1533 | end_turn | 17 | 0 | 12878 | 26 | 12904 | - | exact |  |
+| repair-patch | yes | 1648 | - | 49 | - | 12956 | 31 | 12987 | - | exact |  |
+
+smoke: 6/6 ok   wall 9981 ms   mean 1663 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 77342  completion 161  total 77503  reasoning 0

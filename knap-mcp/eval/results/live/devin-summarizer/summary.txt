@@ -1,0 +1,9 @@
+profile: devin-summarizer
+label:   devin summarizer agent via ACP
+backend: acp   model: unreported   effort: -
+smoke:   6/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   -
+

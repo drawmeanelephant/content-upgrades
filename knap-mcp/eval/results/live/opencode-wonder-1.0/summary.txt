@@ -1,0 +1,9 @@
+profile: opencode-wonder-1.0
+label:   Muse Wonder 1.0 via ACP (opencode)
+backend: acp   model: opencode/muse-wonder-1.0   effort: default
+smoke:   0/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   -
+

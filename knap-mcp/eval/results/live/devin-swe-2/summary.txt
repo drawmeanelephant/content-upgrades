@@ -1,0 +1,9 @@
+profile: devin-swe-2
+label:   SWE-2 via ACP (devin, free tier)
+backend: acp   model: swe-2-high   effort: medium
+smoke:   6/6 ok
+repair:  22/22 conv, 1.05 iters, 8/22 exact
+repair (2nap): -
+ratchet: 3/9 cases ok, inert 0
+voice:   2/2 layout-identical
+

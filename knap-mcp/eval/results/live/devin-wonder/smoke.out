@@ -1,0 +1,14 @@
+backend: acp   model: muse-wonder-1-0-high   effort: low   served: n/a
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | yes | 1796 | end_turn | 17 | 0 | 13498 | 19 | 13517 | - | exact |  |
+| voice | yes | 3683 | end_turn | 16 | 0 | 13498 | 19 | 13517 | - | exact |  |
+| verify | yes | 5052 | end_turn | 17 | 0 | 13498 | 19 | 13517 | - | exact |  |
+| judge | yes | 2664 | end_turn | 16 | 0 | 13499 | 19 | 13518 | - | exact |  |
+| enrich | yes | 2054 | end_turn | 17 | 0 | 13499 | 25 | 13524 | - | exact |  |
+| repair-patch | yes | 3147 | - | 48 | - | 13574 | 126 | 13700 | - | exact |  |
+
+smoke: 6/6 ok   wall 18396 ms   mean 3066 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 81066  completion 227  total 81293  reasoning 0
