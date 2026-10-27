@@ -4,10 +4,14 @@
    fields fall back with ?? or vanish with their block. Callout kinds,
    callout titles and section headings are template-owned: the model writes
    values only. Shape descriptor: shapes/reading-note.json.
-   Spacing: optional blocks open with a blank line and close flush against
-   the next block, and loop separators sit behind "not loop.last", so
-   markdown (which trims one trailing newline per loop body) and textile
-   come out with identical single blank lines. Engine note: fragment_link
+   Spacing: optional blocks open with a blank line and close with
+   `{{ "" }}{% endif %}`, which shields the last content line's newline
+   from the standalone-endif trim so every block ends exactly one newline.
+   Loop bodies end with a blank line: each iteration drops one trailing
+   newline and the loop joins iterations with one, which leaves a single
+   blank line between items. Footnote refs come from a replace filter so a
+   silent inline if cannot arm the post-tag whitespace strip that eats the
+   next newline. Engine note: fragment_link
    links only arrays of two or more items, so each lone quote is padded
    with merge and unwrapped with first (see verdict.knap). #}{% set byline = author ?? "Anonymous" %}
 {% set state = status ?? "read" %}
@@ -24,13 +28,14 @@
 {% if tags %}{{ tags | yaml_property:"tags" }}
 {% endif %}{% if connections %}{{ connections | wikilink | yaml_property:"related" }}
 {% endif %}---
+
 {{ title | h1 }}
 
 by {% if author %}{{ author | wikilink }}{% else %}{{ byline }}{% endif %}{% if year %}, {{ year }}{% endif %} · {{ source_url | link:"read it free" }}
 {% if cover %}
 
 {{ cover | image:title }}
-{% endif %}
+{{ "" }}{% endif %}
 {{ verdict | bold }} — {{ take }}
 
 Give-a-shit level: {{ gaf | bold }} · status: {{ state }}
@@ -42,11 +47,9 @@ Give-a-shit level: {{ gaf | bold }} · status: {{ state }}
 {% for q in quotes %}
 {{ q.text | merge:"" | fragment_link:source_url | first | callout:("quote", "Receipt") }}
 
-{{ q.why }}{% if q.note %}[^{{ q.note | kebab }}]{% endif %}{% if not loop.last %}
+{{ q.why }}{{ q.note | kebab | replace:"/(.+)/":"[^$1]" }}
 
-
-{% endif %}{% endfor %}
-{% if aged %}
+{% endfor %}{% if aged %}
 
 {{ "How it aged" | h2 }}
 
@@ -55,15 +58,15 @@ Give-a-shit level: {{ gaf | bold }} · status: {{ state }}
 {% for r in aged %}
 | {{ r.then }} | {{ r.now }} | {{ r.called_it }} |
 {% endfor %}
-{% endif %}{% if thoughts %}
+{{ "" }}{% endif %}{% if thoughts %}
 
 {{ "Marginalia" | h2 }}
 
 {{ thoughts | list }}
-{% endif %}{% if spoilers %}
+{{ "" }}{% endif %}{% if spoilers %}
 
 {{ spoilers | callout:("warning", "Spoilers (open only if you have read it)", true) }}
-{% endif %}
+{{ "" }}{% endif %}
 {{ "Verdict" | h2 }}
 
 {{ bottom_line }}{% if connections %}

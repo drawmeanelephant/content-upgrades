@@ -39,6 +39,7 @@
 {% if related %}{{ related | wikilink | yaml_property:"related" }}
 {% endif %}
 ---
+
 {{ title | h1 }}
 
 {{ verdict | bold }} — {{ take }}

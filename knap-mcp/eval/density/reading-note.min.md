@@ -7,6 +7,7 @@ gaf: "high"
 slug: "the-machine-stops"
 source: "https://www.gutenberg.org/cache/epub/72890/pg72890-images.html"
 ---
+
 # The Machine Stops
 
 by Anonymous· [read it free](https://www.gutenberg.org/cache/epub/72890/pg72890-images.html)
