@@ -33,6 +33,36 @@
         "words": 248,
         "picked": false,
         "why_not": "footnotes, a sources table, and horizontal rules put it closer to knap's apparatus-rich output than to the flat pattern"
+      },
+      {
+        "model": "muse-wonder-1-0-high",
+        "agent_reported": "acp probe reported 'model muse-wonder-1-0-high, effort low' (agent-reported, no prompt sent)",
+        "acp_agent": "devin acp --model muse-wonder-1-0-low",
+        "date": "2026-10-27",
+        "density_total": 52.5,
+        "words": 323,
+        "usage": {
+          "prompt_tokens": 14215,
+          "completion_tokens": 773,
+          "total_tokens": 14988
+        },
+        "picked": false,
+        "why_not": "apparatus-rich \u2014 receipts table, footnotes, blockquote pull-quote, sources section, 'Related'/'Apparatus' trailer; closer to knap's own rich output than to the flat pattern"
+      },
+      {
+        "model": "muse-wonder-1-0-high",
+        "agent_reported": "acp probe reported 'model muse-wonder-1-0-high, effort low' (agent-reported, no prompt sent)",
+        "acp_agent": "devin acp --model muse-wonder-1-0-low",
+        "date": "2026-10-27",
+        "density_total": 35.2,
+        "words": 363,
+        "usage": {
+          "prompt_tokens": 14213,
+          "completion_tokens": 782,
+          "total_tokens": 14995
+        },
+        "picked": false,
+        "why_not": "apparatus-rich \u2014 blockquote citations, per-claim 'Receipts' subsections, numbered footnotes, sources section; also tripped the density scorer's overload check"
       }
     ],
     "criterion": "typical flat pattern (wall paragraph, header, wall paragraph); clean, not broken"
@@ -40,6 +70,9 @@
   "notes": [
     "Issue #92 asks for Spark and Wonder; MODEL_API_KEY was unavailable, so the output was produced through knap-mcp's acp backend (backend.Kind.acp -> acp.zig -> `devin acp`) per the lane brief.",
     "The brief's example KNAP_ACP_AGENT, `devin acp --agent-type summarizer`, was tried first; the summarizer agent returns a session-summary envelope (<summary>...</summary>) describing the request rather than a document, so the default agent was used.",
-    "Output is saved verbatim; no post-edits. A re-render on a sponsor model (Spark/Wonder) can replace it if MODEL_API_KEY lands."
+    "Output is saved verbatim; no post-edits.",
+    "2026-10-27 re-run on Muse Wonder 1.0 via `devin acp --model muse-wonder-1-0-low` (same prompt, same transport, two sessions): both replies came back apparatus-rich (density/2 52.5 and 35.2), not the flat wall-paragraph pattern the issue's selection rule requires, so the gpt-5-5-none reply stays as the fixture. Both Wonder replies were kept verbatim off-tree.",
+    "ACP has no temperature knob; `--model muse-wonder-1-0-low` (low thinking) is the closest to the issue's 'temperature as low as the API allows'. The devin agent's own system prompt rides on the call, which likely pushed Wonder toward mirroring the sources JSON's structure instead of answering flat.",
+    "Muse Spark via `opencode acp` is still blocked (insufficient account funds); the Spark candidate remains pending, so this stays 'Part of #92'."
   ]
 }
