@@ -60,3 +60,7 @@ SKIPPED (demo/run.sh exits 0).
   lane that needs a pinned boris on a fresh machine can reuse it.
 - If a lane changes what `make demo` needs (new tool on PATH), update this
   job or the beat will silently skip.
+- Env seam gotcha (cost one CI round): `stage-check.sh` reads `BORIS`,
+  `demo/run.sh` and knap-mcp read `KNAP_BORIS_PATH`, and `selftest.sh`
+  maps either onto the other. On a runner without a PATH boris, export
+  **both** or the stage-check half of selftest fails `boris: not found`.

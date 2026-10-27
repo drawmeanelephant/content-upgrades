@@ -126,23 +126,6 @@ jobs:
       - name: Install boris v0.8.2
         run: scripts/install-boris.sh
 
-      # Debug: reproduce beat 2's k4o crash directly (temporary).
-      - name: Probe k4o render
-        run: |
-          set -x
-          export KNAP_ENGINES_DIR="$HOME/.cache/knap-engines"
-          K4O="$(scripts/engines.sh path k4o)"
-          export KNAP_K4O_PATH="$K4O"
-          "$K4O" --version || true
-          (cd knap-mcp && zig build)
-          cd "$(mktemp -d)"
-          ln -s "$GITHUB_WORKSPACE/knap-mcp/templates" templates
-          ln -s "$GITHUB_WORKSPACE/knap-mcp/data" data
-          "$K4O" render templates/verdict.knap --data data/verdict.sample.json --format markdown | head -5
-          echo "direct: $?"
-          KNAP_MCP_HOME="$(mktemp -d)" "$GITHUB_WORKSPACE/knap-mcp/zig-out/bin/knap-mcp" validate verdict -d data/verdict.sample.json
-          echo "via knap-mcp: $?"
-
       # KNAP_BORIS_PATH makes beat 5 (publish-check) run instead of skipping.
       - name: Demo
         run: KNAP_BORIS_PATH="$HOME/.cache/knap-boris/v0.8.2/boris" KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" KNAP_ENGINES_SRC="$RUNNER_TEMP/src" make demo
@@ -152,7 +135,10 @@ jobs:
       # wrong boris build.
       - name: Boris site selftest
         run: |
-          export KNAP_BORIS_PATH="$HOME/.cache/knap-boris/v0.8.2/boris"
+          # stage-check.sh reads BORIS (not KNAP_BORIS_PATH); selftest maps
+          # either onto KNAP_BORIS_PATH for the knap-mcp side.
+          export BORIS="$HOME/.cache/knap-boris/v0.8.2/boris"
+          export KNAP_BORIS_PATH="$BORIS"
           export KNAP_K4O_PATH="$(KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" scripts/engines.sh path k4o)"
           sh boris-site/selftest.sh
 
