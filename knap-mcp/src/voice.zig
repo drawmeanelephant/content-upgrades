@@ -93,7 +93,7 @@ pub fn voiceData(ctx: *Ctx, template_id: []const u8, data_json: []const u8, tone
     var data = std.json.parseFromSliceLeaky(Value, a, data_json, .{ .parse_numbers = false }) catch
         return ctx.fail("data is not valid JSON", .{});
     if (data != .object) return ctx.fail("data must be a JSON object", .{});
-    if (kind != .mock and ctx.environ.get("MODEL_API_KEY") == null)
+    if (backend.needsKey(kind) and ctx.environ.get("MODEL_API_KEY") == null)
         return ctx.fail("knap_voice: backend '{s}' needs MODEL_API_KEY (use --backend mock for canned replies)", .{@tagName(kind)});
 
     const slots = try collect(a, template_id, shape, &data);

@@ -9,7 +9,7 @@
 //!     knap-mcp lint <file.knap>             k4o lint passthrough
 //!     knap-mcp format-check <doc_id>        advisory structure lint on a doc
 //!     knap-mcp eval [--corpus <seeds.json>] [--backend <b>]
-//!     knap-mcp backends                     backend availability
+//!     knap-mcp backends [--probe]           backend availability + models
 //!     knap-mcp --help | --version
 //!
 //! Subcommands are rows in `commands`: a registry tool (argv becomes its
@@ -75,7 +75,7 @@ const commands = [_]Command{
     .{ .name = "ratchet", .usage = "ratchet <id> [options]", .summary = "values-only density ratchet", .run = .{ .tool = .{ .tool = "knap_ratchet", .key = "template_id" } } },
     .{ .name = "ratchet-eval", .usage = "ratchet-eval [--corpus f]", .summary = "ratchet climb table (eval/ratchet.json)", .run = .{ .custom = @import("ratchet.zig").cmdEval } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
-    .{ .name = "backends", .usage = "backends", .summary = "backend availability", .run = .{ .custom = cmdBackends } },
+    .{ .name = "backends", .usage = "backends [--probe]", .summary = "backend availability + resolved models", .run = .{ .custom = cmdBackends } },
     .{ .name = "--help", .usage = "--help | --version", .run = .{ .custom = cmdHelp } },
     .{ .name = "-h", .run = .{ .custom = cmdHelp } },
     .{ .name = "--version", .run = .{ .custom = cmdVersion } },
@@ -98,7 +98,7 @@ const usage_tail =
     \\Options:
     \\  -d, --data <file|->     JSON data file; - reads stdin (default {})
     \\  --target <t>            markdown (default) | oliver | html
-    \\  --backend <b>           mock (default) | spark | wonder | baseten
+    \\  --backend <b>           mock (default) | spark | wonder | baseten | acp
     \\  --tone <t>              voice tone: mild | spicy | feral
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
@@ -107,6 +107,7 @@ const usage_tail =
     \\  --verifier <v>          heuristic (default) | none | decision
     \\  --limit <n>             boris-ask hits (default 5)
     \\  --max-iters <n>         ratchet iteration cap (default 6)
+    \\  --probe                 backends: GET /models per live backend
     \\
     \\Environment:
     \\  KNAP_K4O_PATH / KNAP_DOGBED_PATH   engine binaries (default: PATH)
@@ -114,7 +115,14 @@ const usage_tail =
     \\  KNAP_MCP_HOME                      artifact store dir (default .knap-mcp)
     \\  KNAP_BACKEND                       default backend kind
     \\  MODEL_API_KEY                      enables spark/wonder/baseten
-    \\  KNAP_BASETEN_URL                   baseten endpoint override
+    \\  KNAP_<KIND>_URL                    chat endpoint (KIND = SPARK|WONDER|BASETEN)
+    \\  KNAP_<KIND>_MODEL                  model id override per backend
+    \\  KNAP_<KIND>_MODELS_URL             model-list URL (default: _URL-derived)
+    \\  KNAP_<KIND>_TEMPERATURE            0..2 or 'omit'; else KNAP_TEMPERATURE, else 0
+    \\  KNAP_TEMPERATURE                   shared temperature fallback
+    \\  KNAP_ACP_AGENT                     backend acp: agent command (e.g. 'devin acp --agent-type summarizer')
+    \\  KNAP_ACP_TIMEOUT / KNAP_ACP_INIT_TIMEOUT   acp call / spawn+init caps, seconds
+    \\  KNAP_ACP_CWD                       acp session cwd (default: process cwd)
     \\  KNAP_BORIS_SITE                    boris site dir (default <templates>/../../boris-site)
     \\  KNAP_BORIS_PATH                    boris binary for publish-check (default: PATH)
     \\  KNAP_ENGINE_TIMEOUT                engine subprocess cap, seconds (default 60, 0 off)
@@ -354,23 +362,45 @@ fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
         w.flush() catch {};
         return fail(ctx, if (ctx.err_msg.len > 0) ctx.err_msg else "eval failed");
     };
+    try ctx.writeTokens(&w.interface);
     w.flush() catch return 1;
     return code;
 }
 
 fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
-    _ = args;
+    var probe = false;
+    for (args) |a| {
+        if (!std.mem.eql(u8, a, "--probe"))
+            return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "backends: unknown option '{s}'", .{a}));
+        probe = true;
+    }
     var buf: [4096]u8 = undefined;
     var w = std.Io.File.stdout().writerStreaming(ctx.io, &buf);
     const has_key = ctx.environ.get("MODEL_API_KEY") != null;
-    try w.interface.writeAll("backend    status\n");
-    try w.interface.writeAll("mock       always available (canned patches)\n");
-    inline for ([_]backend.Kind{ .spark, .wonder, .baseten }) |k| {
-        try w.interface.print("{s: <10} {s}\n", .{
+    try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "backend", "model", "status" });
+    try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "mock", "-", "always available (canned patches)" });
+    for ([_]backend.Kind{ .spark, .wonder, .baseten }) |k| {
+        ctx.err_msg = "";
+        const ep = backend.endpoint(ctx, k) catch {
+            try w.interface.print("{s: <10} {s}\n", .{ @tagName(k), ctx.err_msg });
+            continue;
+        };
+        try w.interface.print("{s: <10} {s: <32} {s}\n", .{
             @tagName(k),
+            ep.model,
             if (has_key) "MODEL_API_KEY set — live calls enabled" else "needs MODEL_API_KEY",
         });
+        if (!probe) continue;
+        ctx.err_msg = "";
+        const ids = backend.listModels(ctx, k) catch {
+            try w.interface.print("  probe: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "failed"});
+            continue;
+        };
+        try w.interface.print("  probe: {d} model(s)", .{ids.len});
+        for (ids) |id| try w.interface.print(" {s}", .{id});
+        try w.interface.writeAll("\n");
     }
+    try w.interface.print("{s: <10} {s: <32} {s}\n", .{ "acp", "-", backend.statusLine(ctx, .acp) });
     try w.interface.print("default    {s} (KNAP_BACKEND)\n", .{@tagName(ctx.backend_kind)});
     try w.flush();
     return 0;
