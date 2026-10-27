@@ -30,3 +30,43 @@ since I1 owns demo/ this wave.
 - Verdict html drops the footnote definitions (found by C2).
 - Frontmatter renders as `<hr/><p>` text in html (found by C2; dogbed
   renders what it is given, so the fix may be template-side).
+
+## 2026-10-26: final-wave launch plan (ready, gated on MODEL_API_KEY)
+
+State: everything through #40 merged. Both pins current (k4o `aeba163`,
+dogbed `188ccac`), conformance 187/188, `make demo` runs all beats offline,
+beats 4b/5/6 re-taped with shipped tools.
+
+Remaining wave-2 lanes, in dependency order — briefs so a fresh thread can
+fire them the moment the key lands:
+
+- **M1 — live backends** (gate: `MODEL_API_KEY`). Owns `src/backend.zig`.
+  Smoke Spark/Wonder/Baseten via `knap-mcp backends` + one `complete` per
+  kind; fix reply parsing; record latency per backend (tokens only if
+  metered). Gate: `make test`, eval unchanged on mock.
+- **I2 — convergence table** (needs M1, E1). `make eval` across
+  mock/spark/wonder/baseten on the full corpus; real rates replace mock
+  rows in docs + storyboard beat 8. Parallel with I3.
+- **I3 — density model matrix** (needs M1, D2). `ratchet-eval` per backend;
+  which models fill apparatus slots, score climbs, rejection profile.
+  Parallel with I2.
+- **I4 — numbers card** (needs I2, K3). Measured-only card for beat 8:
+  conformance delta, convergence, LOC, slice sizes.
+- **I5 — freeze** (last, before Oct 30 EOD). Freeze demo data (swap live
+  drafts for fixed files), enforce the Oct 29 filter cut-line.
+
+Also open (parallel-safe, no key needed): `make demo` in CI (needs a boris
+binary on the runner — package or vendor), stale-worktree cleanup, the
+dogbed findings above, the trailing-`!` footnote hazard above.
+
+Human blockers still open (PARALLEL-PLAN): `MODEL_API_KEY`, Baseten
+request, video rules check, K1 ownership (other thread vs Opus child),
+optional Muse Code MCP-client probe.
+
+Wave 3 (Nov 1–4) is the actual swarm shape: **one agent per vhs tape**
+(beats 1,2,3,4,4b,5,6,7,8 are independent files) + README/submission
+writeup + final verification. Each tape agent owns one `demo/tapes/*.tape`
+plus its storyboard section; shared-file conflicts are nil if beats stay
+per-file. Pre-assign: beats 2/3 need M1 live output; beat 8 needs I4;
+beat 4 needs the human hero shot + art. Kdenlive assembly and portal
+submission stay human.
