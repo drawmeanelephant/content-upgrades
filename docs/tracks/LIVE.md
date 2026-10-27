@@ -85,7 +85,7 @@ plus this branch. Raw outputs and provenance are in
 
 | profile | model (agent-reported) | smoke | repair `seeds.json` | ratchet `ratchet.live.json` | voice (verdict) |
 |---|---|---|---|---|---|
-| devin-wonder | `muse-wonder-1-0-high`, effort low | 6/6 ok, 2.9 s/call | 22/22 conv, 1.09 iters, 8/22 exact | 2/9 ok, **inert 0** | 2/2 layout-identical (feral: 1 of 8 rejected) |
+| devin-wonder | `muse-wonder-1-0-high`, effort low | 6/6 ok, 2.9 s/call | 22/22 conv, 1.05 iters, 10/22 exact (rerun in #157; first run 1.09 iters, 8/22 exact); 2nap 167/167, see I2.md | 2/9 ok, **inert 0** | 2/2 layout-identical (feral: 1 of 8 rejected) |
 | devin-swe-2 | `swe-2-high`, effort medium | 6/6 ok, 2.1 s/call | 22/22 conv, 1.05 iters, 8/22 exact | 3/9 ok, **inert 0** | 2/2 layout-identical (feral: 4 of 8 rejected) |
 | devin-summarizer | unreported | 6/6 ok | (I2/I3 columns) | | |
 | opencode-spark-1.3 / -1.2 / wonder-1.0 | correct model | 0/6: insufficient account funds | | | |
