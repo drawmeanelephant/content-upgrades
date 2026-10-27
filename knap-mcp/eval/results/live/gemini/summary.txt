@@ -1,0 +1,17 @@
+profile: gemini
+label:   Gemini via ACP (gemini-cli, Google account)
+backend: acp   model: gemini-1.5-flash   effort: -
+smoke:   0/6 ok
+repair:  -
+repair (2nap): -
+ratchet: -
+voice:   -
+note:    smoke repair: acp agent 'gemini' failed session/prompt: {"error":{"message":"{
+ \"error\": {
+ \"code\": 403,
+ \"message\": \"Permission denied: Consumer 'projects/undefined' has been suspended.\",
+ \"status\": \"PERMISSION_DENIED\",
+ \"details\": [
+ {
+ \"@type\": \"type.googleapis.com/google.rpc.ErrorInfo\",
+ \"rea

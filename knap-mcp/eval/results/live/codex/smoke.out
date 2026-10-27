@@ -1,0 +1,14 @@
+backend: acp   model: gpt-6-luna   effort: -   served: n/a
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | NO | 3802 | - | - | - | - | - | - | - | none | acp agent 'npx' failed session/prompt: Internal error |
+| voice | NO | 3363 | - | - | - | - | - | - | - | none | acp agent 'npx' failed session/prompt: Internal error |
+| verify | NO | 4677 | - | - | - | - | - | - | - | none | acp agent 'npx' failed session/prompt: Internal error |
+| judge | NO | 3915 | - | - | - | - | - | - | - | none | acp agent 'npx' failed session/prompt: Internal error |
+| enrich | NO | 3545 | - | - | - | - | - | - | - | none | acp agent 'npx' failed session/prompt: Internal error |
+| repair-patch | NO | 4663 | - | - | - | - | - | - | - | none | acp agent 'npx' failed session/prompt: Internal error |
+
+smoke: 0/6 ok   wall 23965 ms   mean 3994 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 0  completion 0  total 0  reasoning 0

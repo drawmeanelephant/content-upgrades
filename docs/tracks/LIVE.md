@@ -86,6 +86,14 @@ make live P=fake                                     # credential-free self-test
    shape at 1.5B (12-token replies, no patch), so the fail-fast gate
    correctly stopped it before the evals. Use a bigger local model for
    real numbers.
+6. **Two more coding-plan profiles wired: `gemini` and `codex`.** Both
+   handshake, report their model and gate correctly. Both are currently
+   blocked on the account, not the harness: gemini-cli's auth answers
+   prompts with a suspended-project 403, and the codex-acp adapter
+   (which needs `-c 'model="…"'` — its gpt-5.5 default isn't on ChatGPT
+   accounts) gets `model_not_found` for every slug in
+   `~/.codex/models_cache.json`. Once the user picks a model their plan
+   accepts (or uses an API key), both are one `make live P=…` away.
 
 ## Results
 
@@ -99,6 +107,8 @@ plus this branch. Raw outputs and provenance are in
 | devin-swe-2 | `swe-2-high`, effort medium | 6/6 ok, 2.3 s/call | 22/22 conv, 1.09 iters, 9/22 exact | 3/9 ok, **inert 0** | 2/2 layout-identical (feral: 4 of 8 rejected) |
 | devin-summarizer | unreported | 6/6 ok | (I2/I3 columns) | | |
 | ollama (qwen2.5-coder:1.5b, local) | `qwen2.5-coder:1.5b` | 5/6 ok, repair-patch wrong shape | gated off | | |
+| gemini (gemini-cli `--acp`) | `gemini-1.5-flash` | 0/6: 403 "Consumer 'projects/undefined' has been suspended" — account-side auth | | | |
+| codex (`@zed-industries/codex-acp`) | `gpt-6-luna` | 0/6: "model is not supported when using Codex with a ChatGPT account" for every cached slug | | | |
 | opencode-spark-1.3 / -1.2 / wonder-1.0 | correct model | 0/6: insufficient account funds | | | |
 | spark / wonder / baseten | | skipped: needs `MODEL_API_KEY` | | | |
 

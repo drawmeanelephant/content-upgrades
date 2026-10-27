@@ -23,7 +23,7 @@
 # (default ~/.config/knap/providers.sh) as a knap_profile_local function
 # with the same contract plus a KNAP_PROFILES_LOCAL list; they're tried first.
 
-KNAP_PROFILES="fake spark wonder baseten compat ollama opencode-spark-1.3 opencode-spark-1.2 opencode-wonder-1.0 devin-wonder devin-swe-2 devin-summarizer"
+KNAP_PROFILES="fake spark wonder baseten compat ollama opencode-spark-1.3 opencode-spark-1.2 opencode-wonder-1.0 devin-wonder devin-swe-2 devin-summarizer gemini codex"
 
 # opencode acp has no --model flag and defaults to opencode/flint-40b-free,
 # so the model always goes through OPENCODE_CONFIG_CONTENT. The single quotes
@@ -73,6 +73,19 @@ knap_profile() {
         backend=acp cmds=devin expect='*'
         label='devin summarizer agent via ACP'
         export KNAP_ACP_AGENT='devin acp --agent-type summarizer'
+        ;;
+    gemini)
+        backend=acp cmds=gemini expect='gemini-*'
+        label='Gemini via ACP (gemini-cli, Google account)'
+        export KNAP_ACP_AGENT='gemini --acp'
+        ;;
+    # codex-acp defaults to gpt-5.5, which ChatGPT-account auth rejects;
+    # -c model=… passes through to codex config. The inner "…" is literal:
+    # knap's argv splitter only strips the outer '…' grouping.
+    codex)
+        backend=acp cmds='codex npx' expect='gpt-*'
+        label='gpt-6-luna via ACP (@zed-industries/codex-acp, ChatGPT account)'
+        export KNAP_ACP_AGENT="npx -y @zed-industries/codex-acp -c 'model=\"gpt-6-luna\"'"
         ;;
     *) return 1 ;;
     esac
