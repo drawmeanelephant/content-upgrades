@@ -1,0 +1,152 @@
+{
+  "card": "knap-mcp: the numbers, measured",
+  "generated": {
+    "date_utc": "2026-10-27",
+    "git": "6f29af1",
+    "by": "demo/card/build.sh"
+  },
+  "engines": {
+    "k4o": {
+      "pin": "k4o-aeba163",
+      "version": "k4o 0.1.0"
+    },
+    "dogbed": {
+      "pin": "dogbed-d96b125"
+    }
+  },
+  "scorer": "density/2",
+  "columns": [
+    {
+      "id": "mock",
+      "label": "mock (control)"
+    },
+    {
+      "id": "summarizer",
+      "label": "acp: devin summarizer"
+    },
+    {
+      "id": "wonder",
+      "label": "Muse Wonder 1.0 via ACP (devin)"
+    }
+  ],
+  "rows": [
+    {
+      "metric": "repair: converged",
+      "corpus": "eval/seeds.json · 22 seeded breaks",
+      "cells": [
+        {
+          "value": "12/22",
+          "detail": "exact 6/12 · mean 1.25 iters",
+          "source": "eval --backend mock, this commit"
+        },
+        {
+          "value": "22/22",
+          "detail": "exact 10/22 · mean 1.18 iters",
+          "source": "eval/results/live/acp-seeds.out"
+        },
+        {
+          "value": "22/22",
+          "detail": "exact 10/22 · mean 1.05 iters",
+          "source": "eval/results/live/devin-wonder/repair-seeds.out"
+        }
+      ]
+    },
+    {
+      "metric": "repair: converged",
+      "corpus": "eval/seeds.2nap.json · 167 seeded breaks",
+      "cells": [
+        {
+          "value": "120/167",
+          "detail": "exact 66/115 · mean 1.19 iters",
+          "source": "eval --backend mock, this commit"
+        },
+        {
+          "value": "166/167",
+          "detail": "exact 100/158 · mean 1.06 iters",
+          "source": "eval/results/live/acp-seeds.2nap.out"
+        },
+        {
+          "value": "167/167",
+          "detail": "exact 108/159 · mean 1.03 iters",
+          "source": "eval/results/live/devin-wonder/repair-seeds.2nap.out"
+        }
+      ]
+    },
+    {
+      "metric": "density ratchet: cases ok",
+      "corpus": "eval/ratchet.live.json · 9 cases · density/2",
+      "cells": [
+        {
+          "value": "9/9",
+          "detail": "best +43.4 release-notes-min",
+          "source": "eval/results/live/mock.txt"
+        },
+        {
+          "value": "3/9",
+          "detail": "best +12.7 iteration-cap",
+          "source": "eval/results/live/acp.txt"
+        },
+        {
+          "value": "2/9",
+          "detail": "best +14.3 reading-note-min",
+          "source": "eval/results/live/devin-wonder/ratchet.out"
+        }
+      ]
+    },
+    {
+      "metric": "repair calls × mean slice",
+      "corpus": "eval/seeds.2nap.json · repair eval",
+      "cells": [
+        {
+          "value": "193 × 149 B",
+          "source": "eval --backend mock, this commit"
+        },
+        {
+          "value": "180 × 149 B",
+          "source": "eval/results/live/acp-seeds.2nap.out"
+        },
+        {
+          "value": "172 × 148 B",
+          "source": "eval/results/live/devin-wonder/repair-seeds.2nap.out"
+        }
+      ]
+    },
+    {
+      "metric": "ratchet calls × mean slice",
+      "corpus": "eval/ratchet.live.json · density/2",
+      "cells": [
+        {
+          "value": "37 × 1015 B",
+          "source": "eval/results/live/mock.txt"
+        },
+        {
+          "value": "18 × 1029 B",
+          "source": "eval/results/live/acp.txt"
+        },
+        {
+          "value": "19 × 955 B",
+          "source": "eval/results/live/devin-wonder/ratchet.out"
+        }
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "label": "k4o conformance",
+      "value": "187/188",
+      "detail": "pin k4o-aeba163 · k4o 0.1.0 · k4o base 15/188 → #70 43/188 → #71 48/188",
+      "source": "eval/conformance/results/k4o-main-aeba163.json"
+    },
+    {
+      "label": "server",
+      "value": "14494 lines of Zig",
+      "detail": "knap-mcp/src/*.zig",
+      "source": "cat $(find knap-mcp/src -name '*.zig') | wc -l"
+    }
+  ],
+  "footnotes": [
+    "ACP columns measure model plus agent harness (one devin acp session per call), not a direct API.",
+    "No token-cost numbers: each ACP call carries ~13.5k tokens of agent system prompt (LIVE.md finding 3).",
+    "Sources: knap-mcp/eval/results/live/ (I2/I3), eval/conformance/results/ (K3/K5), a fresh mock eval, src LOC."
+  ]
+}
