@@ -29,14 +29,14 @@ Status key:
 
 | # | Beat | Target | Last render | Tape | Depends on | Status |
 |---|---|---|---|---|---|---|
-| 1 | Cold open: the generic AI doc | 5s | 4.9s | `01-cold-open.tape` | fixture only; density score: D1 | ready |
+| 1 | Cold open: the generic AI doc | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
 | 2 | Ask for a verdict: model drafts data only | 20s | 20.8s | `02-verdict-data.tape` | main; `boris_ask`: B3 (B1's `ask.sh` works now); live drafting: M1 + MCP client | partial |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 23.2s | `03-repair.tape` | main (mock patches); real patches: M1 | ready |
 | 4 | The doc | 30s | 29.4s | `04-the-doc.tape` | main; callouts: T2; HTML hero shot: human capture; art: Muse Image (human) | partial |
 | 4b | *(optional)* Density ratchet | 15s | 15.2s | `04b-density-ratchet.tape` | D1 + D2 | ready (mock) |
 | 5 | The boris catch | 15s | 16.7s | `05-boris-catch.tape` | B1 (boris-site, boris); `knap_publish_check`: B2 | ready |
 | 6 | Same template, mild vs feral | 20s | 21.8s | `06-voice.tape` | C3 (mock replies), `knap_voice`: C1; structure hash: C2 | ready (mock) |
-| 7 | One source -> md + html + apparatus | 15s | 18.6s | `07-one-source.tape` | main; oliver target: P1; one shared data file: T2/I5 | partial |
+| 7 | One source -> md + html + apparatus | 15s | 18.6s | `07-one-source.tape` | main; oliver target: P1; one shared data file: cut (T2/I5 deferred) | partial |
 | 8 | Numbers card, measured only | 10s | 12.0s | `08-numbers.tape` | main (E1 corpora, K3 results); real table: M1/I2; card: I4 | partial |
 
 **Runtime.** SPEC calls the demo "~2 min", but its per-beat targets add up to 2:20
@@ -48,11 +48,11 @@ beat 7 to its target gets under 2:00. Typing can also be sped up in Kdenlive. Th
 video length limit is still unconfirmed (see `docs/tracks/V0.md`).
 
 **Engines and targets.** Tapes take the engine pins from `scripts/engines.sh`, now k4o
-main `bdfb838` and dogbed main `d7ffaba` (#15). That k4o has no gfm or textile output,
-and lane P1 narrows the targets to markdown | oliver | html, so the tapes use only
-markdown and html. SPEC's beat 7 names textile; on screen it is html now, and oliver
-can join once P1 lands. The k4o main markdown target emits pipe tables, so glow
-renders the receipts table properly.
+main `aeba163` and dogbed main `188ccac`. That k4o has no gfm or textile output, so
+the tapes use only markdown and html. SPEC's beat 7 now names `verdict.oliver`; on
+screen it is verdict.html — oliver renders byte-identical to markdown for this
+template, so html is what makes "several views" visible. The k4o main markdown
+target emits pipe tables, so glow renders the receipts table properly.
 
 **Retakes.** Inputs are fixed, so every take prints the same text. The one exception is
 the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timestamp.
@@ -67,17 +67,16 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
 - **Commands (hidden):** `glow fixtures/generic-ai-doc.md`
 - **Depends on:** `demo/fixtures/generic-ai-doc.md`, a hand-written stand-in for flat model output.
 - **Open:** once M1 lands, replace the fixture with a real flat output from a model,
-  freeze it (I5), and label it as model output. The density score overlay
-  (expected low) is blocked on D1. The next-phase plan's `knap-mcp density <doc_id>`
-  scores stored docs only, so this fixture can't be scored from the CLI. Either D1
-  takes a file path, or the cold open switches to the plan's "generic" artifact (a
-  template rendered with only its required fields).
+  freeze it (I5), and label it as model output. The density score overlay is no
+  longer blocked: `knap-mcp density <file>` takes a file path, and the fixture
+  scores 3.7 on density/1 — an overlay could go on screen now (human, Kdenlive).
 
 ### 2. Ask for a verdict (20s): partial
 
-- **On screen:** the six tool names the model can call (straight from the MCP server
-  over stdio), the verdict template's field names, the drafted values, and `validate`
-  returning ok. The point: the model sees shapes and writes values, and never sees layout.
+- **On screen:** the tool names the model can call (`tools/list`, straight from the
+  MCP server over stdio), the verdict template's field names, the drafted values, and
+  `validate` returning ok. The point: the model sees shapes and writes values, and
+  never sees layout.
 - **Commands:**
   ```sh
   echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | knap-mcp | jq -r '.result.tools[].name'
@@ -94,8 +93,6 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   command; drafting happens in the MCP client (Muse Code if the probe works), which
   calls `knap_templates` and `knap_validate`. Record that session with OBS, or keep
   this tape and swap in the frozen drafted data file (I5).
-- **Warning:** the server's `initialize` response is invalid JSON today (see V0.md).
-  A real MCP client will fail at the handshake until that is fixed.
 
 ### 3. Seeded failure -> repair (25s): ready
 
@@ -116,7 +113,7 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   `demo/lib/env.sh`, so it follows template edits.
 - **Template not byte-exact:** the mock closes the block at EOF, so the repaired
   template differs from the shipped one and E1's eval does not count this seed as
-  `exact`. On k4o `bdfb838` the repaired doc is byte-identical to a clean render
+  `exact`. On k4o `aeba163` the repaired doc is byte-identical to a clean render
   (checked with `diff`), so nothing differs on screen.
 - **Why this seed:** the unknown-filter seed also converges with mock, but the mock
   patch deletes `| head2` instead of fixing it to `| h2`, so "The case" loses its
@@ -139,10 +136,10 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   art is a Kdenlive overlay (human). The better hero shot is dogbed HTML in a browser.
   The pinned dogbed renders both templates to html now, but nobody has styled or
   captured it (human, OBS or a headless screenshot).
-- **Visual bugs to fix before the final take:** the markdown `table` output has an
-  empty header row, with "claim | evidence" rendered as a data row (k4o or T2). The
-  footnotes have no in-text references, and `format-check` flags them plus 2 bare URLs
-  (T2). Keep `format-check` off screen until those are fixed.
+- **Visual state, verified on main:** the receipts table renders a real header row
+  (`| Claim | Evidence | Source |`), receipts with a `note` carry in-text footnote
+  refs (`[^benchmark]`, `[^backup-gap]`), and `format-check` returns zero warnings
+  on the sample render — it can go on screen.
 
 ### 4b. Density ratchet (15s, optional): ready (mock)
 
@@ -160,8 +157,9 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   ```
   `r0.json` is a copy of `data/release-notes.min.json` made in the hidden
   preamble to keep the typed line under the frame width. The plan proposed
-  `verdict`, but verdict ships no `.min.json`; the README's ratchet example is
-  `release-notes` + `data/release-notes.min.json`, which is what the tape runs.
+  `verdict` and `data/verdict.min.json` ships now, but the README's ratchet
+  example is `release-notes` + `data/release-notes.min.json`, which is what
+  the tape runs — and verdict's shape carries no ratchet slots yet.
 - **Missing:** only a live-backend run (M1).
 
 ### 5. The boris catch (15s): ready
@@ -221,10 +219,12 @@ the `doc_id` handle in beat 3's repair result, which embeds a nanosecond timesta
   knap-mcp render apparatus -d data/apparatus.sample.json --target html --out apparatus.html | jq -c '{ok, bytes}'
   grep -c '<script' verdict.md verdict.html apparatus.html
   ```
-- **Changed from SPEC:** SPEC's beat 7 says textile. The pinned k4o has no textile
-  output and P1 drops it, so the tape shows html; add oliver when P1 ships it.
-- **Missing:** "one source" needs one data file behind both templates (T2/I5); today
-  apparatus has its own sample file.
+- **Changed from SPEC:** SPEC's beat 7 names `verdict.oliver`; the tape shows
+  verdict.html instead, because oliver renders byte-identical to markdown for
+  this template and html makes the second view visible.
+- **Cut:** "one source" — one data file behind both templates (T2/I5) is
+  deferred. apparatus keeps its own `data/apparatus.sample.json`; the take
+  shows verdict and apparatus rendered from their own sample files.
 
 ### 8. Numbers (10s): partial
 
