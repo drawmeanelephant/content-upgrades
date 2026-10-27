@@ -85,13 +85,20 @@ pub fn check(ctx: *Ctx, doc: []const u8, name: []const u8) Error!Report {
             return ctx.fail("cannot resolve the working directory", .{});
         exe = try std.fs.path.join(arena, &.{ cwd, exe });
     }
+    // One `boris validate` gets a hard deadline: the server is
+    // single-threaded, so a hung boris would block every later request.
+    // The deadline is absolute (not an idle timeout) and run() kills the
+    // child when it fires.
+    const secs = ctx.envSecs("KNAP_BORIS_TIMEOUT", 60);
     const result = std.process.run(arena, ctx.io, .{
         .argv = &.{ exe, "validate", "--input", "content", "--report", "report.json", "--quiet" },
         .cwd = .{ .path = dir },
         .stdout_limit = .limited(1024 * 1024),
         .stderr_limit = .limited(4 * 1024 * 1024),
+        .timeout = ctx.deadline(secs),
     }) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
+        error.Timeout => return ctx.fail("boris validate timed out after {d}s", .{secs}),
         else => return ctx.fail("boris not runnable: '{s}' ({s}); set KNAP_BORIS_PATH", .{ exe, @errorName(e) }),
     };
     const code: u8 = switch (result.term) {
@@ -162,6 +169,9 @@ fn stagedName(arena: std.mem.Allocator, name: []const u8) Error![]const u8 {
 pub const Link = struct {
     staged_line: u32,
     staged_col: u32,
+    /// Bytes the link occupies in the staged text after rewriting; pairs
+    /// with text.len to give the column drift this link introduces.
+    staged_len: u32,
     line: u32,
     col: u32,
     id: []const u8,
@@ -285,20 +295,26 @@ fn rewriteLine(
             target = target[0..h];
         }
         const id = try slug(arena, target);
+        const rewritten = id.len > 0 and !std.mem.eql(u8, id, target);
+        const emitted: u32 = @intCast(if (rewritten)
+            "[[|]]".len + id.len + frag.len + label.len
+        else
+            whole.len);
 
         try out.appendSlice(arena, rest[0 .. m[0] - @intFromBool(bang)]);
         try links.append(arena, .{
             .staged_line = staged_line,
             .staged_col = @intCast(out.items.len - line_start + 1),
+            .staged_len = emitted,
             .line = nr,
             .col = @intCast(consumed + m[0] + 1),
             .id = id,
             .text = rest[m[0] - @intFromBool(bang) .. m[1]],
         });
-        if (id.len == 0 or std.mem.eql(u8, id, target))
-            try out.appendSlice(arena, whole)
+        if (rewritten)
+            try out.print(arena, "[[{s}{s}|{s}]]", .{ id, frag, label })
         else
-            try out.print(arena, "[[{s}{s}|{s}]]", .{ id, frag, label });
+            try out.appendSlice(arena, whole);
         consumed += m[1];
     }
     try out.appendSlice(arena, line[consumed..]);
@@ -319,6 +335,12 @@ const BorisDiag = struct {
 const BorisReport = struct {
     diagnostics: []BorisDiag = &.{},
 };
+
+/// Saturating i64 -> u32: a hostile or hand-edited report.json line or
+/// column clamps instead of panicking the process.
+fn clampU32(v: i64) u32 {
+    return @intCast(@min(@max(v, 0), std.math.maxInt(u32)));
+}
 
 /// Map a `boris validate --report` JSON onto the original doc, as
 /// stage-check.sh does: a diagnostic at a staged link's (line, col) takes
@@ -348,8 +370,8 @@ pub fn mapReport(
     const out = try arena.alloc(Diagnostic, report.diagnostics.len);
     for (report.diagnostics, out, 0..) |d, *o, i| {
         const sp = d.sourcePath orelse "";
-        const bl: u32 = if (d.line) |v| @intCast(@max(v, 0)) else 0;
-        const bc: u32 = if (d.column) |v| @intCast(@max(v, 0)) else 0;
+        const bl: u32 = if (d.line) |v| clampU32(v) else 0;
+        const bc: u32 = if (d.column) |v| clampU32(v) else 0;
         var detail = stripRemediation(d.message);
         if (i < err_lines.items.len) {
             const prefix = try std.fmt.allocPrint(arena, "error: {s}: ", .{d.code});
@@ -371,8 +393,17 @@ pub fn mapReport(
                     break;
                 }
             } else if (!std.mem.startsWith(u8, d.code, "EFRONTMATTER")) {
-                o.line = @intCast(@max(@as(i64, bl) + st.delta, 0));
-                o.column = bc;
+                o.line = clampU32(@as(i64, bl) + st.delta);
+                // Rewrites change a staged line's length, so a staged byte
+                // column is shifted relative to the doc: subtract the
+                // net drift of every link that ends left of it.
+                var drift: i64 = 0;
+                if (bc > 0) for (st.links) |k| {
+                    if (k.staged_line != bl) continue;
+                    if (@as(i64, k.staged_col) + @as(i64, k.staged_len) <= @as(i64, bc))
+                        drift += @as(i64, k.staged_len) - @as(i64, @intCast(k.text.len));
+                };
+                o.column = clampU32(@as(i64, bc) - drift);
             } else {
                 o.line = switch (bl) {
                     2 => st.title_line,
@@ -485,14 +516,15 @@ test "stage rewrites frontmatter, links and embeds without moving body lines" {
     try testing.expectEqual(@as(u32, 6), st.fm_close_line);
     try testing.expectEqual(@as(usize, 4), st.links.len);
     const want = [_]Link{
-        .{ .staged_line = 5, .staged_col = 6, .line = 8, .col = 6, .id = "acmedb-docs-backups", .text = "[[AcmeDB docs — backups]]" },
-        .{ .staged_line = 5, .staged_col = 58, .line = 8, .col = 38, .id = "claims/backup-gap", .text = "[[claims/backup-gap]]" },
-        .{ .staged_line = 6, .staged_col = 1, .line = 9, .col = 2, .id = "acmedb-2-0-migration-guide", .text = "![[AcmeDB 2.0 migration guide]]" },
-        .{ .staged_line = 6, .staged_col = 59, .line = 9, .col = 33, .id = "sources", .text = "[[Sources#reliability-scale|scale]]" },
+        .{ .staged_line = 5, .staged_col = 6, .staged_len = 47, .line = 8, .col = 6, .id = "acmedb-docs-backups", .text = "[[AcmeDB docs — backups]]" },
+        .{ .staged_line = 5, .staged_col = 58, .staged_len = 21, .line = 8, .col = 38, .id = "claims/backup-gap", .text = "[[claims/backup-gap]]" },
+        .{ .staged_line = 6, .staged_col = 1, .staged_len = 57, .line = 9, .col = 2, .id = "acmedb-2-0-migration-guide", .text = "![[AcmeDB 2.0 migration guide]]" },
+        .{ .staged_line = 6, .staged_col = 59, .staged_len = 35, .line = 9, .col = 33, .id = "sources", .text = "[[Sources#reliability-scale|scale]]" },
     };
     for (want, st.links) |w, g| {
         try testing.expectEqual(w.staged_line, g.staged_line);
         try testing.expectEqual(w.staged_col, g.staged_col);
+        try testing.expectEqual(w.staged_len, g.staged_len);
         try testing.expectEqual(w.line, g.line);
         try testing.expectEqual(w.col, g.col);
         try testing.expectEqualStrings(w.id, g.id);
@@ -553,6 +585,27 @@ test "mapReport maps links, body lines, frontmatter and routes back to the doc" 
     try testing.expectEqual(@as(u32, 0), ds[4].column);
     try testing.expectEqual(@as(u32, 0), ds[5].line);
     try testing.expectEqualStrings("themes/boris/layouts/main.html: target 'default' compilation failed: LinkAuditFailed", ds[5].detail);
+}
+
+test "mapReport clamps out-of-range positions and undoes per-line column drift" {
+    var a = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a.deinit();
+    const ar = a.allocator();
+    const doc = "# T\n\n- [[AcmeDB docs — backups]] tail\n";
+    const st = try stage(ar, doc);
+    const report =
+        \\{"ok":false,"diagnostics":[
+        \\{"severity":"error","code":"EXYZ","message":"huge","sourcePath":"staged/t.md","line":99999999999,"column":-5},
+        \\{"severity":"error","code":"EXYZ","message":"drifted","sourcePath":"staged/t.md","line":3,"column":51}]}
+    ;
+    const ds = try mapReport(ar, st, "staged/t.md", doc, report, "");
+    try testing.expectEqual(@as(usize, 2), ds.len);
+    try testing.expectEqual(@as(u32, std.math.maxInt(u32)), ds[0].line);
+    try testing.expectEqual(@as(u32, 0), ds[0].column);
+    // Staged line 3 grew 20 bytes at the rewritten link ([[T]] ->
+    // [[slug|T]]), so staged col 51 is doc col 31 (the 't' of "tail").
+    try testing.expectEqual(@as(u32, 3), ds[1].line);
+    try testing.expectEqual(@as(u32, 31), ds[1].column);
 }
 
 test "stagedName follows stage-check.sh" {

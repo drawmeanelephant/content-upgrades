@@ -40,8 +40,14 @@ pub fn serve(init: std.process.Init, ctx: *Ctx) !u8 {
         var req_ctx = ctx.*;
         req_ctx.arena = arena;
         req_ctx.err_msg = "";
+        // Scratch files only live for one request; sweep this process's
+        // leftovers on every exit from the dispatch below.
+        defer store.sweepScratch(&req_ctx);
 
-        const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena, trimmed, .{}) catch {
+        // Numbers stay .number_string so `data` re-stringifies byte-for-byte
+        // (knap_voice's verbatim-number promise); toolsCall re-parses the
+        // scalars handlers actually read as integers.
+        const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena, trimmed, .{ .parse_numbers = false }) catch {
             try sendError(&w, null, -32700, "parse error");
             continue;
         };
@@ -113,6 +119,18 @@ fn toolsCall(ctx: *Ctx, params: ?std.json.Value, out: *Allocating) !void {
         .object => |o| o,
         else => null,
     };
+    // The request parse keeps numbers as .number_string for `data`; every
+    // other argument is a scalar, so re-parse those for handlers that
+    // switch on .integer/.float (ratchet's max_iterations/epsilon,
+    // boris_ask's limit).
+    if (arg_obj) |*o| {
+        var it = o.iterator();
+        while (it.next()) |entry| {
+            if (std.mem.eql(u8, entry.key_ptr.*, "data")) continue;
+            if (entry.value_ptr.* == .number_string)
+                entry.value_ptr.* = std.json.Value.parseFromNumberSlice(entry.value_ptr.number_string);
+        }
+    }
 
     var payload: Allocating = .init(ctx.arena);
     tools.dispatch(ctx, name, arg_obj, &payload) catch |e| {
@@ -142,7 +160,13 @@ fn resourcesList(ctx: *Ctx, out: *Allocating) !void {
             const id = entry.name[0 .. entry.name.len - 5];
             if (!first) try out.writer.writeAll(",");
             first = false;
-            try out.writer.print("{{\"uri\":\"knap://templates/{s}\",\"name\":\"{s}\",\"mimeType\":\"text/plain\"}}", .{ id, id });
+            // Filenames are data: a planted quote must not corrupt the payload.
+            const uri = try std.fmt.allocPrint(ctx.arena, "knap://templates/{s}", .{id});
+            try out.writer.writeAll("{\"uri\":");
+            try std.json.Stringify.value(uri, .{}, &out.writer);
+            try out.writer.writeAll(",\"name\":");
+            try std.json.Stringify.value(id, .{}, &out.writer);
+            try out.writer.writeAll(",\"mimeType\":\"text/plain\"}");
         }
     }
 
@@ -150,7 +174,15 @@ fn resourcesList(ctx: *Ctx, out: *Allocating) !void {
     for (artifacts) |a| {
         if (!first) try out.writer.writeAll(",");
         first = false;
-        try out.writer.print("{{\"uri\":\"knap://docs/{s}\",\"name\":\"{s}.{s}\",\"mimeType\":\"{s}\"}}", .{ a.doc_id, a.doc_id, a.extension, mimeFor(a.extension) });
+        const uri = try std.fmt.allocPrint(ctx.arena, "knap://docs/{s}", .{a.doc_id});
+        const name = try std.fmt.allocPrint(ctx.arena, "{s}.{s}", .{ a.doc_id, a.extension });
+        try out.writer.writeAll("{\"uri\":");
+        try std.json.Stringify.value(uri, .{}, &out.writer);
+        try out.writer.writeAll(",\"name\":");
+        try std.json.Stringify.value(name, .{}, &out.writer);
+        try out.writer.writeAll(",\"mimeType\":");
+        try std.json.Stringify.value(mimeFor(a.extension), .{}, &out.writer);
+        try out.writer.writeAll("}");
     }
     try out.writer.writeAll("]}");
 }

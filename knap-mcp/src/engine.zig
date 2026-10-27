@@ -54,16 +54,27 @@ pub fn render(ctx: *Ctx, target: Target, template_path: []const u8, data_path: [
     return finishRun(ctx, result);
 }
 
-/// `k4o lint <tpl>` — exit 0 and "clean" output means no findings.
-pub fn lint(ctx: *Ctx, template_path: []const u8) Error!Outcome {
+/// `k4o lint` outcome plus the process exit code, so handlers can key
+/// "clean" off the exit status rather than a substring of the output.
+pub const LintResult = struct {
+    outcome: Outcome,
+    /// 0 = clean, 1 = findings on stdout; `maxInt(u8)` when k4o did not
+    /// exit normally.
+    exit_code: u8,
+};
+
+/// `k4o lint <tpl>` — exit 0 means clean, findings arrive on stdout with
+/// a nonzero exit.
+pub fn lint(ctx: *Ctx, template_path: []const u8) Error!LintResult {
     const result = try runEngine(ctx, &.{ ctx.engines.k4o, "lint", template_path }, .limited(16 * 1024 * 1024));
-    switch (result.term) {
-        .exited => |code| if (code == 0) return .{ .ok = result.stdout },
-        else => {},
-    }
+    const exit_code: u8 = switch (result.term) {
+        .exited => |code| code,
+        else => std.math.maxInt(u8),
+    };
+    if (exit_code == 0) return .{ .outcome = .{ .ok = result.stdout }, .exit_code = exit_code };
     // Lint findings go to stdout on exit 1; real failures go to stderr.
-    if (result.stdout.len > 0) return .{ .ok = result.stdout };
-    return .{ .diags = try parseDiags(ctx, result.stderr) };
+    if (result.stdout.len > 0) return .{ .outcome = .{ .ok = result.stdout }, .exit_code = exit_code };
+    return .{ .outcome = .{ .diags = try parseDiags(ctx, result.stderr) }, .exit_code = exit_code };
 }
 
 /// `std.process.run` under a hard deadline — `KNAP_ENGINE_TIMEOUT`

@@ -34,10 +34,15 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
         try out.writer.writeAll("{\"id\":");
         try std.json.Stringify.value(id, .{}, &out.writer);
         // Per-template shape doc, fetched on demand per SPEC (slim catalog,
-        // shape on request — here we inline it since it's small).
+        // shape on request — here we inline it since it's small). Parsed
+        // then re-emitted: a malformed shapes/<id>.json must not corrupt
+        // the result document.
         const shape_path = try std.fmt.allocPrint(ctx.arena, "{s}/shapes/{s}.json", .{ ctx.templates_dir, id });
         if (std.Io.Dir.readFileAlloc(.cwd(), ctx.io, shape_path, ctx.arena, .limited(1 << 20)) catch null) |shape| {
-            try out.writer.print(",\"shape\":{s}", .{shape});
+            if (std.json.parseFromSliceLeaky(std.json.Value, ctx.arena, shape, .{}) catch null) |v| {
+                try out.writer.writeAll(",\"shape\":");
+                try std.json.Stringify.value(v, .{}, &out.writer);
+            }
         }
         try out.writer.writeAll("}");
     }
