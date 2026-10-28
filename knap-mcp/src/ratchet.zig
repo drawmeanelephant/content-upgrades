@@ -54,6 +54,12 @@ pub const epsilon: f64 = 1.0;
 pub const top_k = 2;
 /// Hard cost cap on backend calls per run.
 pub const max_backend_calls = 10;
+/// Hard cap on k4o renders per run — the start render, the ceiling
+/// climb, probes and candidates together — independent of the
+/// client-controlled max_iterations. 256 sits above every current
+/// ratchet-eval case (peak 153) and the measured CLI worst case
+/// (236 renders at --max-iters 20).
+pub const max_renders = 256;
 pub const max_slice_bytes = 4096;
 /// Kinds of one palette slot probed per iteration (and per stubCeiling
 /// step). A palette costs `min(kinds, max_variant_probes)` probe renders
@@ -1100,7 +1106,9 @@ pub const Reason = enum {
     }
 };
 
-pub const Stop = enum { ceiling, plateau, stalled, max_iterations, budget };
+/// `budget` is the backend-call cap, `render_budget` the `max_renders`
+/// cap: a run that can no longer render stops, whatever it measured.
+pub const Stop = enum { ceiling, plateau, stalled, max_iterations, budget, render_budget };
 
 pub const Step = struct {
     /// 1-based, the same counter Result.iterations reports.
@@ -1179,6 +1187,8 @@ const Best = struct {
 const Rendered = union(enum) {
     ok: Best,
     diag: []const u8,
+    /// The render budget is spent; the engine was never invoked.
+    budget,
 };
 
 const Run = struct {
@@ -1192,6 +1202,7 @@ const Run = struct {
     mock_used: std.StringHashMapUnmanaged(usize) = .empty,
 
     fn render(r: *Run, data: ObjectMap) Error!Rendered {
+        if (r.renders >= max_renders) return .budget;
         const a = r.ctx.arena;
         const json = try std.json.Stringify.valueAlloc(a, Value{ .object = data }, .{});
         const path = try store.scratchFile(r.ctx, "json");
@@ -1268,7 +1279,7 @@ const Probe = struct { cand: Cand, best: Best };
 fn probeAll(r: *Run, base: Best, step: usize) Error![]const Probe {
     const a = r.ctx.arena;
     var out: std.ArrayList(Probe) = .empty;
-    for (r.shape.slots, 0..) |s, i| {
+    slots: for (r.shape.slots, 0..) |s, i| {
         if (!canGrow(base.data, s)) continue;
         for (0..probeCount(s)) |j| {
             var c: Cand = .{ .slot = i, .variant = windowKind(s, step, j), .gain = 0 };
@@ -1279,6 +1290,7 @@ fn probeAll(r: *Run, base: Best, step: usize) Error![]const Probe {
                     try out.append(a, .{ .cand = c, .best = p });
                 },
                 .diag => {},
+                .budget => break :slots,
             }
         }
     }
@@ -1303,6 +1315,7 @@ fn askSlice(cands: []Cand, eps: f64) []Cand {
 fn stubCeiling(r: *Run, start: Best, opts: Options) Error!f64 {
     var cur = start;
     for (0..opts.max_iterations) |step| {
+        if (r.renders >= max_renders) break;
         var next: ?Best = null;
         for (try probeAll(r, cur, step)) |p| {
             if (p.best.score - cur.score >= opts.epsilon and (next == null or p.best.score > next.?.score)) next = p.best;
@@ -1337,6 +1350,8 @@ pub fn run(
 
     var best = switch (try r.render(data0)) {
         .ok => |b| b,
+        // renders starts at 0; only a lowered cap could ever see this.
+        .budget => return ctx.fail("render budget spent before the start render", .{}),
         .diag => {
             const path = try store.scratchFile(ctx, "json");
             defer std.Io.Dir.deleteFile(.cwd(), ctx.io, path) catch {};
@@ -1361,12 +1376,22 @@ pub fn run(
     const eps = opts.epsilon;
 
     outer: for (0..opts.max_iterations) |iter| {
+        if (r.renders >= max_renders) {
+            stop = .render_budget;
+            break;
+        }
         if (ceiling - best.score < eps) {
             stop = .ceiling;
             break;
         }
         var cands: std.ArrayList(Cand) = .empty;
         for (try probeAll(&r, best, iter)) |p| try cands.append(a, p.cand);
+        // A probe pass that spent the budget ranks an incomplete field:
+        // stop rather than ask on it.
+        if (r.renders >= max_renders) {
+            stop = .render_budget;
+            break;
+        }
         const ask = askSlice(cands.items, eps);
         if (ask.len == 0) {
             stop = .plateau;
@@ -1437,6 +1462,10 @@ pub fn run(
                             step.reason = .render;
                             step.detail = d;
                             break :judge;
+                        },
+                        .budget => {
+                            stop = .render_budget;
+                            break :outer;
                         },
                     };
                     step.gain = cand.score - best.score;
@@ -2602,4 +2631,88 @@ test "boris evidence: snippets gate a slot; verbatim accepted, paraphrase reject
         \\{"subject":"acmedb backups","title":"zz nothing matches this"}
     ))).?;
     try testing.expect(subj.len > 0);
+}
+
+/// A stand-in engine for run-level tests: argv is ignored and one fixed
+/// doc comes back, so every render scores identically and probes never
+/// earn a gain. Written executable into the test's tmp dir.
+const fake_k4o =
+    \\#!/bin/sh
+    \\printf '%s\n' '# Title' '' 'prose words for the fake engine render' '' '- one' '- two'
+;
+
+/// A ctx whose k4o is the fake script and whose store lives in `tmp`,
+/// so renders spawn /bin/sh and scratch files land under .zig-cache/tmp.
+fn fakeEngineCtx(a: std.mem.Allocator, tmp: *std.testing.TmpDir, env: *std.process.Environ.Map) !Ctx {
+    try tmp.dir.writeFile(std.testing.io, .{
+        .sub_path = "fake-k4o",
+        .data = fake_k4o,
+        .flags = .{
+            .permissions = if (@hasDecl(std.Io.File.Permissions, "fromMode"))
+                std.Io.File.Permissions.fromMode(0o700)
+            else
+                .default_file,
+        },
+    });
+    const dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path[0..]});
+    var ctx = testCtx(a, env);
+    ctx.store_dir = dir;
+    ctx.engines = .{ .k4o = try std.fmt.allocPrint(a, "{s}/fake-k4o", .{dir}), .dogbed = "dogbed" };
+    return ctx;
+}
+
+test "render budget: an exhausted run stops with render_budget and renders <= max_renders" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = try fakeEngineCtx(a, &tmp, &env);
+
+    // More growable slots than the budget: the first probeAll pass of the
+    // ceiling climb spends it without a single gain or backend call.
+    var shape_json: std.Io.Writer.Allocating = .init(a);
+    try shape_json.writer.writeAll("{\"template_id\":\"t\",\"fields\":{");
+    for (0..max_renders + 50) |i|
+        try shape_json.writer.print("{s}\"f{d}\":{{\"type\":\"string\",\"optional\":true,\"apparatus\":\"quote\"}}", .{ if (i == 0) "" else ",", i });
+    try shape_json.writer.writeAll("}}");
+    const sh = try parseShape(a, shape_json.written());
+
+    const outcome = try run(&ctx, .mock, "tpl", sh, try testData(a, "{}"), .{});
+    const r = switch (outcome) {
+        .done => |r| r,
+        .start_failed => return error.TestUnexpectedResult,
+    };
+    try testing.expectEqual(Stop.render_budget, r.stop);
+    try testing.expect(r.renders <= max_renders);
+    try testing.expectEqual(max_renders, r.renders);
+    try testing.expectEqual(@as(usize, 0), r.calls);
+}
+
+test "render budget: a normal run is unchanged below the cap" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = try fakeEngineCtx(a, &tmp, &env);
+
+    // One fixed doc: every probe gains 0, so the climb returns the start
+    // score after one pass and the loop stops at the ceiling check.
+    const sh = try parseShape(a, test_shape);
+    const data0 = try testData(a, "{}");
+    const outcome = try run(&ctx, .mock, "tpl", sh, data0, .{});
+    const r = switch (outcome) {
+        .done => |r| r,
+        .start_failed => return error.TestUnexpectedResult,
+    };
+    try testing.expectEqual(Stop.ceiling, r.stop);
+    var want: usize = 1; // the start render
+    for (sh.slots) |s| {
+        if (canGrow(data0, s)) want += probeCount(s);
+    }
+    try testing.expectEqual(want, r.renders);
+    try testing.expect(r.renders < max_renders);
 }
