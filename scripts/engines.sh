@@ -54,40 +54,63 @@ sha256_file() {
     fi
 }
 
+# trust_legacy <dir>: a pin dir with no digest PROVENANCE makes the digest
+# check moot — a trojaned binary dropped into the cache dir (which CI
+# restores via actions/cache) would run unverified. So: refuse on CI
+# ($CI is true|1|yes) unless KNAP_ENGINES_TRUST_LEGACY=1 is set
+# explicitly; off CI keep the legacy accept for one transition release
+# with a louder warning; TRUST_LEGACY=0 refuses everywhere.
+trust_legacy() {
+    t_dest=$1
+    if [ "${KNAP_ENGINES_TRUST_LEGACY:-}" = "1" ]; then
+        echo "engines: WARNING: $t_dest has no digest PROVENANCE" >&2
+        echo "engines: WARNING: KNAP_ENGINES_TRUST_LEGACY=1 is set — running an UNVERIFIED binary" >&2
+        return 0
+    fi
+    t_on_ci=
+    case "${CI:-}" in true|1|yes) t_on_ci=1 ;; esac
+    if [ "${KNAP_ENGINES_TRUST_LEGACY:-}" = "0" ] || [ -n "$t_on_ci" ]; then
+        echo "engines: $t_dest has no digest PROVENANCE; refusing to run an unverified binary" >&2
+        echo "engines: delete the dir to rebuild it, or set KNAP_ENGINES_TRUST_LEGACY=1 to accept it" >&2
+        return 1
+    fi
+    echo "engines: WARNING: $t_dest has no digest PROVENANCE (pre-digest cache)" >&2
+    echo "engines: WARNING: the binary is UNVERIFIED — accepting as-is for one transition release" >&2
+    echo "engines: WARNING: this is refused on CI; delete the dir to rebuild, or set KNAP_ENGINES_TRUST_LEGACY=0 to refuse" >&2
+    return 0
+}
+
 # verify <name>: an existing pin dir is only used when its PROVENANCE proves
 # the binary came from the full pinned SHA and matches its recorded digest.
-# A pre-digest PROVENANCE (or none) warns and is accepted so existing caches
-# keep working. On mismatch this fails; the dir is never removed or
-# overwritten — inspect it by hand.
+# A pre-digest PROVENANCE (or none) is handled by trust_legacy. On mismatch
+# this fails; the dir is never removed or overwritten — inspect it by hand.
 verify() {
     v_name=$1
     v_sha=$(pin_sha "$v_name")
     v_dest=$(pin_dir "$v_name")
     v_prov=$v_dest/PROVENANCE
     if [ ! -f "$v_prov" ]; then
-        echo "engines: $v_dest has no PROVENANCE (pre-digest cache); accepting as-is" >&2
-        return 0
+        trust_legacy "$v_dest"
+        return
     fi
-    v_any=
     v_rec=$(sed -n 's/^sha=//p' "$v_prov" | head -n 1)
     if [ -n "$v_rec" ]; then
-        v_any=1
         if [ "$v_rec" != "$v_sha" ]; then
             echo "engines: $v_dest records sha=$v_rec but the pin is $v_sha; refusing to use it" >&2
             return 1
         fi
     fi
     v_rec=$(sed -n 's/^sha256=//p' "$v_prov" | head -n 1)
-    if [ -n "$v_rec" ]; then
-        v_any=1
-        v_got=$(sha256_file "$v_dest/$v_name")
-        if [ "$v_rec" != "$v_got" ]; then
-            echo "engines: $v_dest/$v_name digest mismatch (recorded $v_rec, actual $v_got); refusing to use it" >&2
-            return 1
-        fi
+    if [ -z "$v_rec" ]; then
+        # No digest line: the binary itself is unverified even when sha=
+        # matches — a crafted sha-only PROVENANCE would pass unchecked.
+        trust_legacy "$v_dest"
+        return
     fi
-    if [ -z "$v_any" ]; then
-        echo "engines: $v_dest has a pre-digest PROVENANCE; accepting as-is" >&2
+    v_got=$(sha256_file "$v_dest/$v_name")
+    if [ "$v_rec" != "$v_got" ]; then
+        echo "engines: $v_dest/$v_name digest mismatch (recorded $v_rec, actual $v_got); refusing to use it" >&2
+        return 1
     fi
 }
 
