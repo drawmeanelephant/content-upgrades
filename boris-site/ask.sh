@@ -23,7 +23,9 @@ k=5
 while [ $# -gt 0 ]; do
   case $1 in
     --claims) claims=true ;;
-    -k) k=$2; shift ;;
+    -k) [ $# -ge 2 ] || { echo "usage: ask.sh [--claims] [-k N] <query>" >&2; exit 2; }
+        case $2 in ''|*[!0-9]*|0*) echo "usage: ask.sh [--claims] [-k N] <query>" >&2; exit 2 ;; esac
+        k=$2; shift ;;
     -*) echo "usage: ask.sh [--claims] [-k N] <query>" >&2; exit 2 ;;
     *) break ;;
   esac
