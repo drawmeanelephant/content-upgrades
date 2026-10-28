@@ -36,10 +36,17 @@ knap_opencode() {
 }
 
 # droid exec --output-format acp reads its default model from --settings <json>.
+# The cfg goes to a mktemp file, never a predictable /tmp name: a fixed path
+# is a symlink-clobber target, and the old code never removed it either.
+# resolve() always runs inside a live.sh subshell, so this EXIT trap fires
+# when the readiness probe or the profile run ends; live.sh's own cleanup
+# trap also removes $KNAP_TMP_FILES.
 knap_droid() {
     backend=acp cmds=droid expect="$1"
     label="$2 via ACP (droid)"
-    droid_cfg="${TMPDIR:-/tmp}/knap-droid-$1.json"
+    droid_cfg=$(mktemp "${TMPDIR:-/tmp}/knap-droid-$1.XXXXXX")
+    KNAP_TMP_FILES="${KNAP_TMP_FILES:-} $droid_cfg"
+    trap 'rm -f $KNAP_TMP_FILES' EXIT
     printf '{"model":"%s","reasoningEffort":"%s"}\n' "$1" "${3:-none}" >"$droid_cfg"
     export KNAP_ACP_AGENT="droid exec --output-format acp --settings '$droid_cfg'"
 }

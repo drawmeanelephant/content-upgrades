@@ -1,1 +1,7 @@
-[scrubbed: see #204]
+[scrubbed under issue #204: this file held ~1.2 MB of codex-acp agent stderr
+ (codex_models_manager errors incl. account/model payload) captured by a
+ KNAP_DEBUG=1 run. acp.zig discards agent stderr unless KNAP_DEBUG because it
+ may carry account details; live.sh now unsets KNAP_DEBUG so it cannot reach
+ committed artifacts again. The run's outcome is recorded in
+ ./provenance.json and ./summary.txt: smoke repair: acp agent 'npx' failed
+ session/prompt: Internal error.]
