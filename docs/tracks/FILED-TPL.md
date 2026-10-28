@@ -19,11 +19,15 @@ Issue #256. Lane owns: `src/tools/extract.zig`, `templates/filed-*.knap`,
 - Everything a canon slot cannot carry is never dropped: non-canon sections
   go verbatim into `extra_sections` (`{after, heading, level, body}`) and are
   re-emitted by the templates right after the canon slot they followed, so
-  `extract → render` reproduces the record's section order; `unmapped`
-  reports every non-skeleton range plus stray frontmatter keys.
-- `round_trip` in the report renders the extracted data and compares
-  `structhash --ignore-formatting` skeletons per region (preamble + each
-  section, in doc order).
+  non-canon sections keep doc order. Canon sections render in template canon
+  order, not doc order — `extract → render` preserves section order only for
+  canon-ordered records; `unmapped` reports every non-skeleton range plus
+  stray frontmatter keys.
+- `round_trip` in the report renders the extracted data and compares each
+  region (preamble + each section, in doc order) against the render's region
+  at the same position — the heading (fuzzy-aware, both directions) and the
+  `structhash --ignore-formatting` skeleton — so a canon reorder is reported
+  in `mismatched`, not absorbed.
 - `--data <ratcheted.json>` (or the tool's `data` arg) switches to fragment
   mode: for each canon slot that went empty→filled it emits the rendered
   section block, and for grown arrays the append delta — insert fragments

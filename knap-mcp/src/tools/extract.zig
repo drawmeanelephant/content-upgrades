@@ -482,8 +482,62 @@ const RoundTrip = struct {
     render_failed: ?[]const u8 = null,
 };
 
-/// Render the extracted data and compare per-section skeletons: every
-/// original region (preamble + sections, doc order) against the render's.
+/// One region under comparison: the text to skeleton plus the heading it
+/// claims — `name` for `mismatched` reporting, `norm` for the
+/// same-heading check.
+const Region = struct {
+    text: []const u8,
+    name: []const u8,
+    norm: []const u8,
+};
+
+/// [preamble] ++ ["#"/"##" heading + body] per section, in model order.
+fn docRegions(a: std.mem.Allocator, m: *const DocModel) ![]Region {
+    var out: std.ArrayList(Region) = .empty;
+    try out.append(a, .{ .text = m.preamble, .name = "(preamble)", .norm = "(preamble)" });
+    for (m.sections) |s| {
+        try out.append(a, .{
+            .text = try std.fmt.allocPrint(a, "{s}{s}\n\n{s}", .{ if (s.level == 1) "# " else "## ", s.heading, s.body }),
+            .name = s.heading,
+            .norm = s.norm,
+        });
+    }
+    return out.items;
+}
+
+/// Do the regions claim the same section? headingMatch in either direction
+/// covers a canon heading against the doc's fuzzy variant and the exact
+/// heading a template prints instead of the canon name ("Known System
+/// Messages" for "System Messages"); raw equality covers headings with no
+/// alnum words.
+fn sameHeading(x: Region, y: Region) bool {
+    return headingMatch(x.norm, y.norm) != .none or
+        headingMatch(y.norm, x.norm) != .none or
+        std.mem.eql(u8, x.name, y.name);
+}
+
+/// Positional compare: a doc region is equal only when the rendered region
+/// at its position claims the same heading and has the same
+/// ignore-formatting skeleton — so a same-structure reorder is a mismatch.
+fn compareRegions(a: std.mem.Allocator, orig: []const Region, rend: []const Region) !RoundTrip {
+    var rt: RoundTrip = .{ .sections = orig.len };
+    for (orig, 0..) |reg, i| {
+        if (i < rend.len and sameHeading(reg, rend[i])) {
+            const x = try skeletonText(a, reg.text);
+            const y = try skeletonText(a, rend[i].text);
+            if (std.mem.eql(u8, x, y)) {
+                rt.equal += 1;
+                continue;
+            }
+        }
+        try rt.mismatched.append(a, reg.name);
+    }
+    return rt;
+}
+
+/// Render the extracted data and compare per-region: every original region
+/// (preamble + sections, doc order) against the render's region at the same
+/// position — same heading, then same skeleton.
 fn roundTrip(ctx: *Ctx, tpl: []const u8, r: *const Report) tools.Error!RoundTrip {
     const a = ctx.arena;
     var rt: RoundTrip = .{};
@@ -495,33 +549,8 @@ fn roundTrip(ctx: *Ctx, tpl: []const u8, r: *const Report) tools.Error!RoundTrip
             return rt;
         },
     };
-    var orig: std.ArrayList([]const u8) = .empty;
-    var names: std.ArrayList([]const u8) = .empty;
-    try orig.append(a, r.doc.preamble);
-    try names.append(a, "(preamble)");
-    for (r.doc.sections) |s| {
-        try orig.append(a, try std.fmt.allocPrint(a, "{s}{s}\n\n{s}", .{ if (s.level == 1) "# " else "## ", s.heading, s.body }));
-        try names.append(a, s.heading);
-    }
     const rm = try parseDoc(a, doc);
-    var rend: std.ArrayList([]const u8) = .empty;
-    try rend.append(a, rm.preamble);
-    for (rm.sections) |s| {
-        try rend.append(a, try std.fmt.allocPrint(a, "{s}{s}\n\n{s}", .{ if (s.level == 1) "# " else "## ", s.heading, s.body }));
-    }
-    rt.sections = orig.items.len;
-    for (orig.items, 0..) |reg, i| {
-        if (i >= rend.items.len) {
-            try rt.mismatched.append(a, names.items[i]);
-            continue;
-        }
-        const x = try skeletonText(a, reg);
-        const y = try skeletonText(a, rend.items[i]);
-        if (std.mem.eql(u8, x, y)) {
-            rt.equal += 1;
-        } else try rt.mismatched.append(a, names.items[i]);
-    }
-    return rt;
+    return compareRegions(a, try docRegions(a, &r.doc), try docRegions(a, &rm));
 }
 
 // --- insert plan + fragments ---------------------------------------------------
@@ -869,6 +898,34 @@ test "parseDoc on a doc whose last line is a heading" {
     const m2 = try parseDoc(a, "---\ntitle: T\n---\n# T\n\n## Last\n");
     try testing.expectEqual(@as(usize, 1), m2.sections.len);
     try testing.expectEqualStrings("", m2.sections[0].body);
+}
+
+test "compareRegions reports a reorder the kind skeleton cannot see" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const orig = try parseDoc(a, "---\ntitle: T\n---\n# T\n\n## Biography\n\nbio\n\n## Image\n\nimg\n");
+    // Canon order renders Image first: same token kinds, swapped headings.
+    const flipped = try parseDoc(a, "---\ntitle: T\n---\n# T\n\n## Image\n\nimg\n\n## Biography\n\nbio\n");
+    const rt = try compareRegions(a, try docRegions(a, &orig), try docRegions(a, &flipped));
+    try testing.expectEqual(@as(usize, 3), rt.sections);
+    try testing.expectEqual(@as(usize, 1), rt.equal);
+    try testing.expectEqual(@as(usize, 2), rt.mismatched.items.len);
+    try testing.expectEqualStrings("Biography", rt.mismatched.items[0]);
+    try testing.expectEqualStrings("Image", rt.mismatched.items[1]);
+}
+
+test "compareRegions matches a canon heading printed instead of the doc variant" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // The template prints "Known System Messages" for the canon slot; the
+    // doc may carry either name — same position, still equal.
+    const orig = try parseDoc(a, "## System Messages\n\n- `a`\n");
+    const rend = try parseDoc(a, "## Known System Messages\n\n- `a`\n");
+    const rt = try compareRegions(a, try docRegions(a, &orig), try docRegions(a, &rend));
+    try testing.expectEqual(@as(usize, 2), rt.equal);
+    try testing.expectEqual(@as(usize, 0), rt.mismatched.items.len);
 }
 
 test "prelude is byte-identical across filed templates" {
