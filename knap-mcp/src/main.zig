@@ -306,8 +306,17 @@ fn flagProp(flag: []const u8) []const u8 {
 
 /// True when a tool's input_schema declares `prop` in its properties.
 fn schemaHasProp(schema: []const u8, prop: []const u8) bool {
-    var buf: [64]u8 = undefined;
-    const needle = std.fmt.bufPrint(&buf, "\"{s}\":{{", .{prop}) catch unreachable;
+    const needle_max = 64;
+    var buf: [needle_max]u8 = undefined;
+    // The needle is '"' + prop + '":{'. Callers only pass flagProp of a
+    // tool_flags entry, so a flag name too long for buf fails the build.
+    comptime {
+        for (tool_flags) |flag| {
+            if (flagProp(flag).len + 4 > needle_max)
+                @compileError("tool_flags entry '" ++ flag ++ "' overflows schemaHasProp's buffer");
+        }
+    }
+    const needle = std.fmt.bufPrint(&buf, "\"{s}\":{{", .{prop}) catch return false;
     return std.mem.indexOf(u8, schema, needle) != null;
 }
 
