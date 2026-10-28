@@ -10,7 +10,7 @@
     "tags":          {"type": "array<string>", "role": "frontmatter tags, lowercase kebab-case", "optional": true, "apparatus": "frontmatter", "max_items": 5, "words": 1},
     "summary":       {"type": "string", "role": "when to reach for this runbook, 2-4 sentences, single paragraph, body of the 'When to use this' abstract callout"},
     "danger":        {"type": "string", "role": "the one step people skip; highlighted with == == inside the 'Do not skip' danger callout", "optional": true, "apparatus": "callout", "words": 25},
-    "preflight":     {"type": "array<string>", "role": "checks to run before touching anything, one task item each, under 'Before you start'", "optional": true, "apparatus": "list", "max_items": 6, "words": 15},
+    "preflight":     {"type": "array<string>", "role": "checks to run before touching anything, one task item each, under 'Before you start'", "optional": true, "apparatus": "list", "max_items": 5, "words": 6},
     "phases":        {"type": "array<object>", "role": "the procedure, one h2 each; `---` thematic breaks separate phases", "fields": {
       "name":  {"type": "string", "role": "phase name, one line, h2 heading"},
       "steps": {"type": "array<object>", "role": "the steps of this phase, in order", "fields": {
@@ -21,7 +21,7 @@
         "note":    {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref after the step heading. Must match a `notes` key exactly", "optional": true, "ref": "notes"}
       }}
     }},
-    "rollback":      {"type": "array<string>", "role": "how to undo it, one numbered step each, folded into the collapsed 'Rollback' warning callout", "optional": true, "apparatus": "list", "max_items": 6, "words": 15},
+    "rollback":      {"type": "array<string>", "role": "how to undo it, one numbered step each, folded into the collapsed 'Rollback' warning callout", "optional": true, "apparatus": "callout", "max_items": 4, "words": 8},
     "escalation":    {"type": "array<object>", "role": "rows of the 'Escalation' pipe table; the header (who | when | how) is fixed in the template. `who` is the contact, `when` the trigger, `how` the channel. No | or newlines in values", "optional": true, "apparatus": "table", "max_items": 4, "words": 6, "fields": {
       "who":  {"type": "string"},
       "when": {"type": "string"},

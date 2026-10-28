@@ -27,6 +27,12 @@
       "expect": {"min_gain": 10, "stop": "stalled"}
     },
     {
+      "id": "runbook-min",
+      "template_id": "runbook",
+      "data": "@../data/runbook.min.json",
+      "expect": {"min_gain": 15}
+    },
+    {
       "id": "release-notes-sample",
       "template_id": "release-notes",
       "data": "@../data/release-notes.sample.json",
@@ -168,6 +174,13 @@
       "expect": {"reject": {"inert": 1}}
     },
     {
+      "id": "adv-command-paraphrase",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.min.json",
+      "mock": {"upgrade_command": ["acmedb upgrade --to the 2.0.0 release"]},
+      "expect": {"reject": {"verifier": 1}}
+    },
+    {
       "id": "adv-code-multiline",
       "template_path": "ratchet/code.knap",
       "shape_path": "ratchet/code.shape.json",
@@ -179,8 +192,11 @@
       "id": "adv-no-gain-wall",
       "template_id": "release-notes",
       "data": "@../data/release-notes.min.json",
-      "mock": {"known_issues[+]": [
-        "Snapshots of databases over two terabytes take hours rather than minutes, and while a snapshot is running the background compactor pauses, which means that write amplification climbs steadily for the whole duration of the job, so on a busy primary you should expect disk usage to grow by roughly the size of one full day of writes before it settles back down after the snapshot completes; the team says a fix is planned for a later point release but has not committed to a date, and in the meantime the documented workaround is to take snapshots from a replica instead of the primary, which only helps if you run a replica in the first place, and most small installs do not, because AcmeDB is still single-region and a second node in the same region mostly buys you a second copy of the same outage rather than any real protection against losing the region itself, which remains the larger risk."
+      "mock": {"upgrade_steps[+]": [
+        "Stop the AcmeDB 1.x server only after you have confirmed that every client driver in the fleet is on 1.8 or newer, because drivers older than that can no longer speak the 2.0 wire protocol, and you should also make sure the pre-upgrade backup of the data directory has actually finished and been verified restorable, which means running a test restore into a scratch path rather than trusting the backup job's green checkmark, and only then shut the server down cleanly with systemctl stop acmedb while watching the logs for a clean WAL flush before you consider the upgrade path open for real.",
+        "Stop the AcmeDB 1.x server",
+        "Rename wal_dir to storage.wal_path in acmedb.toml",
+        "Install AcmeDB 2.0 with the command below"
       ]},
       "expect": {"reject": {"no-gain": 1}}
     },
