@@ -1,5 +1,7 @@
 # Content Upgrades
 
+[![CI](https://github.com/drawmeanelephant/content-upgrades/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/drawmeanelephant/content-upgrades/actions/workflows/ci.yml)
+
 AI writes markdown in one flat barf: wall-paragraph, header, wall-paragraph, voice ironed out. `knap-mcp` fixes it with a loop, not a prompt. A model drafts and fills JSON *values*; the formatting — callouts, footnotes, tables, styled runs, a citations apparatus — lives in shipped, human-authored templates. A deterministic scorer (`density/2`, never a model call) scores the result, and a ratchet loop fills the highest-value empty slot until the score climbs. Maximum formatting, minimal formatting risk: the model never writes layout — a voice reply may insert only constrained inline emphasis (`**`, `*`, `~~`, code spans quoting the input, allowlisted emoji within the tone's budget), and an insert-only guard keeps everything else out, so it can't break the page.
 
 ## Install

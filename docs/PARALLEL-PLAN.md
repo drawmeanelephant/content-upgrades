@@ -1,5 +1,8 @@
 # Parallel plan — many agents, normal pace
 
+> Historical Oct 26 planning snapshot, kept for lane tables and history.
+> Current state: `README.md` and `docs/tracks/README.md`.
+
 Snapshot: Oct 26 (kickoff day). Freeze Oct 30 EOD. Filter cut-line Oct 29 EOD.
 
 ## Status (Oct 26 evening)
