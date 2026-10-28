@@ -1,8 +1,10 @@
 #!/bin/sh
 # Checks every few-shot example and mock reply against the voice contract:
 # facts, names, numbers, urls, quotes and footnote refs kept verbatim, no
-# markup or line breaks added, length bounds, tone budgets, and the same
-# inputs across all three tones. testdata/bad.jsonl proves the guard bites.
+# markup dropped and only balanced inline formatting (`**`, `*`, `~~`,
+# code spans quoting the input, allowlisted emoji) added, plain slots kept
+# plain, text length bounds, tone budgets, and the same inputs across all
+# three tones. testdata/bad.jsonl proves the guard bites.
 set -eu
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 data=$here/../../data

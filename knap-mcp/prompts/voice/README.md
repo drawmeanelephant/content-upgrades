@@ -122,20 +122,20 @@ Hard rules. A failure keeps the original value.
 
    Number tokens and names must match as whole words, with no letter or digit on either side. The other tokens match as substrings.
 2. The reply adds no new URL, wikilink, footnote marker, quoted span, number token, or mixed-case name like `QuuxQueue`. New all-caps words and new capitalized words are allowed, because that is how shouting and title case look.
-3. The reply keeps the input's markup exactly. Each of ``* _ ` | # < > [ ] { } ~ ^ @ \ "`` occurs at most as often as in the input and at least as often — dropped markup changes the rendered structure hash as surely as added markup. `!!` or `??` only where the input has them. It may not start with `- `, `+ `, `* `, `= `, `> `, `# `, `1. `, `1) `, `---`, or a textile block tag (`h1. `, `p. `, `bq. `, `bc. `, `pre. `, `fn1. `). The Zig guard also compares the inline structure skeletons of input and reply directly (`structhash.zig`), which catches re-paired or moved markup the character counts miss. Where a field's descriptor marks `footnote_abutting` and the element carries a `note`, the template emits `[^note]` right after the value, so a reply may not end in `!` (`![^n]` reads as image syntax).
-4. No control characters, no line breaks, valid UTF-8, no emoji (no 4-byte UTF-8 sequences and nothing from U+2600 to U+27BF).
-5. The length is between ceil(L/2) and max(2L, L + 40) bytes, where L is the input length. A role containing "one-word" or "four word" (as in "two-to-four word upgrade verdict") allows four words at most. The reply must keep at least half of the input's content words (stopword-free, stemmed — verifier.zig's tokenizing), and a reply that contains the input verbatim may not lead with two or more content words the input lacks: `Sure! Here is the take: <value>` is meta prose, not a rewrite.
+3. The reply keeps the input's markup and may insert only inline formatting. `_ | # < > [ ] { } ^ @ \ " $` are locked in both directions; `*`, `` ` `` and `~` may be added but never dropped. The reply's inline structure skeleton must equal the input's with only `strong`/`em`/`del`/`code` tokens inserted (`structhash.isFormatting` names the set; `structhash --ignore-formatting` is the same projection for whole documents) — a code span around `[^1]` or around the input's own `**bold**` still fails, and a `[[wikilink]]`, link or `delim:` run can never appear. Added `*`, `` ` `` and `~` must resolve into spans (no leftover delimiters, no single `~`, no multi-backtick spans); a `~~` span may only cover words the reply added itself (no input content word, fact or negation); a backtick span's text must occur verbatim in the input. Added `![`, `!!`, `??` or `==`, HTML entities, and block markers (the previous list, plus ` ``` ` and `~~~` fences) are rejected. Where a field's descriptor marks `footnote_abutting` and the element carries a `note`, the template emits `[^note]` right after the value, so a reply may not end in `!` (`![^n]` reads as image syntax).
+4. No control characters, no line breaks, valid UTF-8. Emoji: single code points in U+1F300–1F5FF, U+1F600–1F64F, U+1F680–1F6FF, U+1F900–1F9FF or U+1FA70–1FAFF, plus ✨ ⚡ ⚠ ✅ ❌ ☕, each optionally followed by U+FE0F — within the tone budget. A gesture, food-as-innuendo, weapon or blood emoji, a skin tone, a ZWJ or other invisible character, a bare U+FE0F, `‼`/`⁉`, an astral symbol like mathematical bold, or a non-allowlisted dingbat is a hard failure. Roles containing `rendered bold`, `rendered italic`, `alt text`, `page heading` or `frontmatter` are plain slots: no added formatting and no added emoji.
+5. The length is between ceil(L/2) and max(2L, L + 40) text bytes — `*`, `` ` ``, `~`, allowed emoji and U+FE0F don't count — where L is the input's text length. A role containing "one-word" or "four word" (as in "two-to-four word upgrade verdict") allows four words at most. The reply must keep at least half of the input's content words (stopword-free, stemmed — verifier.zig's tokenizing), and a reply that contains the input verbatim may not lead with two or more content words the input lacks: `Sure! Here is the take: <value>` is meta prose, not a rewrite.
 6. The reply is not empty.
 
 Tone budgets. `check.sh` enforces them on the examples. At runtime they are advisory and only logged, except that a mild reply containing profanity (the brand phrase included) should be rejected.
 
-| Tone | Profanity words | New all-caps words | `!` |
-|---|---|---|---|
-| mild | 0 | 0 | 0 |
-| spicy | 1, no f-word | 1 | 1 |
-| feral | 2 | 3 | 2 |
+| Tone | Profanity words | New all-caps words | `!` | Formatting spans | Emoji |
+|---|---|---|---|---|---|
+| mild | 0 | 0 | 0 | 1, italic only | 0 |
+| spicy | 1, no f-word | 1 | 1 | 2 | 1 |
+| feral | 2 | 3 | 2 | 3 | 2 |
 
-The profanity list lives in `voice.awk`.
+The profanity list lives in `voice.awk`. A formatting span is one added `**…**`, `*…*` or `~~…~~` (a code span quotes the input and doesn't count, nor does the mild budget let `**` or `~~` through at all).
 
 The guard can't see everything. When examples change, a person checks the verdict's direction, the hedges and certainty ("vendor-reported" stays hedged), new claims written in plain words, new acronyms (a new `SQL` passes as shouting), and the safety line in `feral.md`.
 

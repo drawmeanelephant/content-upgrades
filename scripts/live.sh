@@ -161,7 +161,8 @@ suite() {
 }
 
 # voice_suite (run through `suite`): voice each template's sample data per tone on the live
-# backend, render original and voiced, and require equal structure hashes.
+# backend, render original and voiced, and require equal normalized structure hashes
+# (replies may insert inline formatting; --ignore-formatting is the proof).
 voice_suite() {
     work=$KNAP_MCP_HOME/voice
     mkdir -p "$work"
@@ -182,8 +183,8 @@ voice_suite() {
             cp "$work/$t.$tone.json" "$dir/voice-$t-$tone.json"
             jq '.data' "$work/$t.$tone.json" >"$work/$t.$tone.data.json"
             "$bin" render "$t" -d "$work/$t.$tone.data.json" --out "$work/$t.$tone.md" >/dev/null || { echo "| $t | $tone | - | - | - | render failed |"; failed=1; continue; }
-            h0=$("$bin" structhash "$work/$t.md" | cut -d' ' -f1)
-            h1=$("$bin" structhash "$work/$t.$tone.md" | cut -d' ' -f1)
+            h0=$("$bin" structhash "$work/$t.md" --ignore-formatting | cut -d' ' -f1)
+            h1=$("$bin" structhash "$work/$t.$tone.md" --ignore-formatting | cut -d' ' -f1)
             verdict=moved
             [ "$h0" = "$h1" ] && verdict=same && same=$((same + 1))
             [ "$verdict" = same ] || failed=1
