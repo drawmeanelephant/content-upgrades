@@ -23,6 +23,10 @@ BEGIN {
 	NOEMOJI = "\360\237[\200-\253][\200-\277]"
 	# ZWJ, SHY, 200B–200F, 202A–202E, 2060–2064, 2066–2069, FEFF.
 	INVISIBLE = "\342\200[\213-\217]|\302\255|\342\200[\252-\256]|\342\201[\240-\244]|\342\201[\246-\251]|\357\273\277"
+	# Non-ASCII Unicode White_Space: NEL, NBSP, ogham, U+2000-200A,
+	# U+2028/2029, narrow NBSP, medium math space, ideographic space.
+	# The word cap normalizes these before splitting (#334).
+	UNISPACE = "\302\205|\302\240|\341\232\200|\342\200[\200-\212\250\251\257]|\342\201\237|\343\200\200"
 	# Control and format characters whose UTF-8 sits entirely above 0x7f,
 	# invisible to the [\001-\037\177] check: the C1 controls, the
 	# line/paragraph separators and the Cf set (ZWSP–ZWJ, SHY, BOM).
@@ -32,7 +36,7 @@ BEGIN {
 	# ‼ U+203C and ⁉ U+2049 read as !!.
 	BANGBYTES = "\342\200\274|\342\201\211"
 	for (i = 0; i < 256; i++) ORD[sprintf("%c", i)] = i
-	URLRE = "https?://[^ \t\"'<>)]+"
+	URLRE = "https?://[^ \t\"'<>`)]+"
 	NUMRE = "[$#~<>A-Za-z0-9.,%/:_+-]*[0-9][$#~<>A-Za-z0-9.,%/:_+-]*"
 	# verifier.zig's content-word lists, for the W3 strike check.
 	STOPWORDS = " a an the and or but of to in on at for by with from as is are was were be been being it its this that these those has have had do does did will would can could should may might must so than then there their they them we our you your he she his her i me my if into about just also any some each very too which who whom what when where how why s t "
@@ -149,6 +153,11 @@ function present(s, t, kind) {
 	return hasword(s, t)
 }
 
+# A URL ends at whitespace, a quote, <, >, ) or a backtick, so a code
+# span may quote the input's URL (W6, #334). Trailing .,;:!? is the
+# sentence's punctuation, not the target's — dogbed renders bare URLs
+# as text and linkifiers exclude it, so it may change (the documented
+# rule in prompts/voice/README.md).
 function urls(s, T,    rest) {
 	rest = s
 	while (match(rest, URLRE)) {
@@ -681,7 +690,11 @@ function guard(tone, role, fab, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, 
 	if (O < lo) why("too short: " O " bytes, min " lo)
 	if (O > hi) why("too long: " O " bytes, max " hi)
 	if (index(role, "one-word") || index(role, "four word")) {
-		nw = split(out, words, " ")
+		# Count words on Unicode whitespace: normalize the non-ASCII
+		# White_Space set plus VT/FF/CR, then split (" " already
+		# covers space, tab and newline runs).
+		tmp = out; gsub(UNISPACE, " ", tmp); gsub(/[\013\014\015]/, " ", tmp)
+		nw = split(tmp, words, " ")
 		if (nw > 4) why("word-limited role, " nw " words, max 4")
 	}
 
