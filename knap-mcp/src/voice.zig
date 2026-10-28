@@ -354,6 +354,7 @@ pub const Line = struct {
     output: []const u8,
     tone: []const u8 = "",
     expect: []const u8 = "",
+    footnote_abutting: bool = false,
 };
 
 /// Parsed lines of a JSONL file, skipping blank ones.
@@ -1814,9 +1815,9 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 56), lines.len);
+    try testing.expectEqual(@as(usize, 62), lines.len);
     for (lines) |l| {
-        const c = try guard(a, parseTone(l.tone).?, l.field_role, false, l.input, l.output);
+        const c = try guard(a, parseTone(l.tone).?, l.field_role, l.footnote_abutting, l.input, l.output);
         const all = try joined(a, c.hard.items);
         const budget = try joined(a, c.budget.items);
         if (std.mem.indexOf(u8, all, l.expect) == null and std.mem.indexOf(u8, budget, l.expect) == null) {
@@ -1837,7 +1838,7 @@ test "every example and mock reply passes the guard, budgets included" {
             const lines = try parseLines(a, try readTest(a, "prompts/voice/" ++ kind ++ "/" ++ tone ++ ".jsonl"));
             try testing.expect(lines.len > 0);
             for (lines) |l| {
-                const c = try guard(a, parseTone(tone).?, l.field_role, false, l.input, l.output);
+                const c = try guard(a, parseTone(tone).?, l.field_role, l.footnote_abutting, l.input, l.output);
                 if (!c.strict()) {
                     std.debug.print("{s}/{s}.jsonl {s} {s}: [{s}] [{s}]\n", .{ kind, tone, l.template, l.field, try joined(a, c.hard.items), try joined(a, c.budget.items) });
                     return error.TestUnexpectedResult;
