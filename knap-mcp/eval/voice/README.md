@@ -1,6 +1,6 @@
 # eval/voice
 
-The voice proof (SPEC demo beat 6): one template, one data file, three tones. Every tone renders with the same *normalized* structure hash as the original — `knap-mcp structhash --ignore-formatting`, which drops `strong`, `em`, `del` and `code` tokens — and every voiced doc differs from the original as a string. The model rewrote words (and may now insert `**bold**`, `*italic*`, `~~strike~~`, code spans and allowlisted emoji); the layout and every fact didn't move.
+The voice proof (SPEC demo beat 6): one template, one data file, three tones. Every tone renders with the same *normalized* structure hash as the original — `knap-mcp structhash --ignore-formatting`, which drops `strong`, `em`, `del`, `hl` and `code` tokens — and every voiced doc differs from the original as a string. The model rewrote words (and may now insert `**bold**`, `*italic*`, `~~strike~~`, `==highlight==`, code spans and allowlisted emoji); the layout and every fact didn't move.
 
 ```sh
 knap-mcp/eval/voice/run.sh     # prints two tables, exits 0 when every row passes

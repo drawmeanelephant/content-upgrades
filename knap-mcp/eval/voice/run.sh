@@ -65,10 +65,10 @@ nshash() {
     "$bin" structhash "$1" --target "$2" --ignore-formatting | cut -d' ' -f1
 }
 
-# Formatting score of a data file: `*`, `` ` `` and `~` characters plus
+# Formatting score of a data file: `*`, `` ` ``, `~` and `=` characters plus
 # emoji/symbol code points across all string values.
 fmtscore() {
-    jq -r '[.. | strings | (gsub("[^*~`]"; "") | length) + (gsub("[^\\x{1F300}-\\x{1FAFF}\\x{2600}-\\x{27BF}]"; "") | length)] | add // 0' "$1"
+    jq -r '[.. | strings | (gsub("[^*~`=]"; "") | length) + (gsub("[^\\x{1F300}-\\x{1FAFF}\\x{2600}-\\x{27BF}]"; "") | length)] | add // 0' "$1"
 }
 
 # Number of string leaves whose value differs between two data files.
