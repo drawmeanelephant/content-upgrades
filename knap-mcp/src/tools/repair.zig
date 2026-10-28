@@ -14,7 +14,7 @@ const ObjectMap = std.json.ObjectMap;
 
 pub const tool: tools.Tool = .{
     .name = "knap_repair",
-    .description = "Bounded repair loop over shipped templates: render -> diag -> region patch -> re-render, max 4.",
+    .description = "Bounded repair loop over shipped templates: render -> diag -> region patch -> re-render, max 4. For target html, data is inertness-checked (no raw HTML; link targets must be http:|https:|mailto:); the caller's template text is not gated — HTML in your own template is yours.",
     .input_schema =
     \\{"type":"object","properties":{"template_id":{"type":"string"},"data":{"type":"object"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten","acp","compat"]},"target":{"type":"string","enum":["markdown","oliver","html"]}},"required":["template_id","data"]}
     ,
@@ -29,7 +29,12 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
         ctx.backend_kind;
     const target = engine.targetFromName(common.getStr(args, "target") orelse "markdown") orelse
         return ctx.fail("target must be " ++ engine.target_names, .{});
-    const data = try common.stageData(ctx, try common.requireData(ctx, args));
+    const data_json = try common.requireData(ctx, args);
+    if (target == .html) {
+        if (common.htmlDataViolation(args.?.get("data").?)) |why|
+            return ctx.fail("html target: data {s}", .{why});
+    }
+    const data = try common.stageData(ctx, data_json);
     defer std.Io.Dir.deleteFile(.cwd(), ctx.io, data) catch {};
     const text = try common.templateText(ctx, template_id);
 
