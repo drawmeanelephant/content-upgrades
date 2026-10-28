@@ -291,6 +291,35 @@ function eqscan(s,    i, n, l, run, prev, nxt, op, cl, sp, cnt) {
 	return cnt
 }
 
+# Counts resolved ~~del~~ spans in s, `…` spans hidden first — the eqscan
+# pattern for `~`. A run must be exactly two `~` and obey the same
+# flanking rule: open iff next isn't space (punctuation needs space or
+# punctuation on the left), close iff prev isn't space (punctuation needs
+# space or punctuation on the right); doing both, it closes iff the stack
+# is non-empty. `plan~~[^1]~~` — two closers, no opener, `~~` can't
+# flank-hug `[` — resolves to no span, so the char-vs-span accounting in
+# guard() reports it as unbalanced.
+function tildescan(s,    i, n, l, run, prev, nxt, op, cl, sp, cnt) {
+	gsub(/`[^`]*`/, "x", s)
+	n = length(s); i = 1; sp = 0; cnt = 0
+	while (i <= n) {
+		if (substr(s, i, 1) != "~") { i++; continue }
+		l = 0; while (i + l <= n && substr(s, i + l, 1) == "~") l++
+		run = l
+		if (l != 2) { i += run; continue }
+		prev = (i == 1) ? " " : substr(s, i - 1, 1)
+		nxt = (i + l > n) ? " " : substr(s, i + l, 1)
+		op = (nxt !~ /[ \t]/ && (nxt !~ /[[:punct:]]/ || prev ~ /[ \t]/ || prev ~ /[[:punct:]]/))
+		cl = (prev !~ /[ \t]/ && (prev !~ /[[:punct:]]/ || nxt ~ /[ \t]/ || nxt ~ /[[:punct:]]/))
+		if (op && cl) { if (sp > 0) op = 0; else cl = 0 }
+		if (cl) {
+			if (sp > 0) { sp--; cnt++ }
+		} else if (op) sp++
+		i += run
+	}
+	return cnt
+}
+
 # Runs of ch in out that the input's multiset can't cover, in AR[len].
 function addruns(in_, out, ch,    i, l, rin) {
 	split("", rin); split("", AR); i = 1
@@ -466,7 +495,7 @@ function strikeinnerok(inner,    NF2, CW2, t, w, c, j, k) {
 }
 
 # Sets REASONS to every way `out` breaks the voice contract for `in_`.
-function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, din, hl_in, hl_ou, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, DROPSEEN) {
+function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, del_in, del_ou, hl_in, hl_ou, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, DROPSEEN) {
 	REASONS = ""
 	if (in_ == "") why("empty input")
 	if (out == "") { why("empty output"); return }
@@ -510,13 +539,15 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 	split("", SPAN); lou = starscan(out); em_ou = SPAN["em"]; st_ou = SPAN["strong"]
 	if (lou > lin) why("unbalanced *")
 	addruns(in_, out, "`"); if (added_runs_bad(1)) why("unbalanced `")
-	addruns(in_, out, "~"); if (added_runs_bad(2)) why("unbalanced ~")
-	# `=` gets the char-vs-span accounting the zig guard uses: every added
-	# `=` char must belong to an `==…==` span eqscan resolved.
+	# `~` and `=` get the char-vs-span accounting the zig guard uses:
+	# every added char must belong to a ~~…~~ / ==…== span the scan
+	# resolved. A stray or flank-blocked run resolves to no span, so its
+	# chars fail the count.
+	del_in = tildescan(in_); del_ou = tildescan(out)
+	if (countchar(out, "~") - countchar(in_, "~") != 4 * (del_ou - del_in)) why("unbalanced ~")
 	hl_in = eqscan(in_); hl_ou = eqscan(out)
 	if (countchar(out, "=") - countchar(in_, "=") != 4 * (hl_ou - hl_in)) why("unbalanced =")
-	din = int(countchar(in_, "~") / 4)  # each input ~~x~~ is two runs of two
-	nspans = em_ou + st_ou + AR[2] / 2 + hl_ou - em_in - st_in - din - hl_in
+	nspans = em_ou + st_ou + del_ou + hl_ou - em_in - st_in - del_in - hl_in
 
 	# W3: a strike retracts meaning, so ~~ may only surround words the
 	# reply itself added — no input fact, negation or content word.
@@ -596,7 +627,7 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 	tmp = out; nbang = gsub(/!/, "", tmp)
 	if (nbang > MAXBANG[tone]) why(tone ": " nbang " exclamation marks, max " MAXBANG[tone])
 	if (nspans > MAXSPANS[tone]) why(tone ": " nspans " formatting spans, max " MAXSPANS[tone])
-	if (tone == "mild" && (st_ou - st_in) + (AR[2] / 2 - din) + (hl_ou - hl_in) > 0) why("mild: only *italic*")
+	if (tone == "mild" && (st_ou - st_in) + (del_ou - del_in) + (hl_ou - hl_in) > 0) why("mild: only *italic*")
 	if (EMOJI_COUNT > MAXEMOJI[tone]) why(tone ": " EMOJI_COUNT " emoji, max " MAXEMOJI[tone])
 }
 
