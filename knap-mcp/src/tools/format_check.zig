@@ -46,3 +46,30 @@ fn extensionOf(ctx: *Ctx, doc_id: []const u8) []const u8 {
     for (artifacts) |a| if (std.mem.eql(u8, a.doc_id, doc_id)) return a.extension;
     return "?";
 }
+
+/// `knap-mcp format-check <doc_id|file>`: a readable file path is staged
+/// into the artifact store byte-for-byte first; anything else is a doc_id.
+/// Exit 0 with the JSON warnings on stdout, 1 when the check can't run.
+pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
+    if (args.len != 1 or (args[0].len > 1 and args[0][0] == '-')) {
+        std.debug.print("knap-mcp: format-check needs exactly one doc_id or file\nusage: knap-mcp <command> [options]  (see --help)\n", .{});
+        return 1;
+    }
+    const doc_id = common.docIdOrStage(ctx, args[0]) catch {
+        std.debug.print("knap-mcp: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "format-check failed"});
+        return 1;
+    };
+    var a: ObjectMap = .empty;
+    try a.put(ctx.arena, "doc_id", .{ .string = doc_id });
+    var out: Allocating = .init(ctx.arena);
+    tools.dispatch(ctx, tool.name, a, &out) catch {
+        std.debug.print("knap-mcp: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "format-check failed"});
+        return 1;
+    };
+    var buf: [8192]u8 = undefined;
+    var w = std.Io.File.stdout().writer(ctx.io, &buf);
+    try w.interface.writeAll(out.written());
+    try w.interface.writeAll("\n");
+    try w.flush();
+    return 0;
+}

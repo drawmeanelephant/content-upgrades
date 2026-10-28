@@ -47,15 +47,21 @@ fn writeReport(out: *Allocating, doc_id: []const u8, r: boris.Report) !void {
     try w.print(",\"elapsed_ms\":{d:.1}}}", .{r.elapsed_ms});
 }
 
-/// `knap-mcp publish-check <doc_id>`: the tool through the dispatcher, JSON
-/// on stdout; exit 0 when ok, 1 when not ok or the check could not run.
+/// `knap-mcp publish-check <doc_id|file>`: a readable file path is staged
+/// into the artifact store byte-for-byte first; anything else is a doc_id.
+/// The tool runs through the dispatcher, JSON on stdout; exit 0 when ok,
+/// 1 when not ok or the check could not run.
 pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     if (args.len != 1 or (args[0].len > 1 and args[0][0] == '-')) {
-        std.debug.print("knap-mcp: publish-check needs exactly one doc_id\nusage: knap-mcp <command> [options]  (see --help)\n", .{});
+        std.debug.print("knap-mcp: publish-check needs exactly one doc_id or file\nusage: knap-mcp <command> [options]  (see --help)\n", .{});
         return 1;
     }
+    const doc_id = common.docIdOrStage(ctx, args[0]) catch {
+        std.debug.print("knap-mcp: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "publish-check failed"});
+        return 1;
+    };
     var a: ObjectMap = .empty;
-    try a.put(ctx.arena, "doc_id", .{ .string = args[0] });
+    try a.put(ctx.arena, "doc_id", .{ .string = doc_id });
     var out: Allocating = .init(ctx.arena);
     tools.dispatch(ctx, tool.name, a, &out) catch {
         std.debug.print("knap-mcp: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "publish-check failed"});

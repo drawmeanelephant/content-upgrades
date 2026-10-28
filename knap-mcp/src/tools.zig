@@ -38,6 +38,7 @@ pub const all = [_]Tool{
     @import("tools/publish_check.zig").tool,
     @import("tools/density.zig").tool,
     @import("tools/ratchet.zig").tool,
+    @import("tools/ingest.zig").tool,
 };
 
 pub const templatePath = common.templatePath;
