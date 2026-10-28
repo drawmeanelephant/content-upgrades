@@ -39,6 +39,7 @@ pub const all = [_]Tool{
     @import("tools/density.zig").tool,
     @import("tools/ratchet.zig").tool,
     @import("tools/ingest.zig").tool,
+    @import("tools/doc_voice.zig").tool,
 };
 
 pub const templatePath = common.templatePath;

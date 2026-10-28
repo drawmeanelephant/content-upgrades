@@ -102,28 +102,9 @@ pub fn voiceData(ctx: *Ctx, template_id: []const u8, data_json: []const u8, tone
     const dir = promptsDir(ctx);
     const tone_name = @tagName(tone);
     var mock_lines: []const u8 = "";
-    var system: []const u8 = "";
-    if (kind == .mock) {
+    if (kind == .mock)
         mock_lines = try readPrompt(ctx, dir, try std.fmt.allocPrint(a, "mock/{s}.jsonl", .{tone_name}));
-        // Counted, not sent: the system prefix a live call would carry,
-        // when the prompts dir has it (eval/voice's private
-        // KNAP_PROMPTS_DIR controls ship only mock lines).
-        if (mockVoiceSystem(ctx, a, dir, tone_name)) |s| {
-            system = s;
-        } else |_| {
-            ctx.err_msg = "";
-        }
-    } else {
-        system = assembleSystem(
-            a,
-            try readPrompt(ctx, dir, "system.md"),
-            try readPrompt(ctx, dir, try std.fmt.allocPrint(a, "{s}.md", .{tone_name})),
-            try readPrompt(ctx, dir, try std.fmt.allocPrint(a, "examples/{s}.jsonl", .{tone_name})),
-        ) catch |e| switch (e) {
-            error.OutOfMemory => return error.OutOfMemory,
-            else => return ctx.fail("voice examples/{s}.jsonl has a bad line ({s})", .{ tone_name, @errorName(e) }),
-        };
-    }
+    const system = try systemPrompt(ctx, kind, tone);
 
     var fields: std.ArrayList(Field) = .empty;
     var changed: usize = 0;
@@ -177,6 +158,31 @@ pub fn voiceData(ctx: *Ctx, template_id: []const u8, data_json: []const u8, tone
         .changed = changed,
         .data = data,
         .fields = fields.items,
+    };
+}
+
+/// The system prompt for `tone`. Live kinds need every voice prompt file.
+/// Mock calls are counted, not sent: the prefix a live call would carry,
+/// when the prompts dir has it (eval/voice's private KNAP_PROMPTS_DIR
+/// controls ship only mock lines), else "".
+fn systemPrompt(ctx: *Ctx, kind: backend.Kind, tone: Tone) backend.Error![]const u8 {
+    const a = ctx.arena;
+    const dir = promptsDir(ctx);
+    const tone_name = @tagName(tone);
+    if (kind == .mock) {
+        if (mockVoiceSystem(ctx, a, dir, tone_name)) |s| return s else |_| {
+            ctx.err_msg = "";
+            return "";
+        }
+    }
+    return assembleSystem(
+        a,
+        try readPrompt(ctx, dir, "system.md"),
+        try readPrompt(ctx, dir, try std.fmt.allocPrint(a, "{s}.md", .{tone_name})),
+        try readPrompt(ctx, dir, try std.fmt.allocPrint(a, "examples/{s}.jsonl", .{tone_name})),
+    ) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        else => return ctx.fail("voice examples/{s}.jsonl has a bad line ({s})", .{ tone_name, @errorName(e) }),
     };
 }
 
@@ -608,30 +614,36 @@ fn components(a: Allocator, s: []const u8, f: *Facts) !void {
     var i: usize = 0;
     while (std.mem.indexOfScalarPos(u8, s, i, '<')) |p| {
         i = p + 1;
-        var rest = s[p + 1 ..];
-        if (rest.len > 0 and rest[0] == '/') rest = rest[1..];
-        const name_len: usize = if (std.mem.startsWith(u8, rest, "Aside"))
-            "Aside".len
-        else if (std.mem.startsWith(u8, rest, "Details"))
-            "Details".len
-        else
-            continue;
-        const bound: u8 = if (name_len < rest.len) rest[name_len] else 0;
-        if (bound != 0 and std.mem.indexOfScalar(u8, " \t>/", bound) == null) continue;
-        var q: u8 = 0;
-        var j = p;
-        while (j < s.len) : (j += 1) {
-            const c = s[j];
-            if (q != 0) {
-                if (c == q) q = 0;
-            } else if (c == '"' or c == '\'') {
-                q = c;
-            } else if (c == '>') break;
-        }
-        const end = @min(j + 1, s.len);
+        const end = componentEnd(s, p) orelse continue;
         try f.put(a, s[p..end], .component);
         i = end;
     }
+}
+
+/// End of the `<Aside …>`/`</Details>` tag starting at s[p] == '<', or
+/// null when no component tag starts there.
+fn componentEnd(s: []const u8, p: usize) ?usize {
+    var rest = s[p + 1 ..];
+    if (rest.len > 0 and rest[0] == '/') rest = rest[1..];
+    const name_len: usize = if (std.mem.startsWith(u8, rest, "Aside"))
+        "Aside".len
+    else if (std.mem.startsWith(u8, rest, "Details"))
+        "Details".len
+    else
+        return null;
+    const bound: u8 = if (name_len < rest.len) rest[name_len] else 0;
+    if (bound != 0 and std.mem.indexOfScalar(u8, " \t>/", bound) == null) return null;
+    var q: u8 = 0;
+    var j = p;
+    while (j < s.len) : (j += 1) {
+        const c = s[j];
+        if (q != 0) {
+            if (c == q) q = 0;
+        } else if (c == '"' or c == '\'') {
+            q = c;
+        } else if (c == '>') break;
+    }
+    return @min(j + 1, s.len);
 }
 
 fn facts(a: Allocator, s: []const u8) !Facts {
@@ -1229,6 +1241,524 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     return c;
 }
 
+// --- doc-level pass (FILED-VOICE, #257) ------------------------------------
+//
+// A filed record has no data object: it is the doc. The doc pass walks
+// prose paragraphs and list-item text runs, sends each one through the
+// field prompt contract and guard, and copies every other byte verbatim.
+// Frozen by construction: frontmatter, headings, fences, `$$` blocks,
+// quotes and callouts, tables, html and `<Aside>`/`<Details>` blocks,
+// footnote and link definitions, `{{include}}`/embed lines, and every
+// multi-line line group (verse: haiku and limerick lines are not
+// paragraphs). Whole-doc invariants are then proven on the patched text;
+// a doc that can't prove them is never written.
+
+const frontmatter = @import("frontmatter.zig");
+const density = @import("density.zig");
+
+pub const RunKind = enum {
+    paragraph,
+    list_item,
+
+    /// The policy region name (policy.Region) this run kind falls under.
+    pub fn region(k: RunKind) []const u8 {
+        return switch (k) {
+            .paragraph => "paragraphs",
+            .list_item => "list_items",
+        };
+    }
+};
+
+/// The run kinds the doc's collection policy grants for the tone
+/// (`policy.voiceAllowed`). Both false denies the doc outright.
+pub const Gate = struct {
+    paragraphs: bool = false,
+    list_items: bool = false,
+
+    fn allows(g: Gate, k: RunKind) bool {
+        return switch (k) {
+            .paragraph => g.paragraphs,
+            .list_item => g.list_items,
+        };
+    }
+};
+
+/// One rewritable text run: doc[lo..hi] is the paragraph text or the
+/// list item's text after its marker, without line-edge whitespace.
+pub const Run = struct { kind: RunKind, lo: usize, hi: usize, line: u32 };
+
+pub const Walk = struct {
+    runs: []const Run,
+    /// Multi-line plain line groups (verse, soft-wrapped label blocks).
+    line_groups: usize = 0,
+    /// Every other block, copied verbatim.
+    frozen_blocks: usize = 0,
+};
+
+const DocLine = struct { lo: usize, end: usize, no: u32 };
+
+/// Multi-line verbatim blocks that may contain blank lines.
+const BlockState = struct {
+    fence_ch: u8 = 0,
+    fence_n: usize = 0,
+    math: bool = false,
+    components: usize = 0,
+    raw_close: ?[]const u8 = null,
+
+    const Step = enum { none, opened, inside };
+
+    fn step(st: *BlockState, line: []const u8) Step {
+        const t = std.mem.trim(u8, line, " \t");
+        if (st.fence_ch != 0) {
+            const n = runLenAt(t, 0);
+            if (t.len > 0 and t[0] == st.fence_ch and n >= st.fence_n and n == t.len) st.fence_ch = 0;
+            return .inside;
+        }
+        if (st.math) {
+            if (std.mem.endsWith(u8, t, "$$")) st.math = false;
+            return .inside;
+        }
+        if (st.raw_close) |c| {
+            if (std.ascii.findIgnoreCase(t, c) != null) st.raw_close = null;
+            return .inside;
+        }
+        if (st.components > 0) {
+            st.components = componentDepth(t, st.components);
+            return .inside;
+        }
+        if (std.mem.startsWith(u8, t, "```") or std.mem.startsWith(u8, t, "~~~")) {
+            st.fence_ch = t[0];
+            st.fence_n = runLenAt(t, 0);
+            return .opened;
+        }
+        if (std.mem.startsWith(u8, t, "$$")) {
+            st.math = !(t.len >= 4 and std.mem.endsWith(u8, t, "$$"));
+            return .opened;
+        }
+        if (t.len > 0 and t[0] == '<') {
+            if (componentEnd(t, 0) != null) {
+                st.components = componentDepth(t, 0);
+                return .opened;
+            }
+            inline for (.{ .{ "<!--", "-->" }, .{ "<pre", "</pre>" }, .{ "<script", "</script>" }, .{ "<style", "</style>" }, .{ "<textarea", "</textarea>" } }) |pair| {
+                if (std.ascii.startsWithIgnoreCase(t, pair[0])) {
+                    if (std.ascii.findIgnoreCase(t[pair[0].len..], pair[1]) == null) st.raw_close = pair[1];
+                    return .opened;
+                }
+            }
+        }
+        return .none;
+    }
+};
+
+/// Component nesting depth after `t`, starting from `depth`.
+fn componentDepth(t: []const u8, depth: usize) usize {
+    var d = depth;
+    var i: usize = 0;
+    while (std.mem.indexOfScalarPos(u8, t, i, '<')) |p| {
+        i = p + 1;
+        const end = componentEnd(t, p) orelse continue;
+        const tag = t[p..end];
+        if (tag.len > 1 and tag[1] == '/') {
+            d -|= 1;
+        } else if (!std.mem.endsWith(u8, tag, "/>")) d += 1;
+        i = end;
+    }
+    return d;
+}
+
+fn isThematic(t: []const u8) bool {
+    if (t.len < 3 or std.mem.indexOfScalar(u8, "-*_", t[0]) == null) return false;
+    var n: usize = 0;
+    for (t) |c| {
+        if (c == t[0]) n += 1 else if (c != ' ' and c != '\t') return false;
+    }
+    return n >= 3;
+}
+
+/// [lo, hi) of a list item's text inside `line` (offsets into `line`), or
+/// null when the line isn't a single-line `-`/`+`/`*`/`1.`/`1)` item.
+fn listItemText(line: []const u8) ?[2]usize {
+    var i: usize = 0;
+    while (i < line.len and line[i] == ' ') i += 1;
+    if (isThematic(std.mem.trim(u8, line, " \t"))) return null;
+    var m = i;
+    if (m < line.len and std.mem.indexOfScalar(u8, "-+*", line[m]) != null) {
+        m += 1;
+    } else {
+        while (m < line.len and m - i < 9 and std.ascii.isDigit(line[m])) m += 1;
+        if (m == i or m >= line.len or (line[m] != '.' and line[m] != ')')) return null;
+        m += 1;
+    }
+    if (m >= line.len or line[m] != ' ') return null;
+    var s = m;
+    while (s < line.len and line[s] == ' ') s += 1;
+    // Five or more spaces after the marker start an indented code block.
+    if (s - m > 4) return null;
+    const hi = std.mem.trimEnd(u8, line, " \t").len;
+    if (hi <= s) return null;
+    return .{ s, hi };
+}
+
+/// A line that can only be prose: no block marker, link or footnote
+/// definition, include/embed line, setext underline or indented code.
+fn plainLine(line: []const u8) bool {
+    if (line.len > 0 and line[0] == '\t') return false;
+    var ind: usize = 0;
+    while (ind < line.len and line[ind] == ' ') ind += 1;
+    if (ind >= 4) return false;
+    const t = std.mem.trim(u8, line, " \t");
+    if (t.len == 0 or listItemText(line) != null or isThematic(t)) return false;
+    if (std.mem.indexOfScalar(u8, "#>|<=-:", t[0]) != null) return false;
+    if (t[0] == '[' and !std.mem.startsWith(u8, t, "[[")) return false;
+    inline for (.{ "{{", "![", "$$", "```", "~~~" }) |p| {
+        if (std.mem.startsWith(u8, t, p)) return false;
+    }
+    return true;
+}
+
+/// The doc's rewritable runs, in order. Conservative on purpose: a line
+/// group that is not a single plain paragraph line or a run of
+/// single-line list items is frozen whole.
+pub fn docWalk(a: Allocator, doc: []const u8) Allocator.Error!Walk {
+    const body: usize = if (try frontmatter.parse(a, doc)) |fm| fm.hi else 0;
+    var w: Walk = .{ .runs = &.{} };
+    var runs: std.ArrayList(Run) = .empty;
+    var group: std.ArrayList(DocLine) = .empty;
+    var st: BlockState = .{};
+    var line_no: u32 = 1 + @as(u32, @intCast(std.mem.count(u8, doc[0..body], "\n")));
+    var pos = body;
+    while (pos < doc.len) : (line_no += 1) {
+        const nl = std.mem.indexOfScalarPos(u8, doc, pos, '\n') orelse doc.len;
+        const end = if (nl > pos and doc[nl - 1] == '\r') nl - 1 else nl;
+        const text = doc[pos..end];
+        switch (st.step(text)) {
+            .none => if (std.mem.trim(u8, text, " \t").len == 0)
+                try classify(a, doc, &group, &runs, &w)
+            else
+                try group.append(a, .{ .lo = pos, .end = end, .no = line_no }),
+            .opened => {
+                try classify(a, doc, &group, &runs, &w);
+                w.frozen_blocks += 1;
+            },
+            .inside => {},
+        }
+        pos = nl + 1;
+    }
+    try classify(a, doc, &group, &runs, &w);
+    w.runs = runs.items;
+    return w;
+}
+
+fn classify(a: Allocator, doc: []const u8, group: *std.ArrayList(DocLine), runs: *std.ArrayList(Run), w: *Walk) Allocator.Error!void {
+    const lines = group.items;
+    defer group.clearRetainingCapacity();
+    if (lines.len == 0) return;
+    const all_items = for (lines) |l| {
+        if (listItemText(doc[l.lo..l.end]) == null) break false;
+    } else true;
+    if (all_items) {
+        for (lines) |l| {
+            const r = listItemText(doc[l.lo..l.end]).?;
+            if (!plainLine(doc[l.lo + r[0] .. l.lo + r[1]])) continue;
+            try runs.append(a, .{ .kind = .list_item, .lo = l.lo + r[0], .hi = l.lo + r[1], .line = l.no });
+        }
+        return;
+    }
+    for (lines) |l| if (!plainLine(doc[l.lo..l.end])) {
+        w.frozen_blocks += 1;
+        return;
+    };
+    if (lines.len > 1) {
+        w.line_groups += 1;
+        return;
+    }
+    const l = lines[0];
+    const t = doc[l.lo..l.end];
+    const lead = t.len - std.mem.trimStart(u8, t, " ").len;
+    try runs.append(a, .{ .kind = .paragraph, .lo = l.lo + lead, .hi = l.lo + std.mem.trimEnd(u8, t, " \t").len, .line = l.no });
+}
+
+/// Protected atoms of `s` in document order: URLs, embeds, wikilinks,
+/// footnote refs, `{{…}}` includes and component tags — the boris-aware
+/// set the guard freezes (#254). An unclosed span protects the rest.
+pub fn atomList(a: Allocator, s: []const u8) Allocator.Error![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    var i: usize = 0;
+    while (i < s.len) {
+        const rest = s[i..];
+        const end: ?usize = blk: {
+            inline for (.{ .{ "![[", "]]" }, .{ "[[", "]]" }, .{ "[^", "]" }, .{ "{{", "}}" } }) |p| {
+                if (std.mem.startsWith(u8, rest, p[0])) {
+                    const q = std.mem.indexOf(u8, rest[p[0].len..], p[1]) orelse break :blk rest.len;
+                    break :blk p[0].len + q + p[1].len;
+                }
+            }
+            if (std.mem.startsWith(u8, rest, "https://") or std.mem.startsWith(u8, rest, "http://")) {
+                var e: usize = 0;
+                while (e < rest.len and std.mem.indexOfScalar(u8, " \t\"'<>)", rest[e]) == null) e += 1;
+                break :blk std.mem.trimEnd(u8, rest[0..e], ".,;:!?*_~=`").len;
+            }
+            if (rest[0] == '<') break :blk componentEnd(rest, 0);
+            break :blk null;
+        };
+        if (end) |e| {
+            try out.append(a, rest[0..e]);
+            i += e;
+        } else i += 1;
+    }
+    return out.items;
+}
+
+/// Wiki-link and embed targets (the part before `|`), in order.
+pub fn linkTargets(a: Allocator, s: []const u8) Allocator.Error![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    for (try atomList(a, s)) |t| {
+        const open: usize = if (std.mem.startsWith(u8, t, "![[")) 3 else if (std.mem.startsWith(u8, t, "[[")) 2 else continue;
+        const inner = t[open .. t.len - @as(usize, if (std.mem.endsWith(u8, t, "]]")) 2 else 0)];
+        try out.append(a, inner[0 .. std.mem.indexOfScalar(u8, inner, '|') orelse inner.len]);
+    }
+    return out.items;
+}
+
+fn sameList(x: []const []const u8, y: []const []const u8) bool {
+    if (x.len != y.len) return false;
+    for (x, y) |p, q| if (!std.mem.eql(u8, p, q)) return false;
+    return true;
+}
+
+/// The field guard plus the doc pass's own rule: protected atoms keep
+/// their exact order (the field guard checks presence, not order).
+pub fn docGuard(a: Allocator, tone: Tone, role: []const u8, in_: []const u8, out: []const u8) Allocator.Error!Check {
+    var c = try guard(a, tone, role, false, in_, out);
+    if (!sameList(try atomList(a, in_), try atomList(a, out)))
+        try c.hard.append(a, "moves or edits a protected atom");
+    return c;
+}
+
+/// Whole-doc invariants of a patched doc against its original.
+pub const Proof = struct {
+    frontmatter_equal: bool,
+    structhash_equal: bool,
+    links_equal: bool,
+    atoms_equal: bool,
+    density_before: f64,
+    density_after: f64,
+
+    pub fn holds(p: Proof) bool {
+        return p.frontmatter_equal and p.structhash_equal and p.links_equal and p.atoms_equal and
+            p.density_after >= p.density_before;
+    }
+};
+
+pub fn prove(a: Allocator, before: []const u8, after: []const u8) Allocator.Error!Proof {
+    const fb = try frontmatter.parse(a, before);
+    const fa = try frontmatter.parse(a, after);
+    const fm_equal = if (fb != null and fa != null)
+        std.mem.eql(u8, before[fb.?.lo..fb.?.hi], after[fa.?.lo..fa.?.hi])
+    else
+        fb == null and fa == null;
+    const norm: structhash.Options = .{ .ignore_formatting = true };
+    return .{
+        .frontmatter_equal = fm_equal,
+        .structhash_equal = structhash.hashTokens(try structhash.skeletonOpts(a, before, .markdown, norm)) ==
+            structhash.hashTokens(try structhash.skeletonOpts(a, after, .markdown, norm)),
+        .links_equal = sameList(try linkTargets(a, before), try linkTargets(a, after)),
+        .atoms_equal = sameList(try atomList(a, before), try atomList(a, after)),
+        .density_before = (try density.score(a, before)).total,
+        .density_after = (try density.score(a, after)).total,
+    };
+}
+
+/// A canned reply keyed by the exact input text: eval fixtures and
+/// crafted guard cases. JSONL `{"input": "...", "output": "..."}`.
+pub const Canned = struct { input: []const u8, output: []const u8 };
+
+pub fn parseCanned(a: Allocator, jsonl: []const u8) ![]const Canned {
+    var out: std.ArrayList(Canned) = .empty;
+    var it = std.mem.splitScalar(u8, jsonl, '\n');
+    while (it.next()) |line| {
+        if (std.mem.trim(u8, line, " \t\r").len == 0) continue;
+        try out.append(a, try std.json.parseFromSliceLeaky(Canned, a, line, .{ .ignore_unknown_fields = true }));
+    }
+    return out.items;
+}
+
+fn cannedReply(canned: []const Canned, input: []const u8) ?[]const u8 {
+    for (canned) |c| if (std.mem.eql(u8, c.input, input)) return c.output;
+    return null;
+}
+
+/// The mock backend's offline reply: the longest plain lowercase word
+/// (5+ letters, outside every bracket, quote, code span and existing
+/// emphasis) wrapped in the tone's emphasis — `*x*` for mild, `**x**`
+/// otherwise. No candidate returns the input unchanged. The guard still
+/// judges the result like any reply.
+pub fn mockEmphasis(a: Allocator, tone: Tone, s: []const u8) Allocator.Error![]const u8 {
+    var depth: isize = 0;
+    var code = false;
+    var quote = false;
+    var fmt = false;
+    var best: ?[2]usize = null;
+    var i: usize = 0;
+    while (i < s.len) {
+        const c = s[i];
+        if (c == '`') code = !code;
+        if (code or c == '`') {
+            i += 1;
+            continue;
+        }
+        switch (c) {
+            '[', '(', '<', '{' => depth += 1,
+            ']', ')', '>', '}' => depth -= 1,
+            '"' => quote = !quote,
+            '*', '~', '=', '_' => {
+                const n = runLenAt(s, i);
+                const intraword = c == '_' and i > 0 and isAlnum(s[i - 1]) and i + n < s.len and isAlnum(s[i + n]);
+                if (!intraword) fmt = !fmt;
+                i += n;
+                continue;
+            },
+            else => {},
+        }
+        if (std.ascii.isLower(c) and (i == 0 or s[i - 1] == ' ')) {
+            var j = i;
+            while (j < s.len and std.ascii.isLower(s[j])) j += 1;
+            const free = depth == 0 and !quote and !fmt;
+            const bounded = j == s.len or std.mem.indexOfScalar(u8, " ,.;:", s[j]) != null;
+            if (free and bounded and j - i >= 5 and (best == null or j - i > best.?[1] - best.?[0])) best = .{ i, j };
+            i = j;
+            continue;
+        }
+        i += 1;
+    }
+    const b = best orelse return s;
+    const d: []const u8 = if (tone == .mild) "*" else "**";
+    return std.mem.concat(a, u8, &.{ s[0..b[0]], d, s[b[0]..b[1]], d, s[b[1]..] });
+}
+
+pub const DocStatus = enum { rewritten, unchanged, rejected, skipped };
+
+pub const DocField = struct {
+    /// 1-based index among the doc's runs.
+    para: usize,
+    line: u32,
+    kind: RunKind,
+    status: DocStatus,
+    before: []const u8,
+    after: []const u8,
+    /// Guard failures (rejected), skip reason (skipped), `warning: `
+    /// budget overruns (any), or a backend error.
+    reasons: []const []const u8,
+};
+
+pub const DocOptions = struct {
+    tone: Tone,
+    kind: backend.Kind,
+    gate: Gate,
+    canned: []const Canned = &.{},
+};
+
+pub const DocResult = struct {
+    /// The patched doc: runs replaced, every other byte the input's.
+    doc: []const u8,
+    fields: []const DocField,
+    rewritten: usize,
+    line_groups: usize,
+    frozen_blocks: usize,
+    proof: Proof,
+};
+
+const paragraph_role = "prose paragraph of an archive record; the doc's layout is frozen";
+const list_item_role = "list item text of an archive record (one item)";
+
+/// One run through gate, call and guard. `after` is the reply only when
+/// the status is `rewritten`.
+fn voiceRun(ctx: *Ctx, o: DocOptions, system: []const u8, r: Run, para: usize, before: []const u8) backend.Error!DocField {
+    const a = ctx.arena;
+    var f: DocField = .{ .para = para, .line = r.line, .kind = r.kind, .status = .skipped, .before = before, .after = before, .reasons = &.{} };
+    const skip: ?[]const u8 = if (!o.gate.allows(r.kind))
+        try std.fmt.allocPrint(a, "policy: {s} not granted for {s}", .{ r.kind.region(), @tagName(o.tone) })
+    else if (hasControl(before))
+        "control character in the run"
+    else if (std.ascii.startsWithIgnoreCase(before, "alt-text:") or std.ascii.startsWithIgnoreCase(before, "alt text:"))
+        "alt text stays plain"
+    else
+        null;
+    if (skip) |why| {
+        f.reasons = try a.dupe([]const u8, &.{why});
+        return f;
+    }
+    const role = if (r.kind == .paragraph) paragraph_role else list_item_role;
+    const user = try userMessage(a, try std.fmt.allocPrint(a, "{s} {d}", .{ @tagName(r.kind), para }), role, before);
+    const raw: []const u8 = if (cannedReply(o.canned, before)) |c| blk: {
+        ctx.countCall(system, user);
+        break :blk c;
+    } else if (o.kind == .mock) blk: {
+        ctx.countCall(system, user);
+        break :blk try mockEmphasis(a, o.tone, before);
+    } else backend.complete(ctx, o.kind, .voice, system, user) catch |e| switch (e) {
+        error.ToolFailed => {
+            f.status = .rejected;
+            f.reasons = try a.dupe([]const u8, &.{try std.fmt.allocPrint(a, "backend error: {s}", .{ctx.err_msg})});
+            return f;
+        },
+        else => return e,
+    };
+    const reply = cleanReply(raw, before);
+    if (std.mem.eql(u8, reply, before)) {
+        f.status = .unchanged;
+        return f;
+    }
+    const check = try docGuard(a, o.tone, role, before, reply);
+    var reasons: std.ArrayList([]const u8) = .empty;
+    try reasons.appendSlice(a, check.hard.items);
+    for (check.budget.items) |b| try reasons.append(a, try std.fmt.allocPrint(a, "warning: {s}", .{b}));
+    f.reasons = reasons.items;
+    f.status = if (check.passes()) .rewritten else .rejected;
+    if (check.passes()) f.after = reply;
+    return f;
+}
+
+/// Voice every policy-granted run of `doc`: one call per run (canned
+/// reply, mock emphasis, or `backend.complete(.voice)`), one guard per
+/// reply, no retries. A rejected or failed run keeps its original text.
+/// The proof is computed but not enforced here: callers write nothing
+/// unless `proof.holds()`.
+pub fn voiceDoc(ctx: *Ctx, doc: []const u8, o: DocOptions) backend.Error!DocResult {
+    const a = ctx.arena;
+    const walk = try docWalk(a, doc);
+    var needs_call = false;
+    for (walk.runs) |r| needs_call = needs_call or (o.gate.allows(r.kind) and cannedReply(o.canned, doc[r.lo..r.hi]) == null);
+    if (needs_call and backend.needsKey(o.kind) and ctx.environ.get("MODEL_API_KEY") == null)
+        return ctx.fail("knap_doc_voice: backend '{s}' needs MODEL_API_KEY (use --backend mock)", .{@tagName(o.kind)});
+    const system = if (needs_call or o.canned.len > 0) try systemPrompt(ctx, o.kind, o.tone) else "";
+
+    var fields: std.ArrayList(DocField) = .empty;
+    var patched: std.ArrayList(u8) = .empty;
+    var copied: usize = 0;
+    var rewritten: usize = 0;
+    for (walk.runs, 1..) |r, para| {
+        const f = try voiceRun(ctx, o, system, r, para, doc[r.lo..r.hi]);
+        try fields.append(a, f);
+        if (f.status != .rewritten) continue;
+        rewritten += 1;
+        try patched.appendSlice(a, doc[copied..r.lo]);
+        try patched.appendSlice(a, f.after);
+        copied = r.hi;
+    }
+    try patched.appendSlice(a, doc[copied..]);
+    const proof = try prove(a, doc, patched.items);
+    return .{
+        .doc = patched.items,
+        .fields = fields.items,
+        .rewritten = rewritten,
+        .line_groups = walk.line_groups,
+        .frozen_blocks = walk.frozen_blocks,
+        .proof = proof,
+    };
+}
+
 // --- tests -----------------------------------------------------------------
 
 const testing = std.testing;
@@ -1775,4 +2305,86 @@ test "a guard failure keeps the original; a budget overrun only warns" {
         "{\"year\":1.50,\"take\":\"the boring cache\",\"bottom_line\":\"Ship the damn thing, hell yes.\",\"title\":\"\"}",
         try std.json.Stringify.valueAlloc(a, r.data, .{}),
     );
+}
+
+test "docWalk: prose runs only; verse, fences, components, quotes and includes frozen" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const doc =
+        "---\ntitle: T\nid: mascots/M-1\n---\n\n# Head\n\nOne plain paragraph here.  \n\n" ++
+        "- item one\n- item two\n  - nested three\n\n" ++
+        "Line one  \nline two  \nline three\n\n" ++
+        "```\nfenced prose\n\nmore fenced prose\n```\n\n" ++
+        "<Aside type=\"note\">\naside prose\n\nmore aside prose\n</Aside>\n\n" ++
+        "> quoted prose\n\n{{include snippets/x.md}}\n\n[^1]: a footnote\n\n" ++
+        "* * *\n\nTitle\n---\n\n| a | b |\n\n    indented code\n\n<!-- a\n\ncomment -->\n\n" ++
+        "1. ordered item\n- > quoted item\n\nLast paragraph.";
+    const w = try docWalk(a, doc);
+    const want = [_]struct { kind: RunKind, text: []const u8, line: u32 }{
+        .{ .kind = .paragraph, .text = "One plain paragraph here.", .line = 8 },
+        .{ .kind = .list_item, .text = "item one", .line = 10 },
+        .{ .kind = .list_item, .text = "item two", .line = 11 },
+        .{ .kind = .list_item, .text = "nested three", .line = 12 },
+        .{ .kind = .list_item, .text = "ordered item", .line = 49 },
+        .{ .kind = .paragraph, .text = "Last paragraph.", .line = 52 },
+    };
+    try testing.expectEqual(want.len, w.runs.len);
+    for (want, w.runs) |x, r| {
+        try testing.expectEqual(x.kind, r.kind);
+        try testing.expectEqualStrings(x.text, doc[r.lo..r.hi]);
+        try testing.expectEqual(x.line, r.line);
+    }
+    try testing.expectEqual(@as(usize, 1), w.line_groups);
+}
+
+test "docGuard: block markers, edited link targets and dropped markup are rejected" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const in_ = "Mentored by [[limericks/LIM-0155|Patchy]], who taught it **precise** blame pointing.";
+    const ok = try docGuard(a, .feral, list_item_role, in_, "Mentored by [[limericks/LIM-0155|Patchy]], who taught it **precise** blame *pointing*.");
+    try testing.expect(ok.passes());
+    const bad = [_][2][]const u8{
+        .{ "# Mentored by [[limericks/LIM-0155|Patchy]], who taught it **precise** blame pointing.", "starts with a block marker" },
+        .{ "Mentored by [[limericks/LIM-0156|Patchy]], who taught it **precise** blame pointing.", "drops wikilink" },
+        .{ "Mentored by [[limericks/LIM-0155|Patchy]], who taught it precise blame *pointing*.", "drops markup character *" },
+        .{ "Mentored by [[limericks/LIM-0155|Patchy]],\n- who taught it **precise** blame pointing.", "control character or line break" },
+    };
+    for (bad) |b| {
+        const c = try docGuard(a, .feral, list_item_role, in_, b[0]);
+        const why = try joined(a, c.hard.items);
+        if (std.mem.indexOf(u8, why, b[1]) == null) {
+            std.debug.print("'{s}' -> '{s}', want '{s}'\n", .{ b[0], why, b[1] });
+            return error.TestUnexpectedResult;
+        }
+    }
+    // Atom order is the doc pass's own rule: presence alone isn't enough.
+    const two = "See [[a/A-1]] then [[b/B-2]] for more context today.";
+    const swapped = try docGuard(a, .feral, paragraph_role, two, "See [[b/B-2]] then [[a/A-1]] for **more** context today.");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, swapped.hard.items), "moves or edits a protected atom") != null);
+}
+
+test "mockEmphasis: longest free lowercase word, never inside markup" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("a **reassigned** fault, quietly", try mockEmphasis(a, .feral, "a reassigned fault, quietly"));
+    try testing.expectEqualStrings("a *reassigned* fault", try mockEmphasis(a, .mild, "a reassigned fault"));
+    try testing.expectEqualStrings("`everything inside` [[links/L-1|everything]] **everything** tiny", try mockEmphasis(a, .feral, "`everything inside` [[links/L-1|everything]] **everything** tiny"));
+    // `someone` is cut by an apostrophe, not a word boundary.
+    try testing.expectEqualStrings("someone's **widgets**", try mockEmphasis(a, .feral, "someone's widgets"));
+    try testing.expectEqualStrings("tiny bits only", try mockEmphasis(a, .feral, "tiny bits only"));
+}
+
+test "prove: frontmatter, link and atom drift each fail; formatting-only passes" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const base = "---\nid: x/X-1\n---\n\nSee [[a/A-1|A]] and {{include s/x.md}} today.\n";
+    try testing.expect((try prove(a, base, "---\nid: x/X-1\n---\n\nSee [[a/A-1|A]] and {{include s/x.md}} **today**.\n")).holds());
+    try testing.expect(!(try prove(a, base, "---\nid: x/X-2\n---\n\nSee [[a/A-1|A]] and {{include s/x.md}} today.\n")).frontmatter_equal);
+    try testing.expect(!(try prove(a, base, "---\nid: x/X-1\n---\n\nSee [[a/A-2|A]] and {{include s/x.md}} today.\n")).links_equal);
+    try testing.expect(!(try prove(a, base, "---\nid: x/X-1\n---\n\nSee [[a/A-1|A]] and {{include s/y.md}} today.\n")).atoms_equal);
+    try testing.expect(!(try prove(a, base, "---\nid: x/X-1\n---\n\nSee [[a/A-1|A]] and {{include s/x.md}} today.\n\n- new\n")).structhash_equal);
 }
