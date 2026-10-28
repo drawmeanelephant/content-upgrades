@@ -170,10 +170,15 @@ const Section = struct {
 const DocModel = struct {
     fm: ObjectMap = .empty,
     fm_all: []const []const u8 = &.{},
-    /// Body bytes before the first section heading.
+    /// Body bytes before the first section heading; a consumed `# title`
+    /// heading's body (the card/lede) is spliced in after them.
     preamble: []const u8 = "",
     /// `pre_text` is `preamble` trimmed; the verbatim preamble-slot value.
     pre_text: []const u8 = "",
+    /// Verbatim body of the consumed `# title` heading, "" when none.
+    title_body: []const u8 = "",
+    /// Line range of the consumed `# title` heading's section.
+    title_lines: [2]u32 = .{ 0, 0 },
     title_heading: bool = false,
     sections: []const Section = &.{},
 };
@@ -253,11 +258,24 @@ fn parseDoc(a: std.mem.Allocator, doc: []const u8) !DocModel {
     }
     m.sections = secs.items;
     // `# <title>` heading: a leading h1 equal to the fm title is consumed.
+    // Its body — the card/lede the shapes declare as the preamble slot —
+    // splices into the preamble after any pre-title bytes, not dropped.
     if (m.sections.len > 0 and m.sections[0].level == 1) {
         const title = str(m.fm, "title") orelse "";
         if (title.len > 0 and std.mem.eql(u8, m.sections[0].norm, try normalize(a, title))) {
+            const s0 = m.sections[0];
             m.title_heading = true;
+            m.title_body = s0.body;
+            m.title_lines = .{ s0.line_lo, s0.line_hi };
             m.sections = m.sections[1..];
+            if (s0.body.len > 0) {
+                const pre = std.mem.trim(u8, m.preamble, " \t\r\n");
+                m.preamble = if (pre.len > 0)
+                    try std.fmt.allocPrint(a, "{s}\n\n{s}", .{ pre, s0.body })
+                else
+                    s0.body;
+                m.pre_text = m.preamble;
+            }
         }
     }
     return m;
@@ -353,14 +371,25 @@ fn extract(ctx: *Ctx, canon: []const Canon, doc: *const DocModel) tools.Error!Re
     while (it.next()) |e| try r.data.put(a, e.key_ptr.*, e.value_ptr.*);
     if (doc.title_heading) try r.data.put(a, "title_heading", .{ .string = "yes" });
 
-    // preamble slot: verbatim bytes before the first section.
+    // preamble slot: verbatim bytes before the first section — pre-title
+    // text plus the consumed title heading's body (the card/lede). When the
+    // shape declares no slot for it, the same text lands in unmapped.
+    var preamble_slot = false;
     for (canon) |c| {
         if (!c.preamble) continue;
+        preamble_slot = true;
         if (doc.pre_text.len > 0) {
             try r.data.put(a, c.name, .{ .string = doc.pre_text });
             try r.mapped.append(a, .{ .slot = c.name, .heading = "(preamble)", .level = 0, .match = "verbatim", .lines = .{ 0, 0 } });
         }
         break;
+    }
+    if (!preamble_slot and doc.pre_text.len > 0) {
+        const detail = if (doc.title_body.len > 0)
+            "card/lede body under the consumed title heading (the shape declares no preamble slot)"
+        else
+            "preamble before the first section (the shape declares no preamble slot)";
+        try r.unmapped.append(a, .{ .kind = "preamble", .detail = detail, .lines = doc.title_lines });
     }
 
     // canon sections in shape order; each takes the earliest exact match,
@@ -926,6 +955,86 @@ test "compareRegions matches a canon heading printed instead of the doc variant"
     const rt = try compareRegions(a, try docRegions(a, &orig), try docRegions(a, &rend));
     try testing.expectEqual(@as(usize, 2), rt.equal);
     try testing.expectEqual(@as(usize, 0), rt.mismatched.items.len);
+}
+
+test "parseDoc splices a consumed title heading's body into the preamble" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const doc = "---\ntitle: T\n---\n\npre\n\n# T\n\n**Role:** R\n\n## S\n\nbody\n";
+    const m = try parseDoc(a, doc);
+    try testing.expect(m.title_heading);
+    try testing.expectEqualStrings("**Role:** R", m.title_body);
+    try testing.expectEqualStrings("pre\n\n**Role:** R", m.pre_text);
+    try testing.expectEqual(@as(usize, 1), m.sections.len);
+    // an empty title body changes nothing
+    const m2 = try parseDoc(a, "---\ntitle: T\n---\n\n# T\n\n## S\n\nbody\n");
+    try testing.expect(m2.title_heading);
+    try testing.expectEqualStrings("", m2.title_body);
+    try testing.expectEqualStrings("", m2.pre_text);
+}
+
+fn extractTestCtx(a: std.mem.Allocator, env: *std.process.Environ.Map, root: []const u8) !Ctx {
+    return .{
+        .arena = a,
+        .gpa = a,
+        .io = std.testing.io,
+        .environ = env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = try std.fmt.allocPrint(a, "{s}templates", .{root}),
+        .store_dir = ".zig-cache/tmp/extract-test",
+        .project_root = ".",
+    };
+}
+
+fn evalFixture(a: std.mem.Allocator, root: []const u8, name: []const u8) ![]const u8 {
+    return std.Io.Dir.readFileAlloc(.cwd(), testing.io, try std.fmt.allocPrint(a, "{s}eval/extract/{s}", .{ root, name }), a, .limited(1 << 20));
+}
+
+test "extract fills the preamble slot with the post-title card (eval fixture)" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = if (std.Io.Dir.access(.cwd(), testing.io, "templates/filed-mascot.knap", .{})) |_| "" else |_| "knap-mcp/";
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = try extractTestCtx(a, &env, root);
+    const m = try parseDoc(a, try evalFixture(a, root, "card-after-title.md"));
+    try testing.expect(m.title_heading);
+    const r = try extract(&ctx, try canonSlots(&ctx, "filed-mascot"), &m);
+    try testing.expectEqualStrings(
+        "**Role:** Fixture Custodian\n**Function:** Keeps the card where the title left it",
+        str(r.data, "card").?,
+    );
+    var seen = false;
+    for (r.mapped.items) |e| {
+        if (std.mem.eql(u8, e.slot, "card")) {
+            seen = true;
+            try testing.expectEqualStrings("(preamble)", e.heading);
+        }
+    }
+    try testing.expect(seen);
+}
+
+test "extract reports the post-title card in unmapped when no preamble slot exists" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const root = if (std.Io.Dir.access(.cwd(), testing.io, "templates/filed-mascot.knap", .{})) |_| "" else |_| "knap-mcp/";
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = try extractTestCtx(a, &env, root);
+    const m = try parseDoc(a, try evalFixture(a, root, "card-after-title.md"));
+    try testing.expect(m.title_heading);
+    const r = try extract(&ctx, &.{.{ .name = "biography", .heading = "Biography", .section = "biography" }}, &m);
+    var found = false;
+    for (r.unmapped.items) |u| {
+        if (std.mem.eql(u8, u.kind, "preamble")) {
+            found = true;
+            try testing.expect(u.lines[0] > 0);
+            try testing.expect(u.lines[1] >= u.lines[0]);
+        }
+    }
+    try testing.expect(found);
 }
 
 test "prelude is byte-identical across filed templates" {
