@@ -47,3 +47,4 @@
 {"tone": "mild", "template": "verdict", "field": "take", "field_role": "one-line hot take", "input": "the boring database that actually ships", "output": "the boring database that actually ==ships==", "expect": "mild: only *italic*"}
 {"tone": "feral", "template": "verdict", "field": "verdict", "field_role": "one-word verdict, rendered bold", "input": "give a shit", "output": "give a ==shit==", "expect": "formatting in a plain slot"}
 {"tone": "spicy", "template": "verdict", "field": "summary", "field_role": "the case, 2-4 sentences", "input": "the plan[^1] works", "output": "the plan==[^1]== works", "expect": "unbalanced ="}
+{"tone": "spicy", "template": "verdict", "field": "summary", "field_role": "the case, 2-4 sentences", "input": "the plan[^1] works", "output": "the plan~~[^1]~~ works", "expect": "unbalanced ~"}

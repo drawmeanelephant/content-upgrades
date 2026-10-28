@@ -1217,7 +1217,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 49), lines.len);
+    try testing.expectEqual(@as(usize, 50), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, false, l.input, l.output);
         const all = try joined(a, c.hard.items);
