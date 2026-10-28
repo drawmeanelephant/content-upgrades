@@ -17,7 +17,9 @@ jobs:
     name: build + test + eval
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      # First-party actions pin by commit SHA like zig-zouave below (tag kept
+      # in the trailing comment); Dependabot files the bump PRs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Pinned by commit SHA (tag v2.2.1-node24). Maintained fork of
       # mlugg/setup-zig: upstream moved to Codeberg and the GitHub copy has been
@@ -47,7 +49,7 @@ jobs:
           echo "hash=$(shasum -a 256 "$RUNNER_TEMP/engine-pins.txt" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache pinned engine builds
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/knap-engines
           key: knap-engines-v2-${{ runner.os }}-${{ steps.pins.outputs.hash }}
@@ -89,7 +91,7 @@ jobs:
     name: make demo (mock backend, boris beat 5)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Zig
         uses: drawmeanelephant/zig-zouave@2d8510d62b517fa786279562cf8b1bdcf0c47b9f
@@ -105,7 +107,7 @@ jobs:
           echo "hash=$(shasum -a 256 "$RUNNER_TEMP/engine-pins.txt" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Cache pinned engine builds
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/knap-engines
           key: knap-engines-v2-${{ runner.os }}-${{ steps.pins.outputs.hash }}
@@ -129,7 +131,7 @@ jobs:
       # with Zig 0.16.0 (boris moved to Zig 0.17.0 after v0.8.2, so the repo's
       # pinned 0.17.0 cannot build it).
       - name: Cache boris binary
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/knap-boris
           key: knap-boris-v2-${{ runner.os }}-v0.8.2-zig0.16.0
@@ -155,7 +157,7 @@ jobs:
 
       - name: Upload demo transcript and artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: demo-out
           path: demo/out/demo/
