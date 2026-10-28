@@ -188,6 +188,9 @@ pub fn main(init: std.process.Init) !u8 {
         report("init failed: {s}", .{@errorName(e)});
         return 1;
     };
+    // Reclaim scratch files from dead processes once per run — a
+    // SIGKILLed run's defers never ran, and nobody else sweeps them.
+    store.sweepStale(&ctx);
     // A lazily spawned acp agent must not outlive this process: shutdown
     // closes its stdin, gives a short grace, then kills and reaps it.
     // Idempotent — serve() defers its own call too.
