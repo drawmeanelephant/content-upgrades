@@ -62,14 +62,18 @@ knap-mcp render verdict -d data/verdict.sample.json --target markdown
 knap-mcp render apparatus -d data/apparatus.sample.json --target html
 knap-mcp repair verdict -d data/verdict.sample.json --backend mock
 knap-mcp lint templates/verdict.knap
+knap-mcp ingest <file>... [--force]             # copy existing markdown docs into the store
 knap-mcp format-check doc-<id>                  # advisory structure lint on a stored doc
 knap-mcp voice release-notes -d data/release-notes.sample.json --tone feral
+knap-mcp doc-voice <doc> --tone <t>             # guarded voice pass over a record (dry-run)
+knap-mcp extract <doc_id|file> --template <id>  # filed record -> template data (+insert fragments)
 knap-mcp structhash doc-<id>                    # layout skeleton hash (markdown|html)
 knap-mcp verify-citation "<claim>" --evidence "<quote>"
 knap-mcp boris-ask "point-in-time snapshots" --limit 3
 knap-mcp boris-check "Does AcmeDB have managed backups?"
 knap-mcp publish-check doc-<id>                 # stage into the boris site; exit 1 unless ok
 knap-mcp density doc-<id>                       # formatting-density score (markdown)
+knap-mcp audit <dir> [options]                  # corpus density audit over a tree (read-only)
 knap-mcp ratchet release-notes -d data/release-notes.min.json --backend mock
 knap-mcp ratchet-eval                           # ratchet climb table (eval/ratchet.json)
 knap-mcp eval --corpus eval/seeds.json --backend mock   # convergence table
@@ -87,7 +91,8 @@ that returns `{"ok":false}` (the JSON still goes to stdout).
 `knap_templates` · `knap_validate` · `knap_render` · `knap_repair` ·
 `knap_lint` · `knap_format_check` · `knap_voice` · `knap_structure_hash` ·
 `knap_verify_citation` · `boris_ask` · `boris_check` ·
-`knap_publish_check` · `knap_density` · `knap_ratchet` — plus
+`knap_publish_check` · `knap_density` · `knap_ratchet` · `knap_ingest` ·
+`knap_doc_voice` · `knap_extract` — plus
 `resources/list`/`resources/read` over `knap://templates/<id>` and
 `knap://docs/<doc_id>` artifact handles.
 
@@ -120,7 +125,7 @@ resolve to a page — embeds are checked as links. Diagnostics map back to
 line:column in the rendered doc; `ok` is false on any error.
 
 `knap_density(doc_id)` is the deterministic formatting-density score
-(density/2, 0–100) of a rendered markdown doc: per-signal breakdown plus
+(density/3, 0–100) of a rendered markdown doc: per-signal breakdown plus
 format_check penalties. Markdown only; no model call.
 
 `knap_ratchet(template_id, data)` is the values-only ratchet: probe which
@@ -128,7 +133,7 @@ empty slot raises the density score most, ask the backend for one value,
 keep it only if schema, markup and evidence checks pass and the markdown
 score rises. A non-empty value and the template never change. Stops on
 ceiling, plateau, stalled, `--max-iters` (default 6) or the call budget.
-`ratchet-eval` runs the 20-case corpus in `eval/ratchet.json`.
+`ratchet-eval` runs the 31-case corpus in `eval/ratchet.json`.
 
 ## Voice
 
@@ -189,7 +194,8 @@ Mock convergence today: **12/22** on seeds.json (mean iters 1.25, exact
 1.19, exact 66/115, controls 2/2 clean), with zero no-op seeds in either
 corpus. The class table breaks convergence down by error class, so the
 classes the mock cannot patch (unknown-tag, missing-value,
-bad-filter-arg, unclosed-comment) read as honest NO rows, not bugs.
+bad-filter-arg, missing-filter-arg, empty-filter-arg, unclosed-tuple,
+unclosed-comment) read as honest NO rows, not bugs.
 `exact` counts repairs byte-identical to the unbroken render — a patch
 can converge without being exact, e.g. the mock deletes an unknown filter
 rather than guessing the intended one. A "no-op seed" is a break the
@@ -208,7 +214,7 @@ with the pin.
 - `src/backend.zig` — backend interface: mock patches + `complete()` for live models
 - `src/repair.zig` — bounded repair loop
 - `src/formatcheck.zig` — advisory structure lint (9 pinned rules)
-- `src/density.zig` — formatting-density scorer (density/2)
+- `src/density.zig` — formatting-density scorer (density/3)
 - `src/structhash.zig` — layout-skeleton tokenizer + hash (markdown, html)
 - `src/voice.zig` — voice rewrite logic (eligibility, guard, call assembly)
 - `src/verifier.zig` — citation verifier slot (none | heuristic | decision)
@@ -218,7 +224,7 @@ with the pin.
 - `src/eval.zig` — seeded-breakage harness
 - `src/store.zig` — doc_id artifact handles + scratch files
 - `src/ctx.zig` — shared context (paths, env, allocators)
-- `templates/` — 4 shipped templates + `shapes/*.json` descriptors
+- `templates/` — 8 shipped templates + `shapes/*.json` descriptors
 - `data/` — sample, minimal (`.min.json`) and hallucinated data sets
 - `prompts/voice/` — voice prompt contract, tone prompts, mock replies
 - `eval/` — seeded-breakage corpora + lane harnesses (voice, boris, ratchet, verifier, density fixtures)
