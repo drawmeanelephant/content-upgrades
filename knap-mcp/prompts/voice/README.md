@@ -111,6 +111,8 @@ Caching: there are exactly three system messages, one per tone, each 5.6 to 6.3 
 
 These are the rules `voice.awk` applies to the examples. C1 ports the hard rules to Zig and runs them on every reply. Lengths are in UTF-8 bytes.
 
+Scope: the guard verifies tokens — facts, markup and structure — not meaning. At runtime a reply that adds a claim in plain words (`ships on schedule; vendor recalled units, refunded buyers`) or flips the input with a negation (`never ships on schedule`) passes every rule. A cap on new content words can't tell those from legitimate voice, so there is none; the measurements are in `docs/tracks/VOICE-SCOPE.md`.
+
 Hard rules. A failure keeps the original value.
 
 1. Every protected token in the input appears unchanged in the reply:
@@ -137,7 +139,7 @@ Tone budgets. `check.sh` enforces them on the examples. At runtime they are advi
 
 The profanity list lives in `voice.awk`. A formatting span is one added `**…**`, `*…*`, `~~…~~` or `==…==` (a code span quotes the input and doesn't count, nor does the mild budget let `**`, `~~` or `==` through at all).
 
-The guard can't see everything. When examples change, a person checks the verdict's direction, the hedges and certainty ("vendor-reported" stays hedged), new claims written in plain words, new acronyms (a new `SQL` passes as shouting), and the safety line in `feral.md`.
+The guard can't see everything, here or at runtime. When examples change, a person checks the verdict's direction, the hedges and certainty ("vendor-reported" stays hedged), new claims written in plain words, new acronyms (a new `SQL` passes as shouting), and the safety line in `feral.md`.
 
 ## Mock replies
 

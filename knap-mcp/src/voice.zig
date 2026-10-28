@@ -1955,6 +1955,26 @@ test "guard rejects markup removal, wrappers, bad UTF-8 and a footnote-abutting 
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "ends with ! where a footnote marker follows") != null);
 }
 
+// The guard's documented scope (#306, docs/tracks/VOICE-SCOPE.md): it
+// verifies tokens, not meaning. If a semantic rule ever lands, this test
+// should flip and the README/SPEC scope statements change with it.
+test "guard scope: plain-word claims and negation flips pass (token-level only)" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const in_ = "the boring database ships every release on schedule";
+    for ([_][]const u8{
+        "the boring database ships on schedule; vendor recalled units, refunded buyers",
+        "the boring database never ships on schedule",
+    }) |out| {
+        const c = try guard(a, .spicy, "one-line hot take", false, in_, out);
+        try testing.expect(c.strict());
+    }
+    // A fabricated fact-shaped token is still caught.
+    const c = try guard(a, .spicy, "one-line hot take", false, in_, "the boring database ships on schedule; vendor recalled 400 units");
+    try testing.expect(!c.passes());
+}
+
 test "guard W1: insert-only skeleton accepts formatting, rejects swallowed or moved structure" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
