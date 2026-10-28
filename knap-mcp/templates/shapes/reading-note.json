@@ -14,8 +14,8 @@
     "take":        {"type": "string", "role": "one-line hot take after the verdict", "voice": true},
     "tags":        {"type": "array<string>", "role": "frontmatter tags, lowercase kebab-case", "optional": true, "apparatus": "frontmatter", "max_items": 5, "words": 1},
     "summary":     {"type": "string", "role": "the pitch, 2-4 sentences, single paragraph, body of 'The pitch' abstract callout. No spoilers", "voice": true},
-    "thesis":      {"type": "string", "role": "the author's central claim in one sentence, rendered highlighted after a bold 'Thesis:' label", "optional": true},
-    "argument":    {"type": "array<string>", "role": "the author's argument in order, one numbered step each, one sentence", "optional": true, "apparatus": "list", "max_items": 5, "words": 12},
+    "thesis":      {"type": "string", "role": "the author's central claim in one sentence, a rendered highlight after a bold 'Thesis:' label", "optional": true, "voice": true},
+    "argument":    {"type": "array<string>", "role": "the author's argument in order, one numbered step each, one sentence", "optional": true, "voice": true, "apparatus": "list", "max_items": 5, "words": 12},
     "quotes":      {"type": "array<object>", "role": "receipts, one quote callout each", "apparatus": "quote", "max_items": 5, "fields": {
       "text": {"type": "string", "role": "verbatim quote copied from the page at `source_url`, one line. Rendered with a #:~:text= deep link, so it must match the source text exactly; avoid curly quotes", "evidence": true},
       "why":  {"type": "string", "role": "why this quote matters, 1-2 sentences", "voice": true, "footnote_abutting": true},
@@ -27,7 +27,7 @@
       "called_it": {"type": "string"}
     }},
     "thoughts":    {"type": "array<string>", "role": "marginalia, one bullet each, 1-2 sentences", "optional": true, "voice": true, "apparatus": "list", "max_items": 3, "words": 15},
-    "follow_ups":  {"type": "array<string>", "role": "things to read or check next, one task-list item each, imperative, under 12 words", "optional": true, "apparatus": "list", "max_items": 4, "words": 8},
+    "follow_ups":  {"type": "array<string>", "role": "things to read or check next, one task-list item each, imperative, under 12 words", "optional": true, "voice": true, "apparatus": "list", "max_items": 4, "words": 8},
     "spoilers":    {"type": "string", "role": "the ending, single paragraph, body of the collapsed 'Spoilers' warning callout", "optional": true, "voice": true, "apparatus": "callout", "words": 30},
     "bottom_line": {"type": "string", "role": "closing verdict, 1-2 sentences", "voice": true},
     "connections": {"type": "array<string>", "role": "names of existing site pages (author, influences, collections); rendered as [[wikilinks]] in frontmatter `related` and the Connections link cloud. Name only pages that exist; an invented name is a dangling wikilink", "optional": true, "apparatus": "wikilink", "max_items": 3, "words": 3},

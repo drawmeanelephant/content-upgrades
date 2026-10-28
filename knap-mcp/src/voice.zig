@@ -1583,7 +1583,7 @@ test "mock voice pass changes every sample, keeps structure and other values" {
         .store_dir = "",
         .project_root = "",
     };
-    inline for (.{ "verdict", "apparatus", "release-notes", "reading-note" }) |id| {
+    inline for (.{ "verdict", "apparatus", "release-notes", "reading-note", "runbook" }) |id| {
         const sample = try readTest(a, "data/" ++ id ++ ".sample.json");
         var feral_fmt: usize = 0;
         inline for (.{ Tone.mild, Tone.spicy, Tone.feral }) |tone| {
@@ -1638,7 +1638,7 @@ test "mock field roles match the shape roles verbatim" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    inline for (.{ "verdict", "apparatus", "release-notes", "reading-note" }) |id| {
+    inline for (.{ "verdict", "apparatus", "release-notes", "reading-note", "runbook" }) |id| {
         var data = try std.json.parseFromSliceLeaky(Value, a, try readTest(a, "data/" ++ id ++ ".sample.json"), .{ .parse_numbers = false });
         const shape = try std.json.parseFromSliceLeaky(Value, a, try readTest(a, "templates/shapes/" ++ id ++ ".json"), .{});
         const slots = try collect(a, id, shape, &data);
