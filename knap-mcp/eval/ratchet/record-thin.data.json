@@ -1,0 +1,12 @@
+{
+  "title": "Annex Survey",
+  "id": "mascots/M-0710",
+  "parent": "mascots",
+  "status": "published",
+  "tags": ["mascot"],
+  "title_heading": "yes",
+  "card": "**Role:** attic surveyor",
+  "extra_sections": [
+    {"after": "card", "heading": "Attic Survey", "level": 2, "body": "The attic annex holds rolled charts from three previous decades, stacked by colour along the east wall. Dust covers every shelf except the one Bricky uses as a standing desk. A brass lamp hums over the reading chair, and a cracked window feeds the room a stripe of cold light. Nothing here was catalogued after the flood; the survey marks what survived, where it rests, and which boxes still smell of river water. Two cabinets remain locked. The surveyor left them sealed, pending a decision no one has yet made."}
+  ]
+}

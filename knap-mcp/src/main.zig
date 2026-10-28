@@ -114,7 +114,7 @@ const usage_tail =
     \\  --corpus <file>         seeded-breakage corpus (default eval/seeds.json)
     \\  --out <file>            write rendered doc to file instead of stdout
     \\  --explain, --strict, --ignore-formatting  structhash: print tokens; keep link targets; drop inline formatting
-    \\  --evidence <v>          verify-citation quote | ratchet source: data | boris
+    \\  --evidence <v>          verify-citation quote | ratchet source: data | boris | record
     \\  --verifier <v>          heuristic (default) | none | decision
     \\  --limit <n>             boris-ask hits (default 5)
     \\  --max-iters <n>         ratchet iteration cap (default 6)
