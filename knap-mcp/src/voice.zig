@@ -477,9 +477,31 @@ fn isAlnum(c: u8) bool {
     return std.ascii.isAlphanumeric(c);
 }
 
+/// A code point the contract bans from every voice value and reply: the
+/// Cc ranges (C0 controls, DEL and C1), the line/paragraph separators,
+/// and the format characters (Cf) — zero-widths, soft hyphen, BOM. Each
+/// multi-byte one encodes entirely above 0x7F, so a byte-wise scan misses it.
+fn bannedCp(cp: u21) bool {
+    return cp < 0x20 or (cp >= 0x7f and cp <= 0x9f) or
+        cp == 0x2028 or cp == 0x2029 or
+        (cp >= 0x200b and cp <= 0x200f) or cp == 0x00ad or cp == 0xfeff;
+}
+
+/// The first banned code point of `s`, or null when it's clean. Bytes
+/// that don't decode are read as themselves ("invalid UTF-8" reports
+/// them too), so a stray C1 lookalike still counts.
+fn firstBanned(s: []const u8) ?u21 {
+    var i: usize = 0;
+    while (i < s.len) {
+        const d = nextCp(s, i);
+        i += d.len;
+        if (bannedCp(d.cp)) return d.cp;
+    }
+    return null;
+}
+
 fn hasControl(s: []const u8) bool {
-    for (s) |c| if (c < 0x20 or c == 0x7f) return true;
-    return false;
+    return firstBanned(s) != null;
 }
 
 /// `w` occurs in `s` with no letter or digit on either side.
@@ -1062,7 +1084,12 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
         try H.add(a, &c.hard, "empty output", .{});
         return c;
     }
-    if (hasControl(out)) try H.add(a, &c.hard, "control character or line break", .{});
+    if (firstBanned(out)) |cp| {
+        if (cp < 0x80)
+            try H.add(a, &c.hard, "control character or line break", .{})
+        else
+            try H.add(a, &c.hard, "control or format character U+{X:0>4}", .{cp});
+    }
     if (!std.unicode.utf8ValidateSlice(out)) try H.add(a, &c.hard, "invalid UTF-8", .{});
 
     const fi = try facts(a, in_);
@@ -1848,7 +1875,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 66), lines.len);
+    try testing.expectEqual(@as(usize, 74), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, l.footnote_abutting, l.input, l.output);
         const all = try joined(a, c.hard.items);
@@ -2014,6 +2041,40 @@ test "guard rejects markup removal, wrappers, bad UTF-8 and a footnote-abutting 
     try testing.expect(c.passes());
     c = try guard(a, .feral, "r", true, "it just works", "it just works, dammit!");
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "ends with ! where a footnote marker follows") != null);
+}
+
+// The banned set of bannedCp: C1 controls, the line/paragraph
+// separators and the Cf format characters — every byte of their UTF-8
+// sits above 0x7F, where the old byte-wise scan looked away.
+test "guard: C1 controls, separators and format chars are banned by code point" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const in_ = "the boring database that actually ships";
+    const cases = [_]struct { cp: u21, seq: []const u8 }{
+        .{ .cp = 0x85, .seq = "\u{85}" }, // NEL
+        .{ .cp = 0x90, .seq = "\u{90}" }, // DCS
+        .{ .cp = 0x2028, .seq = "\u{2028}" }, // line separator
+        .{ .cp = 0x2029, .seq = "\u{2029}" }, // paragraph separator
+        .{ .cp = 0x200B, .seq = "\u{200B}" }, // ZWSP
+        .{ .cp = 0x200D, .seq = "\u{200D}" }, // ZWJ
+        .{ .cp = 0xFEFF, .seq = "\u{FEFF}" }, // BOM
+        .{ .cp = 0xAD, .seq = "\u{AD}" }, // soft hyphen
+    };
+    for (cases) |cse| {
+        const out = try std.mem.concat(a, u8, &.{ in_, " ", cse.seq });
+        const c = try guard(a, .feral, "r", false, in_, out);
+        const want = try std.fmt.allocPrint(a, "control or format character U+{X:0>4}", .{cse.cp});
+        try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), want) != null);
+        // A value carrying one is ineligible: the model never sees it.
+        var v: Value = .{ .string = out };
+        try testing.expect(!eligible(&v));
+    }
+    // Ordinary non-ASCII stays eligible and unremarkable.
+    var v: Value = .{ .string = "the café" };
+    try testing.expect(eligible(&v));
+    const c = try guard(a, .mild, "r", false, in_, "the boring database — that actually ships");
+    try testing.expect(c.passes());
 }
 
 // The guard's documented scope (#306, docs/tracks/VOICE-SCOPE.md): it
