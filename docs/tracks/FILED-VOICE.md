@@ -25,13 +25,20 @@
    underlines, indented code, and **every multi-line group**. That last
    rule covers verse: haiku lines, limerick lines with hard breaks, and
    soft-wrapped label blocks like `**Role:** …`. Those count as
-   `line_groups_skipped`. They map to policy region `verse`, and they stay
-   frozen even when a policy grants `verse`.
+   `line_groups_skipped`.
+   `verse` and `headings` are named `policy.Region`s but they are frozen
+   by construction: nothing in the walk produces runs under them. Since
+   #359 a policy that names either in `voice.regions` fails to load
+   (`'verse' is frozen — voice regions may only grant 'paragraphs' and
+   'list_items'`) — a grant the gate can't honor is a load error, not a
+   silent no-op. The only grantable regions are `paragraphs` and
+   `list_items`.
 2. **Gate.** `policy.voiceAllowed(match(rel), tone, .paragraphs|.list_items)`.
    If no policy is found, the run errors out (pass `--policy`, or put
-   `knap-policy.json` in or above the `content/` dir). If the policy is
-   found but the doc is unpoliced, or denied for this tone, every run is
-   `skipped`: no backend call, no write, exit 0.
+   `knap-policy.json` in or above the `content/` dir); a policy granting
+   `verse`/`headings` never reaches the gate — it fails to load (#359).
+   If the policy is found but the doc is unpoliced, or denied for this
+   tone, every run is `skipped`: no backend call, no write, exit 0.
 3. **One call per run.** A canned reply (`--replies`) wins. Otherwise
    `mock` uses `mockEmphasis`: the longest free lowercase word of 5+
    letters, wrapped as `*x*` for mild or `**x**` otherwise. Otherwise the
@@ -126,3 +133,7 @@ KNAP_BORIS_SITE=~/dev/filed.fyi KNAP_BORIS_STAGING=raw KNAP_BORIS_THEME=themes/c
   the three env vars. That change belongs in the filed repo.
 - **Captain.** README and `docs/SPEC.md` could list `doc-voice` and
   `knap_doc_voice`. Those files are outside this lane.
+- **`docs/policy.md` still advertises all four regions** in its
+  `.voice.regions` row. Since #359 only `paragraphs`/`list_items` are
+  grantable and `verse`/`headings` are load errors; that file is outside
+  this lane and needs the matching line.
