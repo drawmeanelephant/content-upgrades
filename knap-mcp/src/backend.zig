@@ -802,8 +802,8 @@ fn curl(ctx: *Ctx, url: []const u8, key: []const u8, payload: ?[]const u8) Error
     // can keep the provider's error payload.
     try argv.appendSlice(ctx.arena, &.{
         "curl", "-sS",                                                   "--fail-with-body",  "-X",                                                                                      if (payload != null) "POST" else "GET",
-        "-m",   try std.fmt.allocPrint(ctx.arena, "{d}", .{total_secs}), "--connect-timeout", try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.envSecs("KNAP_CURL_CONNECT_TIMEOUT", 10)}), "-K",                                   "-",
-        "-w",   "\n%{http_code}",
+        "-m",   try std.fmt.allocPrint(ctx.arena, "{d}", .{total_secs}), "--connect-timeout", try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.envSecs("KNAP_CURL_CONNECT_TIMEOUT", 10)}), "-K",
+        "-",    "-w",                                                    "\n%{http_code}",
     });
 
     // The request body goes through an owner-only scratch file, not argv,
