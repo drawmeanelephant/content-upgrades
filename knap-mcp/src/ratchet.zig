@@ -569,12 +569,15 @@ fn keysOf(data: ObjectMap, s: Slot) ObjectMap {
 /// A copy of `data` with `value` set on (or appended to) the slot. The
 /// original is never touched, so `best` stays intact. A keyed slot is the
 /// paired write: the new key and the anchor's ref land together, so the
-/// ref always resolves.
-pub fn withValue(arena: std.mem.Allocator, data: ObjectMap, s: Slot, value: Value) !ObjectMap {
+/// ref always resolves. A keyed slot whose anchor is gone is a tool
+/// error, not a crash: the invariant spans `canGrow` and this write.
+pub fn withValue(ctx: *Ctx, data: ObjectMap, s: Slot, value: Value) !ObjectMap {
+    const arena = ctx.arena;
     var m = try data.clone(arena);
     if (s.field.kind == .keyed) {
         // Callers only write slots canGrow accepted.
-        const at = anchor(data, s) orelse unreachable;
+        const at = anchor(data, s) orelse
+            return ctx.fail("keyed slot '{s}' has no anchor", .{s.path});
         var keys = try keysOf(data, s).clone(arena);
         const key = try noteKey(arena, at, keys);
         try keys.put(arena, key, value);
@@ -1270,7 +1273,7 @@ fn probeAll(r: *Run, base: Best, step: usize) Error![]const Probe {
         for (0..probeCount(s)) |j| {
             var c: Cand = .{ .slot = i, .variant = windowKind(s, step, j), .gain = 0 };
             const ps = c.of(r.shape.slots);
-            switch (try r.render(try withValue(a, base.data, ps, try stub(a, base.data, ps)))) {
+            switch (try r.render(try withValue(r.ctx, base.data, ps, try stub(a, base.data, ps)))) {
                 .ok => |p| {
                     c.gain = p.score - base.score;
                     try out.append(a, .{ .cand = c, .best = p });
@@ -1421,7 +1424,7 @@ pub fn run(
                         step.detail = why;
                         break :judge;
                     };
-                    const next = try withValue(a, best.data, s, v);
+                    const next = try withValue(ctx, best.data, s, v);
                     // Never make a ref-clean document dirty.
                     if ((try refCheck(a, shape, best.data)) == null) if (try refCheck(a, shape, next)) |why| {
                         step.reason = .schema;
@@ -1901,6 +1904,20 @@ fn testData(a: std.mem.Allocator, json: []const u8) !ObjectMap {
     return (try std.json.parseFromSliceLeaky(Value, a, json, .{})).object;
 }
 
+fn testCtx(a: std.mem.Allocator, env: *std.process.Environ.Map) Ctx {
+    return .{
+        .arena = a,
+        .gpa = a,
+        .io = std.testing.io,
+        .environ = env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = ".knap-mcp",
+        .project_root = ".",
+    };
+}
+
 fn slotNamed(sh: Shape, path: []const u8) Slot {
     for (sh.slots) |s| if (std.mem.eql(u8, s.path, path)) return s;
     @panic("no slot");
@@ -2152,7 +2169,9 @@ test "canGrow and withValue never touch a non-empty value" {
     try testing.expect(canGrow(d, slotNamed(sh, "cover")));
     try testing.expect(!canGrow(d, slotNamed(sh, "author")));
     try testing.expect(canGrow(d, slotNamed(sh, "tags[+]")));
-    const d2 = try withValue(a, d, slotNamed(sh, "tags[+]"), .{ .string = "b" });
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+    const d2 = try withValue(&ctx, d, slotNamed(sh, "tags[+]"), .{ .string = "b" });
     try testing.expect(!canGrow(d2, slotNamed(sh, "tags[+]")));
     try testing.expectEqual(@as(usize, 1), d.get("tags").?.array.items.len);
     try testing.expectEqual(@as(usize, 2), d2.get("tags").?.array.items.len);
@@ -2269,7 +2288,9 @@ test "keyed slot: paired write sets one key and the anchor's ref together" {
     );
     try testing.expect(canGrow(d, s));
     try testing.expectEqual(@as(?[]const u8, null), try refCheck(a, sh, d));
-    const d2 = try withValue(a, d, s, .{ .string = "A note." });
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+    const d2 = try withValue(&ctx, d, s, .{ .string = "A note." });
     try testing.expectEqualStrings("beware-of-first-hand", d2.get("quotes").?.array.items[1].object.get("note").?.string);
     try testing.expectEqualStrings("A note.", d2.get("notes").?.object.get("beware-of-first-hand").?.string);
     try testing.expectEqual(@as(?[]const u8, null), try refCheck(a, sh, d2));
@@ -2279,6 +2300,21 @@ test "keyed slot: paired write sets one key and the anchor's ref together" {
     try testing.expect(!canGrow(d2, s));
     try testing.expectEqual(@as(?[]const u8, null), try checkSchema(a, s, .{ .string = "A note." }, d));
     try testing.expectEqualStrings("expected a string", (try checkSchema(a, s, .{ .object = try testData(a, "{\"key\":\"k\"}") }, d)).?);
+}
+
+test "keyed slot: a missing anchor is a tool error, not a crash" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const s = slotNamed(try parseShape(a, test_shape), "notes{+}");
+    // No host element to anchor to: canGrow says no, and a caller that
+    // writes anyway gets ToolFailed naming the slot.
+    const d = try testData(a, "{}");
+    try testing.expect(!canGrow(d, s));
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+    try testing.expectError(error.ToolFailed, withValue(&ctx, d, s, .{ .string = "A note." }));
+    try testing.expect(std.mem.indexOf(u8, ctx.err_msg, "notes{+}") != null);
 }
 
 test "noteKey: kebab label, bounded, unique, fallback" {
