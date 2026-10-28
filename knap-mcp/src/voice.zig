@@ -619,7 +619,7 @@ const locked_markup = "_|#<>[]{}^@\\\"$";
 /// The characters a reply may insert as inline formatting, subject to the
 /// delimiter accounting (W2) and the plain-slot rule (W4). Dropping them
 /// stays a hard failure.
-const insertable = "*`~";
+const insertable = "*`~=";
 
 fn listed(list: []const []const u8, w: []const u8) bool {
     for (list) |x| if (std.mem.eql(u8, x, w)) return true;
@@ -670,7 +670,7 @@ fn plainRole(role: []const u8) bool {
         const w = role[p..i];
         if (w.len == 0) break;
         if (eq(w, "frontmatter") or
-            (eq(prev, "rendered") and (eq(w, "bold") or eq(w, "italic"))) or
+            (eq(prev, "rendered") and (eq(w, "bold") or eq(w, "italic") or eq(w, "highlight"))) or
             (eq(prev, "alt") and eq(w, "text")) or
             (eq(prev, "page") and eq(w, "heading"))) return true;
         prev = w;
@@ -743,15 +743,15 @@ fn classifyCp(cp: u21) CpClass {
     return .text;
 }
 
-/// UTF-8 length of `s` with `*`, `` ` ``, `~`, allowed emoji and VS16 left
-/// out: the length bounds measure the text, not its formatting.
+/// UTF-8 length of `s` with `*`, `` ` ``, `~`, `=`, allowed emoji and VS16
+/// left out: the length bounds measure the text, not its formatting.
 fn textLen(s: []const u8) usize {
     var n: usize = 0;
     var i: usize = 0;
     while (i < s.len) {
         const d = nextCp(s, i);
         i += d.len;
-        if (d.len == 1 and (d.cp == '*' or d.cp == '`' or d.cp == '~')) continue;
+        if (d.len == 1 and (d.cp == '*' or d.cp == '`' or d.cp == '~' or d.cp == '=')) continue;
         if (d.cp == 0xFE0F) continue;
         if (isAllowedEmoji(d.cp)) continue;
         n += d.len;
@@ -996,19 +996,23 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     const so = try structhash.skeletonOpts(a, out, .markdown, .{});
     if (!insertOnly(si, so)) try H.add(a, &c.hard, "changes inline structure", .{});
 
-    // W2: every added `*`, `` ` `` and `~` is accounted for by a resolved
-    // span. A lone space-flanked `*`, an unclosed backtick, a single `~` or
-    // a multi-backtick span emits no token, so W1 alone accepts them.
+    // W2: every added `*`, `` ` ``, `~` and `=` is accounted for by a
+    // resolved span. A lone space-flanked `*` or `==`, an unclosed
+    // backtick, a single `~` or a multi-backtick span emits no token, so
+    // W1 alone accepts them.
     const a_star = @as(isize, @intCast(std.mem.count(u8, out, "*"))) - @as(isize, @intCast(std.mem.count(u8, in_, "*")));
     const a_bt = @as(isize, @intCast(std.mem.count(u8, out, "`"))) - @as(isize, @intCast(std.mem.count(u8, in_, "`")));
     const a_tilde = @as(isize, @intCast(std.mem.count(u8, out, "~"))) - @as(isize, @intCast(std.mem.count(u8, in_, "~")));
+    const a_eq = @as(isize, @intCast(std.mem.count(u8, out, "="))) - @as(isize, @intCast(std.mem.count(u8, in_, "=")));
     const d_strong = opened(so, "strong") - opened(si, "strong");
     const d_em = opened(so, "em") - opened(si, "em");
     const d_del = opened(so, "del") - opened(si, "del");
+    const d_hl = opened(so, "hl") - opened(si, "hl");
     const d_code = opened(so, "code") - opened(si, "code");
     if (a_star != 4 * d_strong + 2 * d_em) try H.add(a, &c.hard, "unbalanced *", .{});
     if (a_bt != 2 * d_code) try H.add(a, &c.hard, "unbalanced `", .{});
     if (a_tilde != 4 * d_del) try H.add(a, &c.hard, "unbalanced ~", .{});
+    if (a_eq != 4 * d_hl) try H.add(a, &c.hard, "unbalanced =", .{});
 
     const ci = try contentWords(a, in_);
 
@@ -1073,7 +1077,7 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     }
 
     // W4: plain slots stay plain — no added formatting and no added emoji.
-    if (plainRole(role) and (a_star != 0 or a_bt != 0 or a_tilde != 0 or n_emoji != 0))
+    if (plainRole(role) and (a_star != 0 or a_bt != 0 or a_tilde != 0 or a_eq != 0 or n_emoji != 0))
         try H.add(a, &c.hard, "formatting in a plain slot", .{});
     try c.hard.appendSlice(a, emoji_reasons.items);
 
@@ -1100,22 +1104,19 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     }
 
     // `![` is raw adjacency (`!**[^1]**` is fine); `!!`/`??` are checked on
-    // the text projection so `wow!**!**` is still caught; `==` is dogbed's
-    // <mark>, which structhash cannot see.
+    // the text projection so `wow!**!**` is still caught.
     if (std.mem.indexOf(u8, out, "![") != null and std.mem.indexOf(u8, in_, "![") == null)
         try H.add(a, &c.hard, "adds ![ (renders as image syntax)", .{});
     {
         var pi: std.ArrayList(u8) = .empty;
         var po: std.ArrayList(u8) = .empty;
-        for (in_) |ch| if (ch != '*' and ch != '`' and ch != '~') try pi.append(a, ch);
-        for (out) |ch| if (ch != '*' and ch != '`' and ch != '~') try po.append(a, ch);
+        for (in_) |ch| if (ch != '*' and ch != '`' and ch != '~' and ch != '=') try pi.append(a, ch);
+        for (out) |ch| if (ch != '*' and ch != '`' and ch != '~' and ch != '=') try po.append(a, ch);
         inline for (.{ "!!", "??" }) |pair| {
             if (std.mem.indexOf(u8, po.items, pair) != null and std.mem.indexOf(u8, pi.items, pair) == null)
                 try H.add(a, &c.hard, "adds " ++ pair, .{});
         }
     }
-    if (std.mem.indexOf(u8, out, "==") != null and std.mem.indexOf(u8, in_, "==") == null)
-        try H.add(a, &c.hard, "adds ==", .{});
     if (addsEntity(in_, out)) try H.add(a, &c.hard, "adds HTML entity", .{});
     if (footnote_abutting and std.mem.endsWith(u8, out, "!"))
         try H.add(a, &c.hard, "ends with ! where a footnote marker follows (renders as image syntax)", .{});
@@ -1176,12 +1177,12 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     if (ncaps > max.caps) try H.add(a, &c.budget, "{s}: {d} new all-caps words, max {d}", .{ name, ncaps, max.caps });
     const nbang = std.mem.count(u8, out, "!");
     if (nbang > max.bang) try H.add(a, &c.budget, "{s}: {d} exclamation marks, max {d}", .{ name, nbang, max.bang });
-    const nspans: usize = @intCast(@max(0, d_strong + d_em + d_del));
+    const nspans: usize = @intCast(@max(0, d_strong + d_em + d_del + d_hl));
     // Mild is the conservative tone: its formatting-span and emoji
     // overruns are hard failures, not advisory like the other budgets.
     if (nspans > max.spans)
         try H.add(a, if (tone == .mild) &c.hard else &c.budget, "{s}: {d} formatting spans, max {d}", .{ name, nspans, max.spans });
-    if (tone == .mild and d_strong + d_del > 0)
+    if (tone == .mild and d_strong + d_del + d_hl > 0)
         try H.add(a, &c.hard, "mild: only *italic*", .{});
     if (n_emoji > max.emoji)
         try H.add(a, if (tone == .mild) &c.hard else &c.budget, "{s}: {d} emoji, max {d}", .{ name, n_emoji, max.emoji });
@@ -1216,7 +1217,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 44), lines.len);
+    try testing.expectEqual(@as(usize, 49), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, false, l.input, l.output);
         const all = try joined(a, c.hard.items);
@@ -1621,6 +1622,7 @@ test "mock voice pass changes every sample, keeps structure and other values" {
                     if (std.mem.count(u8, vb, "*") > std.mem.count(u8, ob, "*") or
                         std.mem.count(u8, vb, "~") > std.mem.count(u8, ob, "~") or
                         std.mem.count(u8, vb, "`") > std.mem.count(u8, ob, "`") or
+                        std.mem.count(u8, vb, "=") > std.mem.count(u8, ob, "=") or
                         nonascii(vb) > nonascii(ob))
                         feral_fmt += 1;
                 }
