@@ -23,6 +23,12 @@
 # (default ~/.config/knap/providers.sh) as a knap_profile_local function
 # with the same contract plus a KNAP_PROFILES_LOCAL list; they're tried first.
 
+# Pinned npm package versions for agents fetched at run time. A bare
+# `npx -y <pkg>` installs whatever is latest at that moment and runs it with
+# the caller's credentials, so each pin is bumped deliberately, in its own
+# change. Keep the version at least 7 days published (npm view <pkg> time).
+CODEX_ACP_VERSION=0.16.0
+
 KNAP_PROFILES="fake spark wonder baseten compat ollama opencode-spark-1.3 opencode-spark-1.2 opencode-wonder-1.0 devin-wonder devin-swe-2 devin-nemotron devin-summarizer droid-nemotron droid-glm droid-deepseek droid-mistral gemini codex"
 
 # opencode acp has no --model flag and defaults to opencode/flint-40b-free,
@@ -104,13 +110,13 @@ knap_profile() {
         label='Gemini via ACP (gemini-cli, Google account)'
         export KNAP_ACP_AGENT='gemini --acp'
         ;;
-    # codex-acp defaults to gpt-5.5, which ChatGPT-account auth rejects;
-    # -c model=… passes through to codex config. The inner "…" is literal:
-    # knap's argv splitter only strips the outer '…' grouping.
+    # codex-acp@$CODEX_ACP_VERSION defaults to gpt-5.5, which ChatGPT-account
+    # auth rejects; -c model=… passes through to codex config. The inner "…"
+    # is literal: knap's argv splitter only strips the outer '…' grouping.
     codex)
         backend=acp cmds='codex npx' expect='gpt-*'
-        label='gpt-6-luna via ACP (@zed-industries/codex-acp, ChatGPT account)'
-        export KNAP_ACP_AGENT="npx -y @zed-industries/codex-acp -c 'model=\"gpt-6-luna\"'"
+        label="gpt-6-luna via ACP (@zed-industries/codex-acp@$CODEX_ACP_VERSION, ChatGPT account)"
+        export KNAP_ACP_AGENT="npx -y @zed-industries/codex-acp@$CODEX_ACP_VERSION -c 'model=\"gpt-6-luna\"'"
         ;;
     *) return 1 ;;
     esac
