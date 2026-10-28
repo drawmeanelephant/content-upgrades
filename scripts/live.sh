@@ -139,13 +139,26 @@ summary=$(mktemp)
 trap 'rm -f "$summary"' EXIT
 status=0
 
+# KNAP_DEBUG makes acp.zig inherit agent stderr and drops other internals
+# into .err; suite() lands whatever a run prints into committed .err files,
+# and agent stderr may carry account details. Debug knap-mcp itself with a
+# direct invocation, not through this harness.
+unset KNAP_DEBUG
+
 # suite <name> <file-stem> <cmd...>: run one suite with stdout/stderr in
 # $dir, record exit code and seconds.
 suite() {
     name=$1 stem=$2
     shift 2
-    cmdline=$*
-    cmdline=knap-mcp${cmdline#"$bin"}
+    if [ "$1" = "$bin" ]; then
+        cmdline=$*
+        cmdline=knap-mcp${cmdline#"$bin"}
+    else
+        # a shell function (voice_suite), not a knap-mcp argv: record a
+        # readable name instead of mangling it into a fake command
+        # ("knap-mcpvoice_suite").
+        cmdline="$1 (shell function in scripts/live.sh)"
+    fi
     t0=$(date +%s)
     set +e
     "$@" >"$dir/$stem.out" 2>"$dir/$stem.err"
@@ -212,10 +225,15 @@ for p in $expanded; do
             printf '%s\t%s\t-\t-\t-\t-\t-\t%s\n' "$p" "$backend" "skipped: needs $m" >>"$summary"
             exit 1
         fi
-        if [ "$scratch" = 1 ] && [ -z "$out_given" ]; then dir=$(mktemp -d)/$p; else dir=$out/$p; fi
+        dir_root=
+        if [ "$scratch" = 1 ] && [ -z "$out_given" ]; then dir_root=$(mktemp -d); dir=$dir_root/$p; else dir=$out/$p; fi
         mkdir -p "$dir"
         KNAP_MCP_HOME=$(mktemp -d)
         export KNAP_MCP_HOME KNAP_ACP_CWD="$KNAP_MCP_HOME"
+        # every mktemp above leaves with this subshell (previously they
+        # leaked). Profiles register scratch files of their own (the droid
+        # --settings json) in KNAP_TMP_FILES for the same cleanup.
+        trap 'rm -rf "$KNAP_MCP_HOME" ${dir_root:+"$dir_root"}; [ -z "${KNAP_TMP_FILES:-}" ] || rm -f $KNAP_TMP_FILES' EXIT
         runs=$KNAP_MCP_HOME/runs.json
         echo '[]' >"$runs"
         cd "$knap"
@@ -300,6 +318,7 @@ EOF
             }' >"$dir/provenance.json"
         printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$p" "$backend" "${model:-?}" "${smoke_s:--}" \
             "${repair_s:--}${full_s:+ | 2nap $full_s}" "${ratchet_s:--}" "${voice_s:--}" "${note:-}" >>"$summary"
+        [ -z "$dir_root" ] || echo "live: $p scratch results in $dir_root (removed on exit; --out keeps them)" >&2
         exit "$failed"
     ) || status=1
 done

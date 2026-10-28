@@ -48,7 +48,7 @@
     },
     {
       "suite": "voice",
-      "command": "knap-mcpvoice_suite",
+      "command": "voice_suite (shell function in scripts/live.sh)",
       "exit": 0,
       "seconds": 49,
       "at": "2026-10-27T19:38:20Z",
