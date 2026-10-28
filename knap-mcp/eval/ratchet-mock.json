@@ -16,6 +16,23 @@
         "Snapshots are online, incremental, and restorable to any point in the last seven days.",
         "Cold start on a 500 GB database fell from 4 minutes to 9 seconds."
       ],
+      "preflight[+]": [
+        "Back up the AcmeDB data directory",
+        "Bump every client driver to 1.8 or newer",
+        "Check free disk space for the snapshot store"
+      ],
+      "upgrade_steps[+]": [
+        "Stop the AcmeDB 1.x server",
+        "Rename wal_dir to storage.wal_path in acmedb.toml",
+        "Install AcmeDB 2.0 with the command below",
+        "Start AcmeDB and confirm acmedb doctor is green"
+      ],
+      "upgrade_command": ["acmedb upgrade --to 2.0.0"],
+      "rollback[+]": [
+        "Stop AcmeDB 2.0",
+        "Restore the pre-upgrade backup of the data directory",
+        "Reinstall the 1.9.x package and start it"
+      ],
       "known_issues[+]": [
         "Snapshots of databases over 2 TB take hours, not minutes.",
         "Still single-region. Cross-region replication is on the roadmap. Again."
@@ -28,6 +45,19 @@
     "reading-note": {
       "author": ["E. M. Forster"],
       "cover": ["https://example.com/covers/the-machine-stops.jpg"],
+      "epigraph": ["Above her, beneath her, and around her, the Machine hummed eternally; she did not notice the noise, for she had been born with it in her ears."],
+      "argument[+]": [
+        "Vashti's generation trades direct experience for comfort until second-hand ideas become the only respectable kind.",
+        "Kuno's walk to the surface proves the Machine's world is a choice, not a necessity.",
+        "When the Machine begins to fail, nobody alive understands it well enough to repair it.",
+        "The Machine stops, and the people it infantilized die with it."
+      ],
+      "follow_ups[+]": [
+        "Read Forster's 'The Celestial Omnibus' for the counter-argument",
+        "Check Neil Postman's Technopoly for the same warning, decades later",
+        "Revisit H. G. Wells's The Time Machine, the heaven Forster answered"
+      ],
+      "notes{+}": ["Beware of first-hand ideas!"],
       "up_next": ["Reading queue"],
       "spoilers": ["The Machine stops. Nobody can restart it, because nobody has understood it for generations, and Kuno and Vashti finally meet face to face as the cities collapse."],
       "connections[+]": ["E. M. Forster", "H. G. Wells", "The Eternal Moment and Other Stories"],
@@ -47,6 +77,30 @@
         "Vashti is not a villain. She is just very, very comfortable, which is scarier.",
         "The Machine never turns evil. It just decays, and nobody remembers how it works.",
         "Forster wrote this before radio broadcasting existed."
+      ]
+    },
+    "runbook": {
+      "postmortem_url": ["https://example.com/acmedb/postmortems/2026-03-restore-overwrite"],
+      "danger": ["Never restore over the live data directory. Restore to a scratch path, verify with acmedb doctor, then cut over."],
+      "related[+]": ["AcmeDB 2.0 migration guide", "AcmeDB docs — backups", "Verdict: AcmeDB"],
+      "tags[+]": ["runbook", "restore", "acmedb"],
+      "preflight[+]": [
+        "Confirm it is a data problem, not a config problem",
+        "Get sign-off from the on-call lead",
+        "Check free disk for the restored copy",
+        "Pick a restore point inside the retention window",
+        "Tell the incidents channel the restore is starting"
+      ],
+      "rollback[+]": [
+        "systemctl stop acmedb on the live node",
+        "Put acmedb.bad back as the live data dir",
+        "systemctl start acmedb and regroup"
+      ],
+      "escalation[+]": [
+        {"who": "AcmeDB SRE on-call", "when": "verify fails or replay stalls", "how": "the #acmedb-incidents channel"},
+        {"who": "Infra lead", "when": "snapshot missing inside retention", "how": "pager"},
+        {"who": "AcmeDB upstream", "when": "doctor reports manifest corruption", "how": "issue tracker"},
+        {"who": "Release manager", "when": "restore touches a frozen release", "how": "release channel"}
       ]
     },
     "callouts": {

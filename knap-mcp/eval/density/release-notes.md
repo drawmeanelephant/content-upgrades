@@ -68,6 +68,30 @@ A health check that tells you what is wrong in plain English instead of a hex du
 | 1.8.x | config key plus driver bump | one restart | yes, this week |
 | 1.7 or older | dump and reload | plan a window | yes, but bring snacks |
 
+## Upgrade path
+
+### Before you start
+
+- [ ] Back up the AcmeDB data directory
+- [ ] Bump every client driver to 1.8 or newer
+- [ ] Check free disk space for the snapshot store
+
+### Steps
+
+1. Stop the AcmeDB 1.x server
+2. Rename wal_dir to storage.wal_path in acmedb.toml
+3. Install AcmeDB 2.0 with the command below
+4. Start AcmeDB and confirm acmedb doctor is green
+
+```sh
+acmedb upgrade --to 2.0.0
+```
+
+> [!warning]- Rollback plan
+> 1. Stop AcmeDB 2.0
+> 2. Restore the pre-upgrade backup of the data directory
+> 3. Reinstall the 1.9.x package and start it
+
 ## Still broken
 
 - Snapshots of databases over 2 TB take hours, not minutes.
