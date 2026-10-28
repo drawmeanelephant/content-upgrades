@@ -1,0 +1,229 @@
+---
+{{ title | yaml_property:"title" }}
+{{ id | yaml_property:"id" }}
+{{ parent | yaml_property:"parent" }}
+{{ status | yaml_property:"status" }}
+{% if tags %}tags: {{ tags | yaml:flow }}
+{% endif %}{% if relations %}relations: {{ relations | yaml:flow }}
+{% endif %}{% if published_at %}{{ published_at | yaml_property:"published_at" }}
+{% endif %}{% if summary %}{{ summary | yaml_property:"summary" }}
+{% endif %}---
+{# filed-mascot.knap: a filed.fyi mascot record — an existing filing, not a
+   fresh draft. Frontmatter is the shared filed prelude (closed boris
+   schema only); canon sections render in skeleton order and each body is
+   a verbatim string the extractor lifted from the record. Non-canon
+   sections ride in `extra_sections` ({after, heading, level, body}) and
+   re-emit right after the canon slot they followed in the doc. Ratchet-
+   growable apparatus: `relationships` + `system_messages` lists, Field
+   Testimony blockquotes with keyed footnotes, a Field Notes palette
+   (callout|quote|list), the Provenance Ledger table. Shape:
+   shapes/filed-mascot.json. #}
+{% if title_heading %}
+
+
+{{ title | h1 }}
+{{ "" }}{% endif %}{% if card %}
+
+
+{{ card }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "preamble") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if image %}
+
+
+{{ "Image" | h2 }}
+
+{{ image }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "image") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if biography %}
+
+
+{{ "Biography" | h2 }}
+
+{{ biography }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "biography") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if origin_myth %}
+
+
+{{ "Origin Myth" | h2 }}
+
+{{ origin_myth }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "origin_myth") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if defining_failure %}
+
+
+{{ "Defining Failure" | h2 }}
+
+{{ defining_failure }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "defining_failure") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if aspirational_goal %}
+
+
+{{ "Aspirational Goal" | h2 }}
+
+{{ aspirational_goal }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "aspirational_goal") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if signature_quirk %}
+
+
+{{ "Signature Quirk" | h2 }}
+
+{{ signature_quirk }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "signature_quirk") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if relationships %}
+
+
+{{ "Relationship Network" | h2 }}
+
+{{ relationships | list }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "relationships") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if day_in_life %}
+
+
+{{ "Day in the Life" | h2 }}
+
+{{ day_in_life }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "day_in_life") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if mood %}
+
+
+{{ "Mood Calibration" | h2 }}
+
+{{ mood }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "mood") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if verse %}
+
+
+{% set vh = verse_heading ?? "Limerick Log" %}{{ vh | h2 }}
+
+{{ verse }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "verse") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if system_messages or system_messages_coda %}
+
+
+{{ "Known System Messages" | h2 }}
+
+{% for m in system_messages %}
+- {{ m | code }}
+{% endfor %}{% if system_messages_coda %}
+
+{{ system_messages_coda }}
+{% endif %}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "system_messages") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if testimony %}
+
+
+{{ "Field Testimony" | h2 }}
+
+{% for t in testimony %}
+{{ t.line | blockquote }}{% if t.attribution %} — {{ t.attribution }}{% endif %}{{ t.note | kebab | replace:"/(.+)/":"[^$1]" }}
+
+{% endfor %}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "testimony") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if field_notes %}
+
+
+{{ "Field Notes" | h2 }}
+
+{% for n in field_notes %}{% if n.kind == "callout" %}{{ n.text | callout:("note", "Field note") }}{% elseif n.kind == "quote" %}{{ n.line | blockquote }}{% elseif n.kind == "list" %}{{ n.items | list }}{% endif %}
+
+{% endfor %}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "field_notes") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if ledger %}
+
+
+{{ "Provenance Ledger" | h2 }}
+
+| entry | detail |
+| --- | --- |
+{% for r in ledger %}
+| {{ r.entry }} | {{ r.detail }} |
+{% endfor %}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "ledger") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if notes %}
+
+
+{{ "Annotations" | h2 }}
+
+{{ notes | footnote }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "notes") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}

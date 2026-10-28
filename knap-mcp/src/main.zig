@@ -73,6 +73,7 @@ const commands = [_]Command{
     .{ .name = "format-check", .usage = "format-check <doc_id|file>", .summary = "advisory structure lint (warnings only)", .run = .{ .custom = @import("tools/format_check.zig").cli } },
     .{ .name = "voice", .usage = "voice <id> --tone <t>", .summary = "rewrite voice: true values in a tone", .run = .{ .tool = .{ .tool = "knap_voice", .key = "template_id" } } },
     .{ .name = "doc-voice", .usage = "doc-voice <doc> --tone <t>", .summary = "guarded voice pass over a record (dry-run)", .run = .{ .custom = @import("tools/doc_voice.zig").cli } },
+    .{ .name = "extract", .usage = "extract <doc_id|file> --template <id>", .summary = "filed record -> template data (+insert fragments)", .run = .{ .custom = @import("tools/extract.zig").cli } },
     .{ .name = "structhash", .usage = "structhash <doc_id|file>...", .summary = "layout skeleton hash, text dropped", .run = .{ .custom = @import("tools/structure_hash.zig").cli } },
     .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "boris-ask", .usage = "boris-ask <query> [--limit n]", .summary = "ranked snippets from the boris artifact", .run = .{ .tool = .{ .tool = "boris_ask", .key = "query", .exactly_one = "query" } } },
@@ -653,6 +654,7 @@ test {
     _ = @import("tools/common.zig");
     _ = @import("tools/density.zig");
     _ = @import("tools/doc_voice.zig");
+    _ = @import("tools/extract.zig");
     _ = @import("tools/format_check.zig");
     _ = @import("tools/ingest.zig");
     _ = @import("tools/lint.zig");

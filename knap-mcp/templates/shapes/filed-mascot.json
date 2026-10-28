@@ -1,0 +1,52 @@
+{
+  "template_id": "filed-mascot",
+  "description": "A filed.fyi mascot record: the shared filed prelude (closed boris frontmatter), the `# title` heading and `**Role:**` card, then the canon skeleton in order — Image, Biography, Origin Myth, Defining Failure, Aspirational Goal, Signature Quirk, Relationship Network, Day in the Life, Mood Calibration, the personal verse log, Known System Messages — followed by the upgrade apparatus (Field Testimony quotes with footnotes, a Field Notes palette, the Provenance Ledger, Annotations). Canon bodies are verbatim extracted strings; `extra_sections` re-emits captured non-canon sections after the canon slot they followed. Section headings and callout/table chrome belong to the template; values only.",
+  "fields": {
+    "title":        {"type": "string", "role": "record title; frontmatter `title` and the `#` heading when title_heading is set"},
+    "id":           {"type": "string", "role": "canonical id, e.g. mascots/M-0003; frontmatter `id`"},
+    "parent":       {"type": "string", "role": "trunk id; frontmatter `parent`"},
+    "status":       {"type": "string", "role": "frontmatter `status`", "enum": ["published", "archived", "draft"]},
+    "tags":         {"type": "array<string>", "role": "frontmatter `tags`, lowercase kebab-case", "optional": true, "apparatus": "frontmatter", "max_items": 12, "words": 1},
+    "relations":    {"type": "array<string>", "role": "frontmatter `relations` entries as `kind=canonical-id` (e.g. relates_to=lorelog/LLG-0001)", "optional": true, "apparatus": "frontmatter", "max_items": 12, "words": 3},
+    "title_heading": {"type": "string", "role": "non-empty when the record carries its own `# <title>` heading; extraction sets it"},
+    "card":         {"type": "string", "role": "the verbatim `**Role:**/…` label block after the title heading", "optional": true, "preamble": true},
+    "image":        {"type": "string", "role": "## Image body: the mascot's alt-text, verbatim", "optional": true, "section": "Image"},
+    "biography":    {"type": "string", "role": "## Biography body, verbatim", "optional": true, "section": "Biography"},
+    "origin_myth":  {"type": "string", "role": "## Origin Myth body, verbatim", "optional": true, "section": "Origin Myth"},
+    "defining_failure": {"type": "string", "role": "## Defining Failure body, verbatim (records may spell it 'Defining Failure/Trauma')", "optional": true, "section": "Defining Failure"},
+    "aspirational_goal": {"type": "string", "role": "## Aspirational Goal body, verbatim", "optional": true, "section": "Aspirational Goal"},
+    "signature_quirk":   {"type": "string", "role": "## Signature Quirk body, verbatim", "optional": true, "section": "Signature Quirk"},
+    "relationships": {"type": "array<string>", "role": "## Relationship Network bullets, one each; existing entries may carry [[wikilinks]], new entries are plain prose", "optional": true, "section": "Relationship Network", "apparatus": "list", "max_items": 8, "words": 15},
+    "day_in_life":  {"type": "string", "role": "## Day in the Life body, verbatim (records may say '… Vignette')", "optional": true, "section": "Day in the Life"},
+    "mood":         {"type": "string", "role": "## Mood Calibration body, verbatim", "optional": true, "section": "Mood Calibration"},
+    "verse_heading": {"type": "string", "role": "verbatim heading text of the personal verse log (e.g. '📜 Blamey's Limerick Log'); falls back to 'Limerick Log'", "optional": true},
+    "verse":        {"type": "string", "role": "verse residue body under the personal limerick/verse log heading, verbatim", "optional": true, "section": "Limerick Log", "match": "first"},
+    "system_messages": {"type": "array<string>", "role": "## Known System Messages bullets; each renders inline-code like `MSG: detail` — supply the text without backticks", "optional": true, "section": "System Messages", "apparatus": "list", "max_items": 9, "words": 8},
+    "system_messages_coda": {"type": "string", "role": "verbatim non-list tail of Known System Messages (sign-off quotes, rules)", "optional": true},
+    "testimony":    {"type": "array<object>", "role": "## Field Testimony: one blockquote each; `note` may key a `notes` footnote", "optional": true, "section": "Field Testimony", "apparatus": "quote", "max_items": 4, "fields": {
+      "line":        {"type": "string", "role": "the quoted line, one sentence", "voice": true, "evidence": true},
+      "attribution": {"type": "string", "role": "who said it, e.g. 'Blamey, post-crash analysis'", "optional": true},
+      "note":        {"type": "string", "role": "key into `notes`; renders a [^key] ref after the quote", "optional": true, "ref": "notes"}
+    }},
+    "field_notes":  {"type": "array<object>", "role": "## Field Notes: one block each, of the kind the server chose (callout, quote, list)", "optional": true, "section": "Field Notes", "apparatus": "palette", "max_items": 3,
+      "variant": "kind",
+      "variants": {"callout": ["text"], "quote": ["line"], "list": ["items"]},
+      "fields": {
+        "kind":  {"type": "string", "role": "block kind; the server picks it, copy it as given", "enum": ["callout", "quote", "list"]},
+        "text":  {"type": "string", "role": "callout kind: the note body, one short paragraph", "optional": true, "voice": true, "words": 25},
+        "line":  {"type": "string", "role": "quote kind: one verbatim line from a source, rendered as a blockquote", "optional": true, "evidence": true, "max_words": 30},
+        "items": {"type": "array<string>", "role": "list kind: one bullet each", "optional": true, "max_items": 5, "words": 8}
+      }},
+    "ledger":       {"type": "array<object>", "role": "## Provenance Ledger rows; the header (entry | detail) is fixed in the template", "optional": true, "section": "Provenance Ledger", "apparatus": "table", "max_items": 5, "words": 6, "fields": {
+      "entry":  {"type": "string"},
+      "detail": {"type": "string"}
+    }},
+    "notes":        {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: defs under 'Annotations'. Every key must be referenced by some testimony `note`; the server picks the key and anchor, write the note text only, copied verbatim from a source", "optional": true, "section": "Annotations", "apparatus": "footnote", "evidence": true},
+    "extra_sections": {"type": "array<object>", "role": "non-canon sections captured verbatim: {after: slot name or 'preamble', heading: text, level: 1|2, body: verbatim}. Extraction fills this; the ratchet never grows it", "optional": true, "fields": {
+      "after":   {"type": "string"},
+      "heading": {"type": "string"},
+      "level":   {"type": "number"},
+      "body":    {"type": "string"}
+    }}
+  }
+}
