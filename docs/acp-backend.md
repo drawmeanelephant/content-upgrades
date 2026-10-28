@@ -1,8 +1,8 @@
 # Design note — ACP as a model backend
 
-Status: shipped as `Kind.acp` (`knap-mcp/src/acp.zig`); this note is the
-original design rationale. The transport lives behind `backend.complete()`
-in `knap-mcp/src/backend.zig`.
+Status: shipped as `Kind.acp` (`knap-mcp/src/acp.zig`). The transport
+lives behind `backend.complete()` in `knap-mcp/src/backend.zig`. This
+note keeps the design rationale and records the lifecycle as shipped.
 
 ## What ACP is
 
@@ -19,10 +19,30 @@ that path is direct inference and needs no second component.
 ## Where it fits
 
 `Kind.acp` = *agent-as-provider*: the cheap iteration tier becomes "any
-ACP-speaking agent" instead of "any OpenAI-compatible endpoint". Spawn the
-agent subprocess once per `knap_repair`/`knap_voice` call sequence, reuse
-the session across iterations (each iteration's slice is a fresh prompt in
-the same session — iteration noise stays in the cheap tier per SPEC).
+ACP-speaking agent" instead of "any OpenAI-compatible endpoint". The
+shipped lifecycle (acp.zig's header contract):
+
+- One agent subprocess per knap-mcp process, spawned lazily on the first
+  call and respawned only if it dies or `KNAP_ACP_AGENT` changes.
+- One `session/new` **per prompt** — repair iterations and voice slots
+  never see each other's turns, so iteration noise can't leak across
+  slices.
+- The contract is prompt in, text out: `initialize` advertises no
+  fs/terminal capabilities, every `session/request_permission` is
+  cancelled, every other agent→client request is refused
+  (`-32601`), and only `agent_message_chunk` text for the prompt's own
+  session is collected.
+
+Three edge behaviors worth knowing:
+
+- The agent's stderr is discarded unless `KNAP_DEBUG` is set — it is the
+  agent's log and may carry account details.
+- Normal exit relies on the agent exiting at stdin EOF: knap-mcp closes
+  its end of the pipe and the agent reaps itself; `kill` is only for the
+  error/respawn paths.
+- A prompt that outlives `KNAP_ACP_TIMEOUT` (default 180s, 0 = none)
+  gets a `session/cancel` and a 5s grace period; an agent that ignores
+  the cancel is killed so the next call starts a fresh subprocess.
 
 Minimal client surface we actually need:
 
@@ -59,12 +79,22 @@ a Zig client reuses `mcp.zig`'s framing almost verbatim.
 - Not a required backend. `mock` covers plumbing in tests; the HTTP
   providers cover metered calls.
 
-## Open questions
+## Design questions — answered at implementation
 
-1. Which ACP agents to smoke first (`devin acp`? Zed-ecosystem agents?)
-2. Session lifecycle: one session per repair call vs. per server lifetime.
-3. Permission/terminal capabilities — we want agents in read-none/write-none
-   mode (prompt in, text out); confirm the protocol supports refusing
-   capability requests cleanly.
-4. Streaming vs. collect: `session/prompt` streams chunks; the repair loop
-   wants the final text only — collect-and-take-last is fine.
+1. Which ACP agents to smoke first — the bundled profiles cover
+   `devin acp`, `gemini --acp`, `codex-acp` and `opencode`
+   (`scripts/live.sh --list`; `knap-mcp smoke --backend acp` handshakes
+   one before eval calls are spent).
+2. Session lifecycle — neither "one session per repair call" nor "per
+   server lifetime": one agent subprocess per knap-mcp process, but a
+   fresh `session/new` for every prompt, so repair iterations and voice
+   slots never see each other's turns.
+3. Permission/terminal capabilities — confirmed cleanly refused: the
+   client advertises `readTextFile`/`writeTextFile`/`terminal` all false
+   at `initialize`, answers `session/request_permission` with
+   `cancelled`, and `-32601`s every other agent→client request.
+4. Streaming vs. collect — `session/update` notifications stream in while
+   `session/prompt` is in flight; the client concatenates
+   `agent_message_chunk` text for its own session (thoughts, tool calls,
+   plans and other sessions' updates are dropped) and returns it with the
+   result's `stopReason` and `usage`.
