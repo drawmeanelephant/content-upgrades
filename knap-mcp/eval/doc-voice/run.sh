@@ -75,6 +75,23 @@ check "--apply without --out refuses" refuses "$src" "${common[@]}" --apply
 check "--out without --apply refuses" refuses "$src" "${common[@]}" --out "$work/x.md"
 check "--apply --out into content/ refuses" refuses "$src" "${common[@]}" --apply --out "$site/content/mascots/x.md"
 check "--apply --out over the source refuses" refuses "$src" "${common[@]}" --apply --out "$work/site/content/../content/mascots/990.doc-voice-fixture.md"
+
+# symlink bypass: a lexical guard alone lets a link carry the write into
+# content/ or over the source — canonicalization must catch it (#356)
+ln -s "$site/content/mascots/990.doc-voice-fixture.md" "$work/out-link.md"
+check "--apply --out symlink onto the source refuses" refuses "$src" "${common[@]}" --apply --out "$work/out-link.md"
+check "source untouched after refused --out link" bash -c "[ \"\$(shasum -a 256 '$src')\" = '$before' ]"
+ln -s "$site/content/mascots/990.doc-voice-fixture.md" "$work/report-link.json"
+check "--report symlink onto the source refuses" refuses "$src" "${common[@]}" --report "$work/report-link.json"
+ln -s "$site/content/mascots/991.dangling.md" "$work/dangle-link.md"
+check "--apply --out dangling symlink into content/ refuses" refuses "$src" "${common[@]}" --apply --out "$work/dangle-link.md"
+check "dangling link target not created" bash -c "[ ! -e '$site/content/mascots/991.dangling.md' ]"
+ln -s "$site/content/mascots" "$work/mascots-link"
+check "--apply --out through symlinked dir into content/ refuses" refuses "$src" "${common[@]}" --apply --out "$work/mascots-link/x.md"
+ln -s "$work/real-out.md" "$work/outside-link.md"
+"$bin" doc-voice "$src" "${common[@]}" --apply --out "$work/outside-link.md" >"$work/link-apply.json"
+check "--apply --out symlink outside content/ writes" bash -c "cmp '$work/real-out.md' '$here/record.feral.md'"
+
 check "no policy refuses" bash -c "cd '$work' && ! '$bin' doc-voice '$src' --tone feral"
 "$bin" doc-voice "$src" "${common[@]}" --apply --out "$work/applied.md" >"$work/apply.json"
 check "--apply --out writes the patched doc" cmp "$work/applied.md" "$here/record.feral.md"

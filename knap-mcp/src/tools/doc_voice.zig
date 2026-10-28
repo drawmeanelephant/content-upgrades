@@ -297,9 +297,66 @@ fn inContentDir(path: []const u8) bool {
     return false;
 }
 
-fn sameFile(ctx: *Ctx, x: []const u8, y: []const u8) !bool {
+/// Canonicalize `path` through the filesystem so a symlink cannot hide the
+/// real destination of a write. `realPathFileAbsoluteAlloc` resolves a path
+/// that exists whole; a missing or dangling tail peels back to the deepest
+/// resolvable ancestor and is re-appended, and a symlinked endpoint is
+/// followed by hand so even a dangling link names its target. The result
+/// is an absolute path with no `..`.
+fn canonicalPath(ctx: *Ctx, path: []const u8) ![]const u8 {
     const cwd = try std.process.currentPathAlloc(ctx.io, ctx.arena);
-    return std.mem.eql(u8, try std.fs.path.resolveAlloc(ctx.arena, &.{ cwd, x }), try std.fs.path.resolveAlloc(ctx.arena, &.{ cwd, y }));
+    var suffix: []const u8 = "";
+    var rest: []const u8 = try std.fs.path.resolveAlloc(ctx.arena, &.{ cwd, path });
+    var hops: usize = 0;
+    while (std.fs.path.dirname(rest)) |parent| {
+        hops += 1;
+        if (hops > 40) return error.SymLinkLoop;
+        if (std.Io.Dir.realPathFileAbsoluteAlloc(ctx.io, rest, ctx.arena)) |real| {
+            if (suffix.len == 0) return real;
+            return std.fs.path.resolveAlloc(ctx.arena, &.{ real, suffix });
+        } else |e| switch (e) {
+            error.FileNotFound, error.NotDir => {},
+            else => return e,
+        }
+        const stat = std.Io.Dir.statFile(.cwd(), ctx.io, rest, .{ .follow_symlinks = false }) catch null;
+        if (stat != null and stat.?.kind == .sym_link) {
+            var buf: [std.Io.Dir.max_path_bytes]u8 = undefined;
+            const n = std.Io.Dir.readLinkAbsolute(ctx.io, rest, &buf) catch |e| switch (e) {
+                error.FileNotFound, error.NotDir => 0,
+                else => return e,
+            };
+            if (n > 0) {
+                rest = if (std.fs.path.isAbsolute(buf[0..n]))
+                    try ctx.arena.dupe(u8, buf[0..n])
+                else
+                    try std.fs.path.resolveAlloc(ctx.arena, &.{ parent, buf[0..n] });
+                continue;
+            }
+        }
+        suffix = if (suffix.len == 0)
+            rest[parent.len + 1 ..]
+        else
+            try std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ rest[parent.len + 1 ..], suffix });
+        rest = parent;
+    }
+    return rest;
+}
+
+/// The CLI never writes into a source tree: refuse when `path` names a
+/// `content` component lexically or through any symlink it resolves
+/// through, and fail closed when the path cannot be canonicalized.
+fn writeIntoContent(ctx: *Ctx, path: []const u8) bool {
+    if (inContentDir(path)) return true;
+    return inContentDir(canonicalPath(ctx, path) catch return true);
+}
+
+/// True when `x` and `y` resolve to the same file — symlinks followed, so
+/// a linked `--out` or `--report` onto the source is caught. Unresolvable
+/// paths compare equal (fail closed).
+fn sameFile(ctx: *Ctx, x: []const u8, y: []const u8) bool {
+    const cx = canonicalPath(ctx, x) catch return true;
+    const cy = canonicalPath(ctx, y) catch return true;
+    return std.mem.eql(u8, cx, cy);
 }
 
 /// `knap-mcp doc-voice <doc_id|file> --tone <t> [...]`. Dry-run is the
@@ -345,8 +402,10 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     if (apply and dry_run) return usage("--apply and --dry-run are exclusive");
     if (apply and out_opt == null) return usage("--apply needs --out <file>: the patched doc is never written in place");
     if (!apply and out_opt != null) return usage("--out needs --apply (dry-run is the default)");
-    for ([_]?[]const u8{ out_opt, report_opt }) |maybe| if (maybe) |p| if (inContentDir(p))
+    for ([_]?[]const u8{ out_opt, report_opt }) |maybe| if (maybe) |p| if (writeIntoContent(ctx, p))
         return usage(try std.fmt.allocPrint(ctx.arena, "refusing to write '{s}': doc-voice never writes into a content/ dir", .{p}));
+    if (out_opt != null and report_opt != null and sameFile(ctx, out_opt.?, report_opt.?))
+        return usage("refusing to write: --out and --report resolve to the same file");
     const tone = voice.parseTone(tone_opt orelse return usage("doc-voice needs --tone mild|spicy|feral")) orelse
         return usage("--tone must be mild|spicy|feral");
     const kind = if (backend_opt) |b| backend.parseKind(b) orelse return usage("--backend must be mock|spark|wonder|baseten|acp|compat") else ctx.backend_kind;
@@ -355,7 +414,7 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     var doc_id = arg;
     if (r.file_path) |path| {
         if (!std.mem.eql(u8, common.docExtForPath(path), "md")) return usage("doc-voice reads markdown records (.md)");
-        if (out_opt) |o| if (try sameFile(ctx, o, path)) return usage("refusing to write over the source doc");
+        for ([_]?[]const u8{ out_opt, report_opt }) |maybe| if (maybe) |o| if (sameFile(ctx, o, path)) return usage("refusing to write over the source doc");
         doc_id = try store.put(ctx, "md", r.bytes);
     }
     const as = as_opt orelse (if (r.file_path) |p| (if (inContentDir(p)) p else null) else null) orelse

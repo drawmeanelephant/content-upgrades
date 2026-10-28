@@ -53,8 +53,11 @@
    is ok. The MCP tool stores the patched doc (`out_doc_id`). The CLI
    writes `--out` only with `--apply`. It refuses `--apply` without
    `--out`, `--out` without `--apply`, any `--out`/`--report` path with a
-   `content` component, and an `--out` that resolves to the source. Exit
-   code 1 means not proven or not clean.
+   `content` component — lexically or through a symlink, a symlinked
+   directory, or a dangling link into `content/` — and an `--out` or
+   `--report` that resolves to the source, or one that resolves to the
+   other. Write-path checks canonicalize through the filesystem and fail
+   closed. Exit code 1 means not proven or not clean.
 
 Report (stdout, or `--report <file>`, in which case stdout carries the
 patched doc): `doc_id, source, tone, backend, policy{path,collection,
@@ -88,8 +91,9 @@ KNAP_BORIS_SITE=~/dev/filed.fyi KNAP_BORIS_STAGING=raw KNAP_BORIS_THEME=themes/c
   `LIM-0002` gives `drops wikilink …` and `moves or edits a protected atom`.
   A dropped input `**` gives `drops markup character *`. In each case the
   original paragraph survives byte for byte.
-- `--apply` without `--out` refuses. `--out …/content/…` refuses. The
-  source is never written.
+- `--apply` without `--out` refuses. `--out …/content/…` refuses, through
+  a symlinked file, symlinked dir, or dangling link too. The source is
+  never written — `#356` closed the lexical-only guard.
 - Fixtures cover skipped verse lines, untouched include, Aside, fence and
   quote atoms, and rejection accounting. The Zig test
   `tools/doc_voice.zig` runs the fixture against the golden file inside
