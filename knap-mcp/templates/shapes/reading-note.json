@@ -1,6 +1,6 @@
 {
   "template_id": "reading-note",
-  "description": "A book, essay or story, judged: should you give a shit about reading it? YAML frontmatter built key by key, a wikilinked byline, an optional cover image, 'The pitch' abstract callout, quotes as receipts deep-linked into the source text, a 'How it aged' table, marginalia, a collapsed spoilers callout, a connections link cloud, an embedded up-next note and footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. The template does all layout; strings hold text, not markup — except that `voice: true` fields may carry constrained inline formatting (**, *, ~~ on words the reply added, code spans quoting the input, allowlisted emoji within the tone's budget).",
+  "description": "A book, essay or story, judged: should you give a shit about reading it? YAML frontmatter built key by key, a wikilinked byline, an optional cover image, an optional verbatim epigraph rendered as a plain blockquote, 'The pitch' abstract callout, an optional highlighted thesis line, an optional numbered argument, quotes as receipts deep-linked into the source text, a 'How it aged' table, marginalia, an optional follow-ups task list, a collapsed spoilers callout, a connections link cloud, an embedded up-next note and footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. The template does all layout; strings hold text, not markup — except that `voice: true` fields may carry constrained inline formatting (**, *, ~~ on words the reply added, code spans quoting the input, allowlisted emoji within the tone's budget).",
   "fields": {
     "title":       {"type": "string", "role": "work title; page heading, frontmatter `title`, cover alt text, and (kebab-cased) frontmatter `slug`"},
     "author":      {"type": "string", "role": "author name, rendered as an [[author]] wikilink in the byline; falls back to Anonymous (no wikilink) via ??", "optional": true, "apparatus": "wikilink", "words": 3},
@@ -8,11 +8,14 @@
     "status":      {"type": "string", "role": "reading status: reading|finished|abandoned; falls back to read via ??", "optional": true},
     "source_url":  {"type": "string", "role": "URL of the full text (http/https, no #fragment); the 'read it free' link, frontmatter `source`, and the deep-link target for every quote"},
     "cover":       {"type": "string", "role": "cover image URL (http/https), rendered as ![title](url)", "optional": true, "apparatus": "image"},
+    "epigraph":    {"type": "string", "role": "one verbatim line from the page at `source_url`, rendered as a plain blockquote under the byline. Copy it exactly; avoid curly quotes", "optional": true},
     "verdict":     {"type": "string", "role": "two-to-four word reading verdict, rendered bold, e.g. read it tonight|skim it|skip it", "voice": true},
     "gaf":         {"type": "string", "role": "give-a-shit level: high|medium|low"},
     "take":        {"type": "string", "role": "one-line hot take after the verdict", "voice": true},
     "tags":        {"type": "array<string>", "role": "frontmatter tags, lowercase kebab-case", "optional": true, "apparatus": "frontmatter", "max_items": 5, "words": 1},
     "summary":     {"type": "string", "role": "the pitch, 2-4 sentences, single paragraph, body of 'The pitch' abstract callout. No spoilers", "voice": true},
+    "thesis":      {"type": "string", "role": "the author's central claim in one sentence, rendered highlighted after a bold 'Thesis:' label", "optional": true},
+    "argument":    {"type": "array<string>", "role": "the author's argument in order, one numbered step each, one sentence", "optional": true},
     "quotes":      {"type": "array<object>", "role": "receipts, one quote callout each", "apparatus": "quote", "max_items": 5, "fields": {
       "text": {"type": "string", "role": "verbatim quote copied from the page at `source_url`, one line. Rendered with a #:~:text= deep link, so it must match the source text exactly; avoid curly quotes", "evidence": true},
       "why":  {"type": "string", "role": "why this quote matters, 1-2 sentences", "voice": true, "footnote_abutting": true},
@@ -24,6 +27,7 @@
       "called_it": {"type": "string"}
     }},
     "thoughts":    {"type": "array<string>", "role": "marginalia, one bullet each, 1-2 sentences", "optional": true, "voice": true, "apparatus": "list", "max_items": 3, "words": 15},
+    "follow_ups":  {"type": "array<string>", "role": "things to read or check next, one task-list item each, imperative, under 12 words", "optional": true},
     "spoilers":    {"type": "string", "role": "the ending, single paragraph, body of the collapsed 'Spoilers' warning callout", "optional": true, "voice": true, "apparatus": "callout", "words": 30},
     "bottom_line": {"type": "string", "role": "closing verdict, 1-2 sentences", "voice": true},
     "connections": {"type": "array<string>", "role": "names of existing site pages (author, influences, collections); rendered as [[wikilinks]] in frontmatter `related` and the Connections link cloud. Name only pages that exist; an invented name is a dangling wikilink", "optional": true, "apparatus": "wikilink", "max_items": 3, "words": 3},

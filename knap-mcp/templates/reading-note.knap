@@ -35,13 +35,24 @@ by {% if author %}{{ author | wikilink }}{% else %}{{ byline }}{% endif %}{{ yea
 {% if cover %}
 
 {{ cover | image:title }}
+{{ "" }}{% endif %}{% if epigraph %}
+
+{{ epigraph | blockquote }}
 {{ "" }}{% endif %}
 {{ verdict | bold }} — {{ take }}
 
 Give-a-shit level: {{ gaf | bold }} · status: {{ state }}
 
 {{ summary | callout:("abstract", "The pitch") }}
+{% if thesis %}
 
+{{ "Thesis" | bold }}: {{ thesis | highlight }}
+{{ "" }}{% endif %}{% if argument %}
+
+{{ "The argument" | h2 }}
+
+{{ argument | list:numbered }}
+{{ "" }}{% endif %}
 {{ "Receipts" | h2 }}
 
 {% for q in quotes %}
@@ -63,6 +74,11 @@ Give-a-shit level: {{ gaf | bold }} · status: {{ state }}
 {{ "Marginalia" | h2 }}
 
 {{ thoughts | list }}
+{{ "" }}{% endif %}{% if follow_ups %}
+
+{{ "Follow-ups" | h2 }}
+
+{{ follow_ups | list:task }}
 {{ "" }}{% endif %}{% if spoilers %}
 
 {{ spoilers | callout:("warning", "Spoilers (open only if you have read it)", true) }}
