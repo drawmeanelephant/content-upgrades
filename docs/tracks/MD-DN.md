@@ -81,3 +81,67 @@ Every fixture moves only through the `block_variety` `sat` 6→8 rescale —
 none of the shipped samples contain `$$`, `$…$`, ordered, or task lists.
 Ordering assertions (flat < generic < verdict < dense-ideal, confetti <
 verdict, min + 15 < full, pipe ≈ html) all hold unchanged.
+
+---
+
+# MD-DN (#241): runbook min vs the `generic < min` invariant
+
+Lane files: `knap-mcp/data/runbook.min.json`, `knap-mcp/src/density.zig`
+(min-vs-sample fixture test), `knap-mcp/eval/ratchet.json`
+(`runbook-min` floor), this note. Also re-rendered
+`knap-mcp/eval/density/runbook.min.md`: it is the generated render of
+`runbook.min.json` (README row: `knap-mcp render runbook -d
+data/runbook.min.json --target markdown`), so it has to move with it.
+
+## Decision: option 1 (richer min), not a per-template floor
+
+The issue framed this as a trade-off: a fatter min raises the ratchet's
+starting line and shrinks its measured gain. Measured, that trade-off
+doesn't exist. Positive credit scales by `min(1, words/min_words)`
+(`min_words = 200`), and that factor applies to the *climb* too. On a
+40-word skeleton every slot the ratchet fills is worth about 0.2x, so
+the thin min had the *smaller* gain:
+
+| `runbook.min.json` | words | start | final | gain | stop |
+|---|--:|--:|--:|--:|---|
+| before (1 sentence, 1 phase, 3 steps) | 40 | 8.8 | 36.9 | 28.0 | max_iterations |
+| after (3 sentences, 2 phases, 5 steps) | 111 | 23.6 | 60.7 | **37.1** | max_iterations |
+
+`generic.md` is 17.8, so `generic < min` holds (23.6) with margin, and
+`min + 15 < full` too (23.6 + 15 < 83.8).
+
+Why not option 2 (a floor below `generic`):
+
+- The old min broke its own shape. `summary`'s role says "2-4
+  sentences"; the file had one. The new one has three. Fixing that alone
+  is most of the word gap.
+- A floor below `generic` would encode "a runbook skeleton is worse than
+  generic prose" into the rubric's own regression test. That is wrong:
+  the skeleton fell below generic only because of the length factor (a
+  short-doc guard against token salad), not because it lacks structure.
+  The invariant's job is to show that a template's bare required fields
+  already beat unstructured prose. A per-template carve-out stops that
+  check from covering the template that most needs it.
+- It is still required fields only: `service`, `owner`, `severity`,
+  `last_reviewed`, `summary`, `phases[].name`, `phases[].steps[].do`.
+  No optional slot is pre-filled, so every slot the ratchet fills
+  (`escalation`, `danger`, `preflight`, …) is still open from the start.
+  The second phase adds the template's `---` break, which is required
+  layout (phases are required), not optional apparatus.
+
+## `runbook-min` floor 15 → 20
+
+Measured gain is now 37.1. The old floor was 15 against 28.0, about
+half the climb. 20 keeps about the same share of headroom (17 points)
+and fails if the runbook climb loses roughly half its gain. The other
+`*-min` cases stay at 15. Their measured gains (43.8, 55.5, 39.1) are
+unchanged by this lane.
+
+## Gate (pinned engines, mock)
+
+- `make test`: all 209 tests passed, with `runbook` in the
+  min-vs-sample `inline for`.
+- `KNAP_MCP_HOME=$(mktemp -d) make eval`: converged 120/167, controls
+  2/2 clean (no change; the seeds don't touch runbook data).
+- `KNAP_MCP_HOME=$(mktemp -d) make ratchet-eval`: all expectations met;
+  `runbook-min` 23.6 → 60.7, gain 37.1, check ok. No other row moved.

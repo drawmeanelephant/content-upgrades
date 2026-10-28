@@ -1228,8 +1228,8 @@ test "calibration fixtures rank as the rubric says" {
     // (k4o f97c5db markdown).
     try testing.expectApproxEqAbs(v1_pipe, v1_html, 2.0);
     // The ratchet's start and finish lines: the required-fields-only render
-    // of each T1 template scores well below its full sample.
-    inline for (.{ "release-notes", "reading-note" }) |t| {
+    // of each template scores well below its full sample.
+    inline for (.{ "release-notes", "reading-note", "runbook" }) |t| {
         const min = (try score(a, try loadFixture(a, t ++ ".min.md"))).total;
         const full = (try score(a, try loadFixture(a, t ++ ".md"))).total;
         try testing.expect(min + 15 < full);
