@@ -1,0 +1,94 @@
+{# runbook.knap: an operational procedure, written to be run at 3am.
+   Preflight checks as a task list, numbered steps with per-step code
+   blocks and expect notes, phases broken by `---` rules, rollback folded
+   away, an escalation table, an error-budget formula and the postmortem
+   receipt. Optional fields vanish with their block; `lang` falls back to
+   sh. Callout kinds, callout titles and section headings are
+   template-owned: the model writes values only. Shape descriptor:
+   shapes/runbook.json.
+   Spacing: optional blocks open with a blank line and close with
+   `{{ "" }}{% endif %}`, which shields the last content line's newline
+   from the standalone-endif trim so every block ends exactly one newline.
+   Loop bodies end with a blank line: each iteration drops one trailing
+   newline and the loop joins iterations with one, which leaves a single
+   blank line between items. Footnote refs come from a replace filter so a
+   silent inline if cannot arm the post-tag whitespace strip that eats the
+   next newline. The `---` between phases sits behind a blank line: under
+   a paragraph bare dashes become a setext heading, not a rule. #}{% set heading = title ?? service %}
+---
+{{ heading | yaml_property:"title" }}
+{{ service | yaml_property:"service" }}
+{{ severity | yaml_property:"severity" }}
+{{ last_reviewed | yaml_property:"last_reviewed" }}
+{% if tags %}{{ tags | yaml_property:"tags" }}
+{% endif %}{% if related %}{{ related | wikilink | yaml_property:"related" }}
+{% endif %}---
+
+{{ heading | h1 }}
+
+Owner {{ owner | wikilink }} · severity {{ severity | code }} · last reviewed {{ last_reviewed | code }}
+
+{{ summary | callout:("abstract", "When to use this") }}
+{% if danger %}
+
+{{ danger | highlight | callout:("danger", "Do not skip") }}
+{{ "" }}{% endif %}{% if preflight %}
+
+{{ "Before you start" | h2 }}
+
+{{ preflight | list:"task" }}
+{{ "" }}{% endif %}
+{% for p in phases %}
+{{ p.name | h2 }}
+
+{% for s in p.steps %}
+{% set lang = s.lang ?? "sh" %}
+{{ s.do | h3 }}{{ s.note | kebab | replace:"/(.+)/":"[^$1]" }}
+
+{% if s.command %}{{ s.command | code_block:lang }}
+
+{{ "" }}{% endif %}{% if s.expect %}{{ "Expect" | h4 }}
+
+{{ s.expect }}
+
+{{ "" }}{% endif %}{% endfor %}{% if not loop.last %}
+
+---
+
+{{ "" }}{% endif %}{% endfor %}
+{% if rollback %}
+
+{{ rollback | list:"numbered" | callout:("warning", "Rollback", true) }}
+{{ "" }}{% endif %}{% if escalation %}
+
+{{ "Escalation" | h2 }}
+
+| who | when | how |
+| --- | --- | --- |
+{% for e in escalation %}
+| {{ e.who }} | {{ e.when }} | {{ e.how }} |
+{% endfor %}
+{{ "" }}{% endif %}{% if slo_target and error_budget %}
+
+{{ "Service level" | h2 }}
+
+Availability target: {{ slo_target | bold }} — monthly error budget:
+
+{{ error_budget | math_block }}
+{{ "" }}{% endif %}{% if lesson %}
+
+{{ "Why this exists" | h2 }}
+
+{{ lesson | blockquote }}
+{% if postmortem_url %}
+
+{{ postmortem_url | link:"Postmortem" }}
+{% endif %}
+{{ "" }}{% endif %}{% if related %}
+
+See also: {{ related | wikilink | join:" · " }}
+{{ "" }}{% endif %}{% if notes %}
+
+{{ "Footnotes" | h2 }}
+
+{{ notes | footnote }}{% endif %}

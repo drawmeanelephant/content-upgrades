@@ -1,0 +1,37 @@
+{
+  "template_id": "runbook",
+  "description": "An operational procedure, written to be run at 3am: YAML frontmatter built key by key, an owner/severity meta line, a 'When to use this' abstract callout, the one step people skip highlighted in a danger callout, a preflight task list, phases of numbered steps — each step an h3 with an optional fenced code block, an 'Expect' h4 and footnote refs — separated by `---` rules, rollback folded into a collapsed warning callout, an escalation pipe table, an error-budget formula as a $$ math block, the postmortem lesson as a plain blockquote with its link, a 'See also' wikilink cloud and object-keyed footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. The template does all layout; strings hold text, not markup.",
+  "fields": {
+    "service":       {"type": "string", "role": "service or system name; frontmatter `service`, and the page heading when `title` is absent"},
+    "title":         {"type": "string", "role": "page heading and frontmatter `title`; falls back to `service` via ??", "optional": true},
+    "owner":         {"type": "string", "role": "owning team's page name, rendered as an [[owner]] wikilink in the meta line. Name only a page that exists; an invented name is a dangling wikilink", "apparatus": "wikilink", "words": 4},
+    "severity":      {"type": "string", "role": "the severity this runbook answers to; frontmatter `severity`, rendered as inline code in the meta line", "enum": ["sev1", "sev2", "sev3"]},
+    "last_reviewed": {"type": "string", "role": "last review date, YYYY-MM-DD; frontmatter `last_reviewed` and the meta line"},
+    "tags":          {"type": "array<string>", "role": "frontmatter tags, lowercase kebab-case", "optional": true, "apparatus": "frontmatter", "max_items": 5, "words": 1},
+    "summary":       {"type": "string", "role": "when to reach for this runbook, 2-4 sentences, single paragraph, body of the 'When to use this' abstract callout"},
+    "danger":        {"type": "string", "role": "the one step people skip; highlighted with == == inside the 'Do not skip' danger callout", "optional": true, "apparatus": "callout", "words": 25},
+    "preflight":     {"type": "array<string>", "role": "checks to run before touching anything, one task item each, under 'Before you start'", "optional": true, "apparatus": "list", "max_items": 6, "words": 15},
+    "phases":        {"type": "array<object>", "role": "the procedure, one h2 each; `---` thematic breaks separate phases", "fields": {
+      "name":  {"type": "string", "role": "phase name, one line, h2 heading"},
+      "steps": {"type": "array<object>", "role": "the steps of this phase, in order", "fields": {
+        "do":      {"type": "string", "role": "what to do, imperative, one line, h3 heading", "footnote_abutting": true},
+        "command": {"type": "string", "role": "the exact command or query to run, one fenced code block", "optional": true},
+        "lang":    {"type": "string", "role": "fence language for `command`; falls back to sh", "optional": true, "enum": ["sh", "sql", "yaml", "json", "zig"]},
+        "expect":  {"type": "string", "role": "what success looks like, one paragraph under the 'Expect' h4", "optional": true},
+        "note":    {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref after the step heading. Must match a `notes` key exactly", "optional": true, "ref": "notes"}
+      }}
+    }},
+    "rollback":      {"type": "array<string>", "role": "how to undo it, one numbered step each, folded into the collapsed 'Rollback' warning callout", "optional": true, "apparatus": "list", "max_items": 6, "words": 15},
+    "escalation":    {"type": "array<object>", "role": "rows of the 'Escalation' pipe table; the header (who | when | how) is fixed in the template. `who` is the contact, `when` the trigger, `how` the channel. No | or newlines in values", "optional": true, "apparatus": "table", "max_items": 4, "words": 6, "fields": {
+      "who":  {"type": "string"},
+      "when": {"type": "string"},
+      "how":  {"type": "string"}
+    }},
+    "slo_target":    {"type": "string", "role": "availability target, e.g. 99.9%; rendered bold in 'Service level' (shown only when `error_budget` is also present)", "optional": true},
+    "error_budget":  {"type": "string", "role": "error-budget formula as a TeX expression, rendered as a $$ math block in 'Service level' (shown only when `slo_target` is also present)", "optional": true},
+    "lesson":        {"type": "string", "role": "one verbatim line from the postmortem that motivated this runbook; a plain blockquote under 'Why this exists'", "optional": true, "apparatus": "quote", "evidence": true},
+    "postmortem_url":{"type": "string", "role": "postmortem URL (http/https); the 'Postmortem' link after the lesson quote", "optional": true, "apparatus": "link"},
+    "related":       {"type": "array<string>", "role": "names of existing site pages; rendered as [[wikilinks]] in frontmatter `related` and the 'See also' link cloud. Name only pages that exist; an invented name is a dangling wikilink", "optional": true, "apparatus": "wikilink", "max_items": 3, "words": 3},
+    "notes":         {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: definitions. Keys are short kebab-case labels. Every key must be referenced by some step `note`, and every `note` must be a key here; format_check flags strays. As a ratchet step the server picks the key and the step it attaches to; write the note text only, copied verbatim from a source", "optional": true, "apparatus": "footnote", "evidence": true}
+  }
+}
