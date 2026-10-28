@@ -656,10 +656,24 @@ fn startsWithBlockMarker(s: []const u8) bool {
 /// Roles whose rendered context already supplies the styling or swallows
 /// the markup: verdicts (`| bold` + frontmatter), h1/frontmatter titles,
 /// `| italic` deck lines, image alt text. A reply in a plain slot may add
-/// no formatting and no emoji (W4).
+/// no formatting and no emoji (W4). The markers are matched on normalized
+/// words — lowercase, split on non-alphanumerics — so `ALT TEXT` and
+/// `frontmatter tags` match but `rendered boldly` and `image alt` don't.
 fn plainRole(role: []const u8) bool {
-    for ([_][]const u8{ "rendered bold", "rendered italic", "alt text", "page heading", "frontmatter" }) |p| {
-        if (std.mem.indexOf(u8, role, p) != null) return true;
+    const eq = std.ascii.eqlIgnoreCase;
+    var prev: []const u8 = "";
+    var i: usize = 0;
+    while (i < role.len) {
+        while (i < role.len and !isAlnum(role[i])) i += 1;
+        const p = i;
+        while (i < role.len and isAlnum(role[i])) i += 1;
+        const w = role[p..i];
+        if (w.len == 0) break;
+        if (eq(w, "frontmatter") or
+            (eq(prev, "rendered") and (eq(w, "bold") or eq(w, "italic"))) or
+            (eq(prev, "alt") and eq(w, "text")) or
+            (eq(prev, "page") and eq(w, "heading"))) return true;
+        prev = w;
     }
     return false;
 }
@@ -685,26 +699,24 @@ fn containsCp(s: []const u8, cp: u21) bool {
     return false;
 }
 
-/// The emoji allowlist: single code points in the common emoji blocks plus
-/// the listed dingbats. Each may be followed by U+FE0F.
-fn isAllowedEmoji(cp: u21) bool {
-    return (cp >= 0x1F300 and cp <= 0x1F5FF) or (cp >= 0x1F600 and cp <= 0x1F64F) or
-        (cp >= 0x1F680 and cp <= 0x1F6FF) or (cp >= 0x1F900 and cp <= 0x1F9FF) or
-        (cp >= 0x1FA70 and cp <= 0x1FAFF) or
-        cp == 0x2728 or cp == 0x26A1 or cp == 0x26A0 or cp == 0x2705 or cp == 0x274C or cp == 0x2615;
-}
-
-/// Inside the allowed blocks but never allowed: gestures, food-as-innuendo,
-/// weapons, blood, and skin tones (they add identity content).
-const disallowed_emoji = [_]u21{
-    0x1F595, 0x1F346, 0x1F351, 0x1F4A6, 0x1F52B, 0x1F52A, 0x1F4A3, 0x1F5E1, 0x1FA93, 0x1FA78,
+/// The emoji allowlist: a named set — the listed dingbats plus a short
+/// curated pictograph list. Each may be followed by U+FE0F. A named
+/// list, not blocks, so a new emoji needs an explicit entry here.
+const allowed_emoji = [_]u21{
+    0x2728,  0x26A1,  0x26A0,  0x2705,  0x274C,  0x2615, // ✨ ⚡ ⚠ ✅ ❌ ☕
+    0x1F525, 0x1F480, 0x1F644, 0x1F381, 0x1FAA3, 0x1F3DB, // 🔥 💀 🙄 🎁 🪣 🏛
+    0x1F680, 0x1F41B, 0x1F389, 0x1F4C9, // 🚀 🐛 🎉 📉
 };
 
-fn isDisallowedEmoji(cp: u21) bool {
-    // Skin-tone modifiers U+1F3FB–U+1F3FF sit inside the allowed blocks.
-    if (cp >= 0x1F3FB and cp <= 0x1F3FF) return true;
-    for (disallowed_emoji) |d| if (d == cp) return true;
+fn isAllowedEmoji(cp: u21) bool {
+    for (allowed_emoji) |e| if (e == cp) return true;
     return false;
+}
+
+/// Everything else in the emoji blocks: the gestures, faces, food,
+/// weapons, blood and skin tones a block allowlist used to admit.
+fn isDisallowedEmoji(cp: u21) bool {
+    return cp >= 0x1F000 and cp <= 0x1FAFF;
 }
 
 fn isInvisible(cp: u21) bool {
@@ -721,8 +733,10 @@ const CpClass = enum { text, emoji, disallowed, symbol, invisible, bang_pair };
 fn classifyCp(cp: u21) CpClass {
     if (isInvisible(cp)) return .invisible;
     if (cp == 0x203C or cp == 0x2049) return .bang_pair; // ‼ and ⁉ read as !!
-    if (isDisallowedEmoji(cp)) return .disallowed;
+    // The allowlist wins first: every allowlisted code point sits inside
+    // the emoji blocks isDisallowedEmoji covers.
     if (isAllowedEmoji(cp)) return .emoji;
+    if (isDisallowedEmoji(cp)) return .disallowed;
     // Any other astral code point (fake bold, flags, tags) or a non-allowlist
     // dingbat. Ordinary non-ASCII (—, ’, é, …) stays allowed.
     if (cp >= 0x10000 or (cp >= 0x2600 and cp <= 0x27BF)) return .symbol;
@@ -783,6 +797,15 @@ fn stem(w: []const u8) []const u8 {
     if (s.len > 5 and std.mem.endsWith(u8, s, "ing")) s = s[0 .. s.len - 3];
     if (s.len > 5 and std.mem.endsWith(u8, s, "ed")) s = s[0 .. s.len - 2];
     return s;
+}
+
+/// Two stems match when equal or when one is a ≥4-byte prefix of the
+/// other — the crude stemmer misses doubled-consonant inflections
+/// (`shipped` → `shipp` where the input has `ships` → `ship`).
+fn sameStem(a: []const u8, b: []const u8) bool {
+    if (std.mem.eql(u8, a, b)) return true;
+    const m = @min(a.len, b.len);
+    return m >= 4 and std.mem.eql(u8, a[0..m], b[0..m]);
 }
 
 /// Deduped, stemmed content words of `s`, in order.
@@ -847,7 +870,8 @@ fn opened(toks: []const structhash.Token, kind: []const u8) isize {
 
 /// May a `~~inner~~` span stand in the reply? It may not retract anything
 /// the input said: no number token at all, none of the input's protected
-/// tokens, no negation, and none of the input's content words.
+/// tokens, no negation, and no word sharing a stem with an input content
+/// word (exact stems plus inflections the crude stemmer misses).
 fn strikeInnerOk(a: Allocator, inner: []const u8, fi: *const Facts, ci: []const []const u8) Allocator.Error!bool {
     var nf: Facts = .{};
     try numbers(a, inner, &nf);
@@ -864,7 +888,9 @@ fn strikeInnerOk(a: Allocator, inner: []const u8, fi: *const Facts, ci: []const 
         const w = try std.ascii.allocLowerString(a, inner[p..i]);
         if (listed(&negations, w)) return false;
     }
-    for (try contentWords(a, inner)) |w| if (listed(ci, w)) return false;
+    for (try contentWords(a, inner)) |w| {
+        for (ci) |c| if (sameStem(w, c)) return false;
+    }
     return true;
 }
 
@@ -894,8 +920,8 @@ fn addsEntity(in_: []const u8, out: []const u8) bool {
 
 pub const Check = struct {
     /// Hard rules (facts, markup both directions, structure, overlap,
-    /// length, UTF-8), plus profanity in a mild reply. Any entry keeps
-    /// the original value.
+    /// length, UTF-8), plus profanity, formatting-span and emoji
+    /// overruns in a mild reply. Any entry keeps the original value.
     hard: std.ArrayList([]const u8) = .empty,
     /// The other tone budgets: advisory at runtime, failures in check.sh.
     budget: std.ArrayList([]const u8) = .empty,
@@ -944,6 +970,24 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     for (insertable) |m| {
         if (std.mem.count(u8, out, &[1]u8{m}) < std.mem.count(u8, in_, &[1]u8{m}))
             try H.add(a, &c.hard, "drops markup character {c}", .{m});
+    }
+
+    // A dropped non-ASCII code point — an emoji the input carried, a
+    // curly quote, an accent — is a removal like a dropped markup char.
+    {
+        var seen: std.ArrayList(u21) = .empty;
+        var ci: usize = 0;
+        while (ci < in_.len) {
+            const d = nextCp(in_, ci);
+            ci += d.len;
+            if (d.cp < 0x80) continue;
+            var dup = false;
+            for (seen.items) |s| dup = dup or s == d.cp;
+            if (dup) continue;
+            try seen.append(a, d.cp);
+            if (!containsCp(out, d.cp))
+                try H.add(a, &c.hard, "drops non-ASCII character U+{X:0>4}", .{d.cp});
+        }
     }
 
     // W1: the input's inline skeleton survives in order; the reply may only
@@ -1008,10 +1052,10 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
             const d = nextCp(out, i);
             defer i += d.len;
             if (d.cp < 0x80 or containsCp(in_, d.cp)) {
-                prev_allowed_emoji = isAllowedEmoji(d.cp) and !isDisallowedEmoji(d.cp);
+                prev_allowed_emoji = isAllowedEmoji(d.cp);
                 continue;
             }
-            defer prev_allowed_emoji = isAllowedEmoji(d.cp) and !isDisallowedEmoji(d.cp);
+            defer prev_allowed_emoji = isAllowedEmoji(d.cp);
             if (d.cp == 0xFE0F) {
                 if (!prev_allowed_emoji)
                     try emoji_reasons.append(a, "adds invisible character U+FE0F");
@@ -1033,7 +1077,9 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
         try H.add(a, &c.hard, "formatting in a plain slot", .{});
     try c.hard.appendSlice(a, emoji_reasons.items);
 
-    // W6: an added code span may only quote text the input already has.
+    // W6: an added code span may only quote text the input already has,
+    // and may not wrap the entire input verbatim (that adds markup
+    // without rewording anything).
     {
         var i: usize = 0;
         while (i < out.len) {
@@ -1045,7 +1091,9 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
             i += n;
             if (n != 1) continue;
             const j = std.mem.indexOfScalarPos(u8, out, i, '`') orelse break;
-            if (std.mem.indexOf(u8, in_, out[i..j]) == null)
+            if (std.mem.eql(u8, out[i..j], in_))
+                try H.add(a, &c.hard, "code span wraps the whole input", .{})
+            else if (std.mem.indexOf(u8, in_, out[i..j]) == null)
                 try H.add(a, &c.hard, "code span text not in the input", .{});
             i = j + 1;
         }
@@ -1129,12 +1177,14 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     const nbang = std.mem.count(u8, out, "!");
     if (nbang > max.bang) try H.add(a, &c.budget, "{s}: {d} exclamation marks, max {d}", .{ name, nbang, max.bang });
     const nspans: usize = @intCast(@max(0, d_strong + d_em + d_del));
+    // Mild is the conservative tone: its formatting-span and emoji
+    // overruns are hard failures, not advisory like the other budgets.
     if (nspans > max.spans)
-        try H.add(a, &c.budget, "{s}: {d} formatting spans, max {d}", .{ name, nspans, max.spans });
+        try H.add(a, if (tone == .mild) &c.hard else &c.budget, "{s}: {d} formatting spans, max {d}", .{ name, nspans, max.spans });
     if (tone == .mild and d_strong + d_del > 0)
-        try H.add(a, &c.budget, "mild: only *italic*", .{});
+        try H.add(a, &c.hard, "mild: only *italic*", .{});
     if (n_emoji > max.emoji)
-        try H.add(a, &c.budget, "{s}: {d} emoji, max {d}", .{ name, n_emoji, max.emoji });
+        try H.add(a, if (tone == .mild) &c.hard else &c.budget, "{s}: {d} emoji, max {d}", .{ name, n_emoji, max.emoji });
     return c;
 }
 
@@ -1166,7 +1216,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 37), lines.len);
+    try testing.expectEqual(@as(usize, 44), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, false, l.input, l.output);
         const all = try joined(a, c.hard.items);
@@ -1375,6 +1425,9 @@ test "guard W3: strikethrough may only cover words the reply added" {
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words") == null);
     c = try guard(a, .feral, "r", false, in_, "the boring database that ~~not~~ actually ships");
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words") != null);
+    // Inflections share the input's stem too: `shipped` retracts `ships`.
+    c = try guard(a, .feral, "r", false, in_, "the boring database that actually ~~shipped~~");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words") != null);
     // A strike the input already had is the input's own business.
     c = try guard(a, .feral, "r", false, "it ~~was~~ is broken", "it ~~was~~ is still broken");
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words") == null);
@@ -1393,6 +1446,8 @@ test "guard W4: plain-role slots take no added formatting or emoji" {
         "alt text for `screenshot`; falls back to `product`",
         "page heading and frontmatter `title`",
         "frontmatter tags, lowercase kebab-case",
+        "ALT TEXT for the screenshot",
+        "FRONTMATTER value",
     }) |role| {
         try testing.expect(plainRole(role));
         const c = try guard(a, .feral, role, false, "give a shit", "**give** a shit");
@@ -1401,6 +1456,9 @@ test "guard W4: plain-role slots take no added formatting or emoji" {
     // "heading" alone is not a plain marker: bottom_line sits "under the
     // 'Verdict' heading" but takes formatting like any prose slot.
     try testing.expect(!plainRole("closing verdict, 1-2 sentences, under the 'Verdict' heading"));
+    // Normalized matching: inflected or partial markers are not slots.
+    try testing.expect(!plainRole("the verdict, rendered boldly on the page"));
+    try testing.expect(!plainRole("image alt (one item)"));
     var c = try guard(a, .feral, "closing verdict, 1-2 sentences, under the 'Verdict' heading", false, "ship it tonight", "ship it **tonight**, honestly");
     try testing.expect(c.passes());
     // Emoji count the same way as delimiters in a plain slot.
@@ -1419,12 +1477,22 @@ test "guard W5: emoji classes — allowlist, disallowed, symbols, invisibles" {
         }
     }.f;
 
-    // Allowlisted emoji are fine in feral and spicy, a warning in mild.
+    // Allowlisted emoji are fine in feral and spicy, a hard failure in
+    // mild (mild's emoji budget is zero and its overruns reject).
     var c = try guard(a, .feral, "r", false, in_, in_ ++ " 🔥");
     try testing.expect(c.passes());
     c = try guard(a, .mild, "r", false, in_, in_ ++ " 🔥");
-    try testing.expect(c.passes());
-    try testing.expect(std.mem.indexOf(u8, try joined(a, c.budget.items), "mild: 1 emoji, max 0") != null);
+    try testing.expect(!c.passes());
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "mild: 1 emoji, max 0") != null);
+    // Emoji outside the named allowlist are disallowed whatever the tone.
+    c = try guard(a, .feral, "r", false, in_, in_ ++ " 💩");
+    try testing.expect(try has(a, c, "adds disallowed emoji U+1F4A9"));
+    c = try guard(a, .feral, "r", false, in_, in_ ++ " 🤡");
+    try testing.expect(try has(a, c, "adds disallowed emoji U+1F921"));
+    c = try guard(a, .feral, "r", false, in_, in_ ++ " 🫠");
+    try testing.expect(try has(a, c, "adds disallowed emoji U+1FAE0"));
+    c = try guard(a, .feral, "r", false, in_, in_ ++ " 🥵");
+    try testing.expect(try has(a, c, "adds disallowed emoji U+1F975"));
     c = try guard(a, .feral, "r", false, in_, in_ ++ " ✨");
     try testing.expect(c.passes());
     // An emoji plus VS16 counts once; a bare VS16 is invisible junk.
@@ -1446,9 +1514,14 @@ test "guard W5: emoji classes — allowlist, disallowed, symbols, invisibles" {
     try testing.expect(try has(a, c, "adds symbol U+1D41B"));
     c = try guard(a, .feral, "r", false, in_, in_ ++ " 🖕");
     try testing.expect(try has(a, c, "adds disallowed emoji U+1F595"));
-    // An emoji already present in the input stays allowed to keep.
+    // An emoji already present in the input stays allowed to keep — but
+    // dropping it, or any other non-ASCII character, is a removal.
     c = try guard(a, .feral, "r", false, in_ ++ " 🔥", in_ ++ " 🔥, and hot");
     try testing.expect(c.passes());
+    c = try guard(a, .feral, "r", false, in_ ++ " 🔥", in_);
+    try testing.expect(try has(a, c, "drops non-ASCII character U+1F525"));
+    c = try guard(a, .feral, "r", false, "the café", "the cafe");
+    try testing.expect(try has(a, c, "drops non-ASCII character U+00E9"));
     // Ordinary non-ASCII stays ordinary.
     c = try guard(a, .mild, "r", false, in_, "the boring database — that actually ships");
     try testing.expect(c.passes());
@@ -1466,6 +1539,9 @@ test "guard W6: code spans quote the input verbatim" {
     // An identifier the input never named is invented.
     c = try guard(a, .spicy, "r", false, "the boring database that actually ships", "the boring database that actually ships, unlike `vacuumdb`");
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "code span text not in the input") != null);
+    // Wrapping the whole input verbatim is markup, not a rewrite.
+    c = try guard(a, .feral, "r", false, "run vacuum after every deploy", "`run vacuum after every deploy`");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "code span wraps the whole input") != null);
 }
 
 test "guard: length bounds count text, not formatting" {

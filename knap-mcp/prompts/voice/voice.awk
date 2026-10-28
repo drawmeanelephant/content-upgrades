@@ -12,12 +12,15 @@ BEGIN {
 	# rules below and the plain-slot rule.
 	LOCKED = "_|#<>[]{}^@\\\"$"
 	INSERT = "*`~"
-	# Emoji classes as UTF-8 byte patterns (LC_ALL=C: bytes, not chars).
-	# Allowed: U+1F300–1F5FF, 1F600–1F64F, 1F680–1F6FF, 1F900–1F9FF,
-	# 1FA70–1FAFF plus the dingbats ✨ ⚡ ⚠ ✅ ❌ ☕.
-	EMOJI = "\360\237[\214-\227][\200-\277]|\360\237[\230-\231][\200-\277]|\360\237[\232-\233][\200-\277]|\360\237[\244-\247][\200-\277]|\360\237[\251-\253][\200-\277]|\342\230\225|\342\232[\240\241]|\342\234[\205\250]|\342\235\214"
-	# Disallowed even inside those blocks, plus skin tones 1F3FB–1F3FF.
-	NOEMOJI = "\360\237\226\225|\360\237\215[\206\221]|\360\237\222[\246\243]|\360\237\224[\252\253]|\360\237\227\241|\360\237\252\223|\360\237\251\270|\360\237\217[\273-\277]"
+	# Emoji allowlist as UTF-8 byte patterns (LC_ALL=C: bytes, not chars):
+	# the dingbats ✨ ⚡ ⚠ ✅ ❌ ☕ plus a curated pictograph set
+	# (🔥 💀 🙄 🎁 🪣 🏛 🚀 🐛 🎉 📉). A named list — every other
+	# emoji-block code point is disallowed, so new emoji need an
+	# explicit entry here, not an accident of their block.
+	EMOJI = "\360\237\224\245|\360\237\222\200|\360\237\231\204|\360\237\216\201|\360\237\252\243|\360\237\217\233|\360\237\232\200|\360\237\220\233|\360\237\216\211|\360\237\223\211|\342\230\225|\342\232[\240\241]|\342\234[\205\250]|\342\235\214"
+	# Everything else in U+1F000–1FAFF: the gestures, faces, food,
+	# weapons, blood and skin tones a block allowlist used to admit.
+	NOEMOJI = "\360\237[\200-\253][\200-\277]"
 	# ZWJ, SHY, 200B–200F, 202A–202E, 2060–2064, 2066–2069, FEFF.
 	INVISIBLE = "\342\200[\213-\217]|\302\255|\342\200[\252-\256]|\342\201[\240-\244]|\342\201[\246-\251]|\357\273\277"
 	VS16 = "\357\270\217"
@@ -26,6 +29,11 @@ BEGIN {
 	for (i = 0; i < 256; i++) ORD[sprintf("%c", i)] = i
 	URLRE = "https?://[^ \t\"'<>)]+"
 	NUMRE = "[$#~<>A-Za-z0-9.,%/:_+-]*[0-9][$#~<>A-Za-z0-9.,%/:_+-]*"
+	# verifier.zig's content-word lists, for the W3 strike check.
+	STOPWORDS = " a an the and or but of to in on at for by with from as is are was were be been being it its this that these those has have had do does did will would can could should may might must so than then there their they them we our you your he she his her i me my if into about just also any some each very too which who whom what when where how why s t "
+	NEGLIST = " no not never without cannot none nobody nothing neither nor "
+	split("zero one two three four five six seven eight nine ten eleven twelve", NWL, " ")
+	for (i = 1; i <= 13; i++) NUMWORD[NWL[i]] = i - 1
 	split("mild spicy feral", TONES, " ")
 	MAXPROF["mild"] = 0; MAXPROF["spicy"] = 1; MAXPROF["feral"] = 2
 	MAXCAPS["mild"] = 0; MAXCAPS["spicy"] = 1; MAXCAPS["feral"] = 3
@@ -295,10 +303,10 @@ function emojiscan(in_, out,    i, n, b, l, seq, prev, p) {
 			prev = 0
 		} else {
 			if (index(in_, seq) == 0) {
-				if (seq ~ "^(" NOEMOJI ")$") why("adds disallowed emoji U+" sprintf("%X", cpof(seq)))
+				if (seq ~ "^(" EMOJI ")$") EMOJI_COUNT++
+				else if (seq ~ "^(" NOEMOJI ")$") why("adds disallowed emoji U+" sprintf("%X", cpof(seq)))
 				else if (seq ~ "^(" INVISIBLE ")$") why("adds invisible character U+" sprintf("%X", cpof(seq)))
 				else if (seq ~ "^(" BANGBYTES ")$") why("adds !!")
-				else if (seq ~ "^(" EMOJI ")$") EMOJI_COUNT++
 				else if (l == 4 || seq ~ /^\342[\230-\236][\200-\277]$/) why("adds symbol U+" sprintf("%X", cpof(seq)))
 			}
 			prev = (seq ~ "^(" EMOJI ")$"); p = i + l
@@ -322,13 +330,114 @@ function textlen(s,    t, i, n, b, l, seq) {
 	return length(t)
 }
 
-function plainrole(role) {
-	return index(role, "rendered bold") || index(role, "rendered italic") || \
-		index(role, "alt text") || index(role, "page heading") || index(role, "frontmatter")
+# Plain-slot markers matched on normalized words: lowercase, split on
+# non-alphanumerics. "ALT TEXT" and "frontmatter tags" match; "rendered
+# boldly" and "image alt" don't.
+function plainrole(role,    t, n, a, i, w, prev) {
+	t = tolower(role)
+	n = split(t, a, "[^a-z0-9]+")
+	prev = ""
+	for (i = 1; i <= n; i++) {
+		w = a[i]
+		if (w == "") continue
+		if (w == "frontmatter" || (prev == "rendered" && (w == "bold" || w == "italic")) || \
+				(prev == "alt" && w == "text") || (prev == "page" && w == "heading"))
+			return 1
+		prev = w
+	}
+	return 0
+}
+
+# verifier.zig's normalize: lowercase ASCII, curly quotes to straight,
+# … to ..., whitespace runs to one space.
+function norm(s,    t) {
+	t = s
+	gsub(/\342\200[\230\231]/, Q, t)
+	gsub(/\342\200[\234\235]/, "\"", t)
+	gsub(/\342\200\246/, "...", t)
+	gsub(/\302\240/, " ", t)
+	t = tolower(t)
+	gsub(/[ \t\r\n]+/, " ", t)
+	sub(/^ /, "", t); sub(/ $/, "", t)
+	return t
+}
+
+# Crude suffix stripping so light inflection still overlaps (verifier.zig).
+function stem(w) {
+	if (length(w) > 3 && substr(w, length(w), 1) == "s" && substr(w, length(w) - 1, 1) != "s") w = substr(w, 1, length(w) - 1)
+	if (length(w) > 4 && substr(w, length(w), 1) == "e") w = substr(w, 1, length(w) - 1)
+	if (length(w) > 5 && w ~ /ing$/) w = substr(w, 1, length(w) - 3)
+	if (length(w) > 5 && w ~ /ed$/) w = substr(w, 1, length(w) - 2)
+	return w
+}
+
+# Two stems match when equal or when one is a >=4-byte prefix of the
+# other: the crude stemmer misses doubled-consonant inflections
+# (`shipped` -> `shipp` where the input has `ships` -> `ship`).
+function samestem(a, b,    m) {
+	if (a == b) return 1
+	m = (length(a) < length(b)) ? length(a) : length(b)
+	return m >= 4 && substr(a, 1, m) == substr(b, 1, m)
+}
+
+# Deduped, stemmed content words of s as a set: C[word] = 1.
+function contentwords(s, C,    t, n, i, c, start, digits, w) {
+	t = norm(s); n = length(t); i = 1
+	split("", C)
+	while (i <= n) {
+		c = substr(t, i, 1)
+		if (c !~ /[A-Za-z0-9]/) { i++; continue }
+		start = i
+		digits = (c ~ /[0-9]/)
+		while (i <= n) {
+			c = substr(t, i, 1)
+			if (digits) {
+				if (c ~ /[0-9]/) { i++; continue }
+			} else {
+				if (c ~ /[A-Za-z]/) { i++; continue }
+				if (c == Q && i + 1 <= n && substr(t, i + 1, 1) ~ /[A-Za-z]/) { i++; continue }
+			}
+			break
+		}
+		w = substr(t, start, i - start)
+		if (!digits) {
+			if (length(w) >= 3 && substr(w, length(w) - 2) == "n't") continue
+			if (length(w) >= 2 && substr(w, length(w) - 1) == "'s") w = substr(w, 1, length(w) - 2)
+			if (index(w, Q) > 0) continue
+			if (index(NEGLIST, " " w " ") > 0) continue
+			if (index(STOPWORDS, " " w " ") > 0) continue
+			if (w in NUMWORD) w = NUMWORD[w] ""
+			else w = stem(w)
+			if (length(w) < 2 && w !~ /[0-9]/) continue
+		}
+		C[w] = 1
+	}
+}
+
+# May a ~~inner~~ span stand in the reply? It may not retract anything
+# the input said: no number token at all, none of the input's protected
+# tokens, no negation, and no word sharing a stem with an input content
+# word (CIWORDS holds the input's stemmed content words).
+function strikeinnerok(inner,    NF2, CW2, t, w, c, j, k) {
+	split("", NF2); numbers(inner, NF2)
+	for (t in NF2) return 0
+	for (t in FI) if (present(inner, t, FI[t])) return 0
+	j = 1
+	while (j <= length(inner)) {
+		if (substr(inner, j, 1) !~ /[A-Za-z]/) { j++; continue }
+		k = j
+		while (k <= length(inner) && substr(inner, k, 1) ~ /[A-Za-z]/) k++
+		w = tolower(substr(inner, j, k - j))
+		if (index(NEGLIST, " " w " ") > 0) return 0
+		j = k
+	}
+	split("", CW2); contentwords(inner, CW2)
+	for (w in CW2) for (c in CIWORDS) if (samestem(w, c)) return 0
+	return 1
 }
 
 # Sets REASONS to every way `out` breaks the voice contract for `in_`.
-function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, din, nspans, pj, pk, rest, ent) {
+function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, din, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, DROPSEEN) {
 	REASONS = ""
 	if (in_ == "") why("empty input")
 	if (out == "") { why("empty output"); return }
@@ -351,6 +460,21 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 		if (countchar(out, c) < countchar(in_, c)) why("drops markup character " c)
 	}
 
+	# A dropped non-ASCII code point (an emoji the input carried, a
+	# curly quote, an accent) is a removal like a dropped markup char.
+	split("", DROPSEEN)
+	i = 1
+	while (i <= length(in_)) {
+		b = substr(in_, i, 1)
+		if (b !~ /[\200-\377]/) { i++; continue }
+		l = (b ~ /[\360-\364]/) ? 4 : (b ~ /[\340-\357]/) ? 3 : 2
+		seq = substr(in_, i, l); i += l
+		if (seq in DROPSEEN) continue
+		DROPSEEN[seq] = 1
+		if (index(out, seq) == 0)
+			why("drops non-ASCII character U+" sprintf("%04X", cpof(seq)))
+	}
+
 	# W2, as pairing: every added `*`, `` ` `` or `~` must resolve into
 	# spans; leftovers are compared against the input's own leftovers.
 	split("", SPAN); lin = starscan(in_); em_in = SPAN["em"]; st_in = SPAN["strong"]
@@ -361,12 +485,45 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 	din = int(countchar(in_, "~") / 4)  # each input ~~x~~ is two runs of two
 	nspans = em_ou + st_ou + AR[2] / 2 - em_in - st_in - din
 
+	# W3: a strike retracts meaning, so ~~ may only surround words the
+	# reply itself added — no input fact, negation or content word.
+	# Code spans are hidden first so a quoted "~~" can't open a strike.
+	split("", CIWORDS); contentwords(in_, CIWORDS)
+	hid = out; gsub(/`[^`]*`/, "x", hid)
+	i = 1; sopen = 0
+	while (i <= length(hid)) {
+		if (substr(hid, i, 1) != "~") { i++; continue }
+		l = 0
+		while (substr(hid, i + l, 1) == "~") l++
+		if (l != 2) { i += l; continue }
+		if (sopen == 0) { sopen = i + 2; i += 2; continue }
+		inner = substr(hid, sopen, i - sopen)
+		sopen = 0; i += 2
+		if (index(in_, "~~" inner "~~") > 0) continue
+		if (!strikeinnerok(inner)) why("strikes input words")
+	}
+
 	# W5 feeds W4: plain slots take no added formatting and no emoji.
 	emojiscan(in_, out)
 	if (plainrole(role) && (countchar(out, "*") != countchar(in_, "*") || \
 			countchar(out, "`") != countchar(in_, "`") || countchar(out, "~") != countchar(in_, "~") || \
 			EMOJI_COUNT > 0))
 		why("formatting in a plain slot")
+
+	# W6: an added code span may only quote text the input already has,
+	# and may not wrap the entire input verbatim.
+	rest = out
+	while ((p = index(rest, "`")) > 0) {
+		l = 0
+		while (substr(rest, p + l, 1) == "`") l++
+		if (l != 1) { rest = substr(rest, p + l); continue }
+		q = index(substr(rest, p + 1), "`")
+		if (q == 0) break
+		inner = substr(rest, p + 1, q - 1)
+		if (inner == in_) why("code span wraps the whole input")
+		else if (index(in_, inner) == 0) why("code span text not in the input")
+		rest = substr(rest, p + q + 1)
+	}
 
 	if (index(out, "![") && !index(in_, "![")) why("adds ![ (renders as image syntax)")
 	pj = in_; pk = out; gsub(/[*`~]/, "", pj); gsub(/[*`~]/, "", pk)
