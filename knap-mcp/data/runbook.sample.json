@@ -1,0 +1,88 @@
+{
+  "service": "AcmeDB",
+  "title": "AcmeDB: restore from a snapshot",
+  "owner": "AcmeDB SRE",
+  "severity": "sev1",
+  "last_reviewed": "2026-10-24",
+  "tags": ["runbook", "restore", "acmedb", "sev1"],
+  "summary": "Use this when a production AcmeDB 2.x database is corrupt, dropped, or rolled to a bad state and you need a point-in-time restore from snapshots. Covers restores inside the seven-day retention window; anything older is an archive job, not this runbook. For databases over 2 TB, budget hours for the snapshot copy, not minutes.",
+  "danger": "Never restore over the live data directory. Restore to a scratch path, verify with acmedb doctor, then cut over — the WAL may still be writing, and a restore on top of it corrupts both copies.",
+  "preflight": [
+    "Confirm it is a data problem, not a config problem: run acmedb doctor on the live node first",
+    "Get sign-off from the on-call lead — a restore drops every write after the restore point",
+    "Check free disk: the restored copy needs roughly 1.1x the live data dir",
+    "Pick a restore point inside the seven-day snapshot retention window",
+    "Tell #acmedb-incidents the restore is starting so nobody else touches the node"
+  ],
+  "phases": [
+    {
+      "name": "Phase 1: pick and check the snapshot",
+      "steps": [
+        {
+          "do": "List snapshots and choose the restore point",
+          "command": "acmedb snapshot list --db prod --before \"2026-10-27T03:00:00Z\"",
+          "expect": "A snapshot ID whose timestamp predates the incident.",
+          "note": "retention"
+        },
+        {
+          "do": "Verify the snapshot is complete before you touch it",
+          "expect": "acmedb snapshot verify exits 0 and prints ok: true for every segment."
+        }
+      ]
+    },
+    {
+      "name": "Phase 2: restore to a scratch path",
+      "steps": [
+        {
+          "do": "Restore into the scratch directory, not the live one",
+          "command": "acmedb snapshot restore snap_0142 --to /var/lib/acmedb-restore",
+          "expect": "restore exits 0 and the scratch dir holds a full data directory."
+        },
+        {
+          "do": "Replay the WAL up to the exact restore point",
+          "command": "acmedb wal replay --dir /var/lib/acmedb-restore --until \"2026-10-27T02:58:00Z\"",
+          "note": "wal-path"
+        }
+      ]
+    },
+    {
+      "name": "Phase 3: verify and cut over",
+      "steps": [
+        {
+          "do": "Health-check the restored copy with acmedb doctor",
+          "expect": "Three green checks. A yellow on replication is expected — it rejoins after cutover."
+        },
+        {
+          "do": "Spot-check the data you actually lost",
+          "command": "SELECT count(*) FROM orders WHERE created_at > '2026-10-26';",
+          "lang": "sql",
+          "expect": "Row counts match the pre-incident numbers in the incident doc. Check a few rows by hand, not just counts."
+        },
+        {
+          "do": "Swap the data directories and restart",
+          "command": "systemctl stop acmedb && mv /var/lib/acmedb /var/lib/acmedb.bad && mv /var/lib/acmedb-restore /var/lib/acmedb && systemctl start acmedb",
+          "expect": "acmedb doctor goes green on the live node within a minute."
+        }
+      ]
+    }
+  ],
+  "rollback": [
+    "systemctl stop acmedb on the live node",
+    "Move the restored directory aside and put acmedb.bad back in place as the live data dir",
+    "systemctl start acmedb — the bad state returns, but the service is up and you can regroup"
+  ],
+  "escalation": [
+    {"who": "AcmeDB SRE on-call", "when": "verify fails or replay stalls over 10 min", "how": "#acmedb-incidents"},
+    {"who": "Infra lead", "when": "snapshot missing inside the retention window", "how": "pager"},
+    {"who": "AcmeDB upstream", "when": "doctor reports manifest corruption on the restore", "how": "issue tracker, severity critical"}
+  ],
+  "slo_target": "99.9%",
+  "error_budget": "B = (1 - 0.999) \\times 30 \\times 24 \\times 60 \\approx 43.2 \\; \\text{min / month}",
+  "lesson": "We lost four hours of writes because the restore went over the live directory while the WAL was still being written, and nobody noticed until the morning.",
+  "postmortem_url": "https://example.com/acmedb/postmortems/2026-03-restore-overwrite",
+  "related": ["AcmeDB 2.0 migration guide", "AcmeDB docs — backups", "Verdict: AcmeDB"],
+  "notes": {
+    "retention": "Seven days is the default retention. The changelog says it is configurable and does not say how far.",
+    "wal-path": "In 2.0 the config key is storage.wal_path; a 1.x config silently writes the WAL somewhere you are not replaying."
+  }
+}
