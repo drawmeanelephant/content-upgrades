@@ -867,7 +867,7 @@ fn countWords(s: []const u8) usize {
 /// Markup a value must never carry. The plan's list, plus the inline
 /// styling runs and newlines: any of them lets a value raise its own score
 /// or reshape the block it lands in, which is the model touching layout.
-const inert_tokens = [_][]const u8{ "![[", "[[", "[^", "](", "> [!", "```", "{{", "{%", "**", "__", "~~", "==", "`", "|" };
+const inert_tokens = [_][]const u8{ "![[", "[[", "[^", "](", "> [!", "```", "{{", "{%", "**", "__", "~~", "==", "`", "|", "$" };
 
 /// A `*` or `_` that can open an emphasis run: a word character on its
 /// right and a non-word boundary (or the string start) on its left. The
@@ -2412,6 +2412,7 @@ test "isInert rejects markup anywhere in a value" {
         .{ "two\nparagraphs", "newline" },
         .{ "- a list", "list marker" },
         .{ "1. first", "list marker" },
+        .{ "$a perfectly normal take with several words in it.$", "$" },
     };
     for (bad) |b| try testing.expectEqualStrings(b[1], inertString(b[0]).?);
     const good = [_][]const u8{ "Plain prose, with commas.", "3 < 4 and 5 > 2", "1.9.x", "C# is fine-ish", "wal_dir and storage.wal_path", "2 * 3 = 6", "a*b" };
