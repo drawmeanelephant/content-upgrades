@@ -1,0 +1,9 @@
+{# code.knap: ratchet eval fixture (lane MD-RT1). A code slot renders one
+   line verbatim inside a fenced block; the prose inert rule would reject
+   real commands (`a | b`, `SELECT *`, `# comment`), so code slots use the
+   literal-safe codeInert rule and an exact-substring evidence gate. #}{{ title | h1 }}
+
+{{ intro }}{% if command %}
+
+
+{{ command | code_block:"sh" }}{% endif %}
