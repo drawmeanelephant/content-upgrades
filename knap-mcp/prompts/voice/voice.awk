@@ -23,6 +23,11 @@ BEGIN {
 	NOEMOJI = "\360\237[\200-\253][\200-\277]"
 	# ZWJ, SHY, 200B–200F, 202A–202E, 2060–2064, 2066–2069, FEFF.
 	INVISIBLE = "\342\200[\213-\217]|\302\255|\342\200[\252-\256]|\342\201[\240-\244]|\342\201[\246-\251]|\357\273\277"
+	# Control and format characters whose UTF-8 sits entirely above 0x7f,
+	# invisible to the [\001-\037\177] check: the C1 controls, the
+	# line/paragraph separators and the Cf set (ZWSP–ZWJ, SHY, BOM).
+	# Banned outright, input or reply, like the C0/DEL bytes.
+	BANCP = "\302[\200-\237]|\342\200[\250-\251]|\342\200[\213-\217]|\302\255|\357\273\277"
 	VS16 = "\357\270\217"
 	# ‼ U+203C and ⁉ U+2049 read as !!.
 	BANGBYTES = "\342\200\274|\342\201\211"
@@ -554,8 +559,9 @@ function guard(tone, role, fab, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, 
 	if (in_ == "") why("empty input")
 	if (out == "") { why("empty output"); return }
 	if (out == in_) why("output equals input")
-	if (in_ ~ /[\001-\037\177]/) why("input has a control character or line break")
+	if (in_ ~ /[\001-\037\177]/ || match(in_, BANCP)) why("input has a control character or line break")
 	if (out ~ /[\001-\037\177]/) why("control character or line break")
+	if (match(out, BANCP)) why("control or format character U+" sprintf("%04X", cpof(substr(out, RSTART, RLENGTH))))
 
 	facts(in_, FI); facts(out, FO)
 	for (t in FI) if (!present(out, t, FI[t])) why("drops " FI[t] " " t)
