@@ -1,4 +1,8 @@
 # Gameplan — Meta Global AI Developer Hackathon
+
+> Historical Oct 26 planning snapshot, kept for lane tables and history.
+> Current state: `README.md` and `docs/tracks/README.md`.
+
 Oct 26 12pm ET → Nov 4 9pm ET · solo · indie track
 
 Pitch line: **"AI can't do layout. So we don't let it."**
