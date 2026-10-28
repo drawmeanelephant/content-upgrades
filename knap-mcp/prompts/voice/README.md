@@ -10,8 +10,8 @@ Nothing here is Zig. `src/voice.zig` (lane C1) loads these files at runtime.
 |---|---|---|
 | `system.md` | The contract: rewrite one value, keep facts exact, return only the string, keep the input's markup and add only inline formatting within limits, stay within length bounds. | Yes, verbatim |
 | `mild.md`, `spicy.md`, `feral.md` | Tone guides. | Yes, verbatim, one per call |
-| `examples/<tone>.jsonl` | Few-shot pairs, 11 per tone, with the same inputs in every tone. | Yes, rendered into the system message |
-| `mock/<tone>.jsonl` | Canned replies for every `voice: true` value in the four `data/*.sample.json` files, for the mock backend. | No |
+| `examples/<tone>.jsonl` | Few-shot pairs, 12 per tone, with the same inputs in every tone. | Yes, rendered into the system message |
+| `mock/<tone>.jsonl` | Canned replies for every voice-eligible value in the five `data/*.sample.json` files — the fields flagged `voice: true` in `templates/shapes/*.json` — for the mock backend. | No |
 | `voice.awk` | The guard (fact and markup checks) and the reference prompt assembler. | No |
 | `check.sh` | Runs the guard over every example and mock reply, plus `testdata/bad.jsonl`. | No |
 | `assemble.sh` | Prints the exact system and user messages for one call. | No |
@@ -26,7 +26,7 @@ One JSON object per line: UTF-8, LF line endings, no blank lines, no comments. E
 
 | Key | Meaning |
 |---|---|
-| `template` | Template id: `verdict`, `apparatus`, `release-notes` or `reading-note`. |
+| `template` | Template id: `verdict`, `apparatus`, `release-notes`, `reading-note` or `runbook`. |
 | `field` | JSON path inside the data, without the template id: `take`, `blockers[0]`, `receipts[1][0]`, `subtitle`, `sources[0].quotes[0].used_for`. A dot separates object keys; `[n]` is an array index. |
 | `field_role` | The shape descriptor's `role` for the field, verbatim. An element of an `array<string>` adds ` (one item)`. |
 | `input` | The value before the voice pass. |
@@ -44,6 +44,7 @@ The shape descriptors in `templates/shapes/*.json` are the source of truth. A fi
 | apparatus | `subtitle`, `sources[i].quotes[j].used_for` | `quotes[j].text` stays verbatim; only the `used_for` annotation is rewritten. |
 | release-notes | `verdict`, `take`, `screenshot_alt`, `tldr`, `breaking_warning`, `breaking[i].change`, `breaking[i].fix`, `highlights[i].what`, `known_issues[i]`, `bottom_line` | `title` is not flagged: its kebab-case form becomes the frontmatter `slug`, so rewriting it would move the page URL invisibly to the structure hash. |
 | reading-note | `verdict`, `take`, `summary`, `quotes[i].why`, `thoughts[i]`, `spoilers`, `bottom_line` | `title` is not flagged: it is the work's title. |
+| runbook | `summary`, `danger`, `preflight[i]`, `phases[i].steps[j].do`, `phases[i].steps[j].expect`, `rollback[i]` | `title` is not flagged: it is the page heading and frontmatter identity (falls back to `service` via `??`). |
 
 The few-shot examples come from verdict and apparatus roles. The other templates' roles are close enough (verdict, take, summary, bottom line, bullets) that the same examples carry over.
 
@@ -105,7 +106,7 @@ sh prompts/voice/assemble.sh system spicy > want-system.txt
 sh prompts/voice/assemble.sh user take "one-line hot take" "the boring database that actually ships" > want-user.txt
 ```
 
-Caching: there are exactly three system messages, one per tone, each 5.6 to 6.3 KB. Each one is the same for every field, template and document. Only the short user message changes, so every call after the first in a tone can hit the prompt cache. The model never gets the template, sibling fields or the boris graph (SPEC, context economy rule 1).
+Caching: there are exactly three system messages, one per tone, each 6.8 to 7.7 KB. Each one is the same for every field, template and document. Only the short user message changes, so every call after the first in a tone can hit the prompt cache. The model never gets the template, sibling fields or the boris graph (SPEC, context economy rule 1).
 
 ## The guard
 
@@ -143,7 +144,7 @@ The guard can't see everything, here or at runtime. When examples change, a pers
 
 ## Mock replies
 
-`mock/<tone>.jsonl` holds hand-written replies for the 38 `voice: true` values in `data/*.sample.json` (verdict 8, apparatus 4, release-notes 14, reading-note 12). A mock backend looks up `(template, field, input)` and returns `output`. On a miss it returns the input unchanged, and the field counts as unchanged. These lines are never sent to a model. `check.sh` warns when a mock input no longer matches the sample data.
+`mock/<tone>.jsonl` holds hand-written replies for the 80 `voice: true` values in `data/*.sample.json` (verdict 8, apparatus 4, release-notes 24, reading-note 21, runbook 23). A mock backend looks up `(template, field, input)` and returns `output`. On a miss it returns the input unchanged, and the field counts as unchanged. These lines are never sent to a model. `check.sh` warns when a mock input no longer matches the sample data.
 
 ## Why the examples use other subjects
 
@@ -158,7 +159,7 @@ sh knap-mcp/prompts/voice/check.sh
 It needs only POSIX sh and awk, and it was tested with macOS `/usr/bin/awk` and gawk. It prints one line per problem, then a summary, and exits non-zero on any failure:
 
 ```
-voice check: 33 examples, 114 mock replies, 21/21 selftest breaks caught, 0 warnings, 0 failures
+voice check: 36 examples, 240 mock replies, 51/51 selftest breaks caught, 0 warnings, 0 failures
 ```
 
 It checks that every line parses with the right keys, that every example and mock reply passes the guard, that each tone has at least 6 examples, that all three tones share the same `template`, `field`, `field_role` and `input` sequence, that no example input is copied from the sample data, and that every line in `testdata/bad.jsonl` is caught with the expected reason.

@@ -89,7 +89,7 @@ else. `==highlight==` landed with MD-VH (#229); details live in
   uses, run-length checks for `` ` ``/`~`, emoji classes as UTF-8 byte
   ranges (LC_ALL=C), `textlen`, plain-role rule,
   `![`/entities/projection checks, span+emoji budgets (`==…==` counts as a
-  span). `check.sh` is green: 36 examples, 114 mock replies, 49/49 selftest
+  span). `check.sh` is green: 36 examples, 240 mock replies, 51/51 selftest
   breaks.
 - Examples: mild 1 italic, spicy `**one**`/code/emoji/`*called*` plus a
   `==mostly==`, feral `**DROPS MESSAGES**`/`~~peer review~~`/`==mostly==`
@@ -99,7 +99,7 @@ else. `==highlight==` landed with MD-VH (#229); details live in
   mild 2 italics; plain slots (verdict, subtitle, title, screenshot_alt)
   stay plain. Mock `field_role`s now equal the shape roles verbatim (a Zig
   test pins that).
-- `testdata/bad.jsonl`: 49 lines — the `**hard pass**` verdict now expects
+- `testdata/bad.jsonl`: 51 lines — the `**hard pass**` verdict now expects
   `formatting in a plain slot`, 🖕 expects `adds disallowed emoji`, plus the
   earlier cases (dropped-markup-with-adds, unbalanced `*`/`` ` ``/`~`,
   `#`/`|`/`_`/`$` adds, `* `-list and ` ``` `-fence starts, plain-slot
@@ -149,13 +149,13 @@ else. `==highlight==` landed with MD-VH (#229); details live in
 - Skeleton matching is text-blind: moving `[^1]`'s sentence order or moving
   emphasis to a different word passes W1 (same token sequence). Acceptable —
   the facts check still pins the marker itself.
-- `README.md`, `docs/SPEC.md` and the shape descriptions still claim the old
-  "any markup fails" / "equal structure hash" guarantees; those files are
-  outside this lane's ownership — filed as a separate discrepancy issue.
+- Resolved: `README.md`, `docs/SPEC.md` and the shape descriptions used to
+  claim the old "any markup fails" / "equal structure hash" guarantees — the
+  doc-accuracy wave (#325) updated them to the constrained-inline-formatting
+  contract.
 - `~~` inside link text or footnote-def text is parsed as `del` by
   structhash like CommonMark; multi-backtick spans never resolve, so
   adding one fails `unbalanced ``.
-- `voice.awk`'s `~` mirror uses weaker run-length pairing (`addruns`)
-  than zig's flanking rule: `plan~~[^1]~~` passes awk but zig rejects it
-  (`unbalanced ~` + `delim:~`). The `==` mirror got the exact `eqscan`
-  pairing in MD-VH; `~` predates it — filed as #247.
+- Fixed (#247, df64133): `voice.awk`'s `~` mirror now pairs by the same
+  flanking rule as zig (`tildescan`), so `plan~~[^1]~~` fails both guards.
+  The `==` mirror got the exact `eqscan` pairing in MD-VH.
