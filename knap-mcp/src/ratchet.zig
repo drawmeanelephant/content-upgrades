@@ -325,7 +325,7 @@ fn parseVariants(arena: std.mem.Allocator, spec: ObjectMap, f: Field, path: []co
             if (std.mem.eql(u8, e, k)) break;
         } else return error.BadShape;
     }
-    const item_specs = spec.get("fields").?.object;
+    const item_specs = (spec.get("fields") orelse return error.BadShape).object;
     const out = try arena.alloc(Variant, vf.enum_values.len);
     for (vf.enum_values, out) |kind, *o| {
         const list = vv.object.get(kind) orelse return error.BadShape;
@@ -2088,6 +2088,9 @@ test "palette: parseShape rejects a malformed palette" {
         ,
         // a palette with no variant
         \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","fields":{"k":{"type":"string","enum":["a"]}}}}}
+        ,
+        // a palette declaring variants but no item fields
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","variant":"k","variants":{"a":[]}}}}
         ,
         // variants on a non-palette slot
         \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"list","variant":"k","variants":{"a":[]},"fields":{"k":{"type":"string","enum":["a"]}}}}}
