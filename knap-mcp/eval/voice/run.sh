@@ -37,7 +37,7 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-templates="verdict apparatus release-notes reading-note"
+templates="verdict apparatus release-notes reading-note runbook"
 targets="markdown html"
 tones="mild spicy feral"
 failed=0
