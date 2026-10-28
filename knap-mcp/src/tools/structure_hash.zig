@@ -14,9 +14,9 @@ const ObjectMap = std.json.ObjectMap;
 
 pub const tool: tools.Tool = .{
     .name = "knap_structure_hash",
-    .description = "Layout skeleton hash of a rendered doc (doc_id handle): block and inline kinds with all text dropped. Equal hashes mean the same layout. strict also keeps link targets and footnote labels.",
+    .description = "Layout skeleton hash of a rendered doc (doc_id handle): block and inline kinds with all text dropped. Equal hashes mean the same layout. strict also keeps link targets and footnote labels. ignore_formatting drops inline emphasis, strikethrough and code spans, so tones that differ only in formatting hash equal.",
     .input_schema =
-    \\{"type":"object","properties":{"doc_id":{"type":"string"},"target":{"type":"string","enum":["markdown","html"]},"strict":{"type":"boolean"}},"required":["doc_id"]}
+    \\{"type":"object","properties":{"doc_id":{"type":"string"},"target":{"type":"string","enum":["markdown","html"]},"strict":{"type":"boolean"},"ignore_formatting":{"type":"boolean"}},"required":["doc_id"]}
     ,
     .run = run,
 };
@@ -36,12 +36,19 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
             else => return ctx.fail("strict must be a boolean", .{}),
         };
     } else false;
-    const tokens = try structhash.skeletonOpts(ctx.arena, doc, format, .{ .strict = strict });
+    const ignore_formatting = if (args) |a| blk: {
+        const v = a.get("ignore_formatting") orelse break :blk false;
+        break :blk switch (v) {
+            .bool => |b| b,
+            else => return ctx.fail("ignore_formatting must be a boolean", .{}),
+        };
+    } else false;
+    const tokens = try structhash.skeletonOpts(ctx.arena, doc, format, .{ .strict = strict, .ignore_formatting = ignore_formatting });
 
     try out.writer.writeAll("{\"ok\":true,\"doc_id\":");
     try std.json.Stringify.value(doc_id, .{}, &out.writer);
-    try out.writer.print(",\"format\":\"{s}\",\"strict\":{},\"hash\":\"{x:0>16}\",\"tokens\":[", .{
-        @tagName(format), strict, structhash.hashTokens(tokens),
+    try out.writer.print(",\"format\":\"{s}\",\"strict\":{},\"ignore_formatting\":{},\"hash\":\"{x:0>16}\",\"tokens\":[", .{
+        @tagName(format), strict, ignore_formatting, structhash.hashTokens(tokens),
     });
     for (tokens, 0..) |t, i| {
         if (i > 0) try out.writer.writeAll(",");
@@ -71,11 +78,12 @@ fn pathFormat(path: []const u8, doc: []const u8) structhash.Format {
     return structhash.sniff(doc);
 }
 
-/// `knap-mcp structhash <doc_id|file>... [--target markdown|html] [--explain] [--strict]`
+/// `knap-mcp structhash <doc_id|file>... [--target markdown|html] [--explain] [--strict] [--ignore-formatting]`
 pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     var target: ?structhash.Format = null;
     var explain = false;
     var strict = false;
+    var ignore_formatting = false;
     var names: std.ArrayList([]const u8) = .empty;
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
@@ -84,6 +92,8 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
             explain = true;
         } else if (std.mem.eql(u8, a, "--strict")) {
             strict = true;
+        } else if (std.mem.eql(u8, a, "--ignore-formatting")) {
+            ignore_formatting = true;
         } else if (std.mem.eql(u8, a, "--target") or std.mem.startsWith(u8, a, "--target=")) {
             const v = if (std.mem.indexOfScalar(u8, a, '=')) |eq| a[eq + 1 ..] else blk: {
                 i += 1;
@@ -117,7 +127,7 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
                 std.debug.print("knap-mcp: {s}\n", .{ctx.err_msg});
                 return 1;
             };
-        const tokens = try structhash.skeletonOpts(ctx.arena, doc, format.?, .{ .strict = strict });
+        const tokens = try structhash.skeletonOpts(ctx.arena, doc, format.?, .{ .strict = strict, .ignore_formatting = ignore_formatting });
         if (explain) {
             for (tokens) |t| {
                 try w.interface.splatByteAll(' ', 2 * @as(usize, t.depth));
@@ -131,7 +141,7 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
 
 fn usage(msg: ?[]const u8) u8 {
     if (msg) |m| std.debug.print("knap-mcp: {s}\n", .{m});
-    std.debug.print("usage: knap-mcp structhash <doc_id|file>... [--target markdown|html] [--explain] [--strict]\n", .{});
+    std.debug.print("usage: knap-mcp structhash <doc_id|file>... [--target markdown|html] [--explain] [--strict] [--ignore-formatting]\n", .{});
     return 1;
 }
 
@@ -160,4 +170,15 @@ test "run rejects a non-boolean strict" {
     var out: Allocating = .init(a);
     try std.testing.expectError(error.ToolFailed, run(&ctx, args.object, &out));
     try std.testing.expectEqualStrings("strict must be a boolean", ctx.err_msg);
+    const bad_ign = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a,
+        \\{{"doc_id":"{s}","ignore_formatting":"yes"}}
+    , .{doc_id}), .{});
+    try std.testing.expectError(error.ToolFailed, run(&ctx, bad_ign.object, &out));
+    try std.testing.expectEqualStrings("ignore_formatting must be a boolean", ctx.err_msg);
+    const ok_ign = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a,
+        \\{{"doc_id":"{s}","ignore_formatting":true}}
+    , .{doc_id}), .{});
+    out = .init(a);
+    try run(&ctx, ok_ign.object, &out);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "\"ignore_formatting\":true") != null);
 }

@@ -1,8 +1,11 @@
 #!/bin/sh
 # Voice eval: same template, same data, three tones. Every tone must render
-# with the original's structure hash, and every voiced doc must differ from
-# the original as a string. Two negative controls inject layout through a
-# value and must come out unequal. See README.md next to this script.
+# with the original's NORMALIZED structure hash (structhash
+# --ignore-formatting: replies may now insert inline formatting), and every
+# voiced doc must differ from the original as a string. Exact-hash negative
+# controls inject layout or formatting drift through a value and must come
+# out unequal; the feral column must also carry visible formatting. See
+# README.md next to this script.
 #
 #   knap-mcp/eval/voice/run.sh        exits 0 when every row passes
 #
@@ -55,6 +58,17 @@ render() {
 
 shash() {
     "$bin" structhash "$1" --target "$2" | cut -d' ' -f1
+}
+
+# Normalized hash: inline formatting the reply may have added doesn't count.
+nshash() {
+    "$bin" structhash "$1" --target "$2" --ignore-formatting | cut -d' ' -f1
+}
+
+# Formatting score of a data file: `*`, `` ` `` and `~` characters plus
+# emoji/symbol code points across all string values.
+fmtscore() {
+    jq -r '[.. | strings | (gsub("[^*~`]"; "") | length) + (gsub("[^\\x{1F300}-\\x{1FAFF}\\x{2600}-\\x{27BF}]"; "") | length)] | add // 0' "$1"
 }
 
 # Number of string leaves whose value differs between two data files.
@@ -115,7 +129,7 @@ for t in $templates; do
             failed=1
             continue
         fi
-        orig=$(shash "$work/$t.orig.$tg" "$tg")
+        orig=$(nshash "$work/$t.orig.$tg" "$tg")
         row="| $t | $tg | $orig"
         equal=yes
         differ=yes
@@ -126,7 +140,7 @@ for t in $templates; do
                 equal=NO
                 continue
             fi
-            h=$(shash "$out" "$tg")
+            h=$(nshash "$out" "$tg")
             row="$row | $h"
             [ "$h" = "$orig" ] || equal=NO
             cmp -s "$out" "$work/$t.orig.$tg" && differ=NO
@@ -142,6 +156,13 @@ for t in $templates; do
         [ "$differ" = NO ] && failed=1
         echo "$row | $equal | $differ | $fields |"
     done
+    # Feral must actually use the formatting it was granted: at least one
+    # added `*`/`` ` ``/`~`/emoji across the template's voiced values.
+    fscore=$(( $(fmtscore "$work/$t.feral.json") - $(fmtscore "data/$t.sample.json") ))
+    if [ "$fscore" -le 0 ]; then
+        echo "| $t | - | feral adds no formatting | | | | NO | | |"
+        failed=1
+    fi
 done
 
 # --- negative controls: layout injected through a value must move the hash ---

@@ -37,7 +37,34 @@ pub const Options = struct {
     /// Keep link, image, wikilink and embed targets, footnote labels,
     /// and raw-URL/autolink targets.
     strict: bool = false,
+    /// Drop inline formatting: markdown strong, em, del (open and close) and
+    /// code spans; html bare <strong> <em> <del> <code> tags and their closes.
+    /// Everything else is kept: blocks, links, images, wikilinks, embeds,
+    /// footnote refs, raw URLs, autolinks, inline html, hard breaks and
+    /// unmatched `delim:` runs (a stray `**` still moves the hash). Drops
+    /// template-owned emphasis too: compare renders of one template only.
+    ignore_formatting: bool = false,
 };
+
+/// The inline kinds `ignore_formatting` drops; voice.zig's guard uses it for
+/// its insert-only check, so both share one definition.
+pub fn isFormatting(kind: []const u8) bool {
+    for ([_][]const u8{
+        "strong", "/strong", "em",   "/em",   "del",   "/del",   "code",
+        "<strong>", "</strong>", "<em>", "</em>", "<del>", "</del>", "<code>", "</code>",
+    }) |k| {
+        if (eql(u8, kind, k)) return true;
+    }
+    return false;
+}
+
+/// html tag names `ignore_formatting` drops when they carry no attributes.
+const fmt_html_tags = [_][]const u8{ "strong", "em", "del", "code" };
+
+fn fmtTag(name: []const u8) ?usize {
+    for (fmt_html_tags, 0..) |t, n| if (eql(u8, name, t)) return n;
+    return null;
+}
 
 pub const Token = struct {
     /// Nesting depth, for `--explain` only; the hash ignores it.
@@ -66,7 +93,7 @@ pub fn skeleton(alloc: Allocator, doc: []const u8, format: Format) ![]Token {
 }
 
 pub fn skeletonOpts(alloc: Allocator, doc: []const u8, format: Format, opts: Options) ![]Token {
-    var o: Out = .{ .alloc = alloc, .strict = opts.strict };
+    var o: Out = .{ .alloc = alloc, .strict = opts.strict, .ignore_formatting = opts.ignore_formatting };
     switch (format) {
         .markdown => try mdDoc(&o, doc),
         .html => try htmlDoc(&o, doc),
@@ -100,8 +127,11 @@ pub fn hash(doc: []const u8, format: Format) u64 {
 const Out = struct {
     alloc: Allocator,
     strict: bool,
+    ignore_formatting: bool = false,
     list: std.ArrayList(Token) = .empty,
     depth: u16 = 0,
+    /// html: open formatting tags skipped per name, so their closes go too.
+    fmt_open: [fmt_html_tags.len]u16 = @splat(0),
 
     fn emit(o: *Out, kind: []const u8) !void {
         try o.list.append(o.alloc, .{ .depth = o.depth, .kind = kind });
@@ -685,6 +715,7 @@ fn inlines(o: *Out, text: []const u8) !void {
     const base = o.depth;
     defer o.depth = base;
     for (p.evs.items) |e| {
+        if (o.ignore_formatting and isFormatting(e.kind)) continue;
         if (e.kind[0] == '/') o.depth -|= 1;
         try o.emit(e.kind);
         if (isOpener(e.kind)) o.depth += 1;
@@ -1042,6 +1073,16 @@ fn htmlDoc(o: *Out, doc: []const u8) !void {
         const name = try std.ascii.allocLowerString(o.alloc, doc[name_start..j]);
         if (closing) {
             i = if (std.mem.findScalarPos(u8, doc, j, '>')) |e| e + 1 else doc.len;
+            // A skipped bare <strong>/<em>/<del>/<code> open swallows its
+            // matching close; attributed formatting tags keep theirs.
+            if (o.ignore_formatting) {
+                if (fmtTag(name)) |n| {
+                    if (o.fmt_open[n] > 0) {
+                        o.fmt_open[n] -= 1;
+                        continue;
+                    }
+                }
+            }
             try o.close(try std.fmt.allocPrint(o.alloc, "</{s}>", .{name}));
             continue;
         }
@@ -1089,6 +1130,16 @@ fn htmlDoc(o: *Out, doc: []const u8) !void {
         }
         i = j;
 
+        // Bare <strong> <em> <del> <code> are inline formatting; attributed
+        // ones like <code class="language-zig"> stay structural.
+        if (o.ignore_formatting) {
+            if (fmtTag(name)) |n| {
+                if (attrs.items.len == 0) {
+                    if (!self_close) o.fmt_open[n] += 1;
+                    continue;
+                }
+            }
+        }
         try o.emit(try tagToken(o, name, attrs.items));
         const is_void = self_close or for (void_tags) |v| {
             if (eql(u8, v, name)) break true;
@@ -1406,6 +1457,87 @@ test "markdown: strict keeps raw-url and autolink targets" {
     try testing.expectEqualStrings(
         "p rawurl(https://a.example/x) autolink(https://a.example/y)",
         try kinds(a, doc_a, .markdown, .{ .strict = true }),
+    );
+}
+
+test "markdown: ignore_formatting drops emphasis and code spans only" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ign = Options{ .ignore_formatting = true };
+    try testing.expectEqualStrings(
+        "p",
+        try kinds(a, "the **boring** `db` that ~~barely~~ *actually* ships", .markdown, ign),
+    );
+    try testing.expectEqualStrings(
+        "p strong /strong",
+        try kinds(a, "the **boring** database", .markdown, .{}),
+    );
+    // Voiced with emphasis: the default hash moves, the normalized one does not.
+    const voiced = try std.mem.replaceOwned(u8, a, md_base, "the boring database", "the **boring** database");
+    try expectDiffer(md_base, voiced, .markdown);
+    const h_plain = try hashOpts(a, md_base, .markdown, ign);
+    const h_voiced = try hashOpts(a, voiced, .markdown, ign);
+    try testing.expectEqual(h_plain, h_voiced);
+    // Template-owned emphasis drops too, so compare one template's renders only.
+    const stripped = try std.mem.replaceOwned(u8, a, md_base, "**give a shit**", "give a shit");
+    try testing.expectEqual(h_plain, try hashOpts(a, stripped, .markdown, ign));
+    // A dropped footnote ref or wikilink still moves the normalized hash.
+    const no_fnref = try std.mem.replaceOwned(u8, a, md_base, "Snapshots exist now.[^1]", "Snapshots exist now.");
+    const no_wiki = try std.mem.replaceOwned(u8, a, md_base, "[[AcmeDB docs]]", "AcmeDB docs");
+    try testing.expect(h_plain != try hashOpts(a, no_fnref, .markdown, ign));
+    try testing.expect(h_plain != try hashOpts(a, no_wiki, .markdown, ign));
+    // An unmatched `**` is a delim token, not formatting: it moves both modes.
+    const stray = try std.mem.replaceOwned(u8, a, md_base, "the boring database", "the **boring database");
+    try expectDiffer(md_base, stray, .markdown);
+    try testing.expect(h_plain != try hashOpts(a, stray, .markdown, ign));
+    // A code span hides the markup inside it: `p code` normalizes to `p`.
+    // The normalized hash cannot see this; the voice guard's insert-only
+    // check is what catches it.
+    const hidden = try std.mem.replaceOwned(u8, a, md_base, "the boring database", "`the **boring** database`");
+    try expectDiffer(md_base, hidden, .markdown);
+    try testing.expectEqual(h_plain, try hashOpts(a, hidden, .markdown, ign));
+    // strict composes: a renamed footnote label moves the strict+normalized hash.
+    const relabel = try std.mem.replaceOwned(u8, a, voiced, "[^1]", "[^one]");
+    try testing.expect(
+        try hashOpts(a, voiced, .markdown, .{ .strict = true, .ignore_formatting = true }) !=
+            try hashOpts(a, relabel, .markdown, .{ .strict = true, .ignore_formatting = true }),
+    );
+    // Depth stays consistent when a dropped span would have shifted it.
+    try testing.expectEqualStrings(
+        "p link /link",
+        try kinds(a, "see [**bold** `code` ~~del~~](u)", .markdown, ign),
+    );
+}
+
+test "html: ignore_formatting drops bare formatting tags" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ign = Options{ .ignore_formatting = true };
+    try testing.expectEqualStrings(
+        "<p> </p>",
+        try kinds(a, "<p>the <strong>boring</strong> <em>db</em> <del>x</del> <code>y</code></p>", .html, ign),
+    );
+    const voiced = try std.mem.replaceOwned(u8, a, html_base, "the boring database", "the <strong>boring</strong> database");
+    try expectDiffer(html_base, voiced, .html);
+    try testing.expectEqual(
+        try hashOpts(a, html_base, .html, ign),
+        try hashOpts(a, voiced, .html, ign),
+    );
+    // A fence-language code tag is structural, not formatting.
+    const fenced = try std.mem.replaceOwned(u8, a, html_base, "<p><strong>give a shit</strong>", "<p><code class=\"language-zig\">x</code> <strong>give a shit</strong>");
+    try testing.expect(
+        try hashOpts(a, html_base, .html, ign) != try hashOpts(a, fenced, .html, ign),
+    );
+    try testing.expectEqualStrings(
+        "<p> <code class=\"language-zig\"> </code> </p>",
+        try kinds(a, "<p><code class=\"language-zig\">x</code></p>", .html, ign),
+    );
+    // Nested formatting tags pair their closes by name.
+    try testing.expectEqualStrings(
+        "<p> </p>",
+        try kinds(a, "<p>a <strong>b <em>c</em> d</strong> e</p>", .html, ign),
     );
 }
 
