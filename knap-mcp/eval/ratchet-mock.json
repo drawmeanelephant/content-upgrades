@@ -101,6 +101,18 @@
         {"who": "Infra lead", "when": "snapshot missing inside retention", "how": "pager"},
         {"who": "AcmeDB upstream", "when": "doctor reports manifest corruption", "how": "issue tracker"},
         {"who": "Release manager", "when": "restore touches a frozen release", "how": "release channel"}
+      ],
+      "appendix[+]:checklist": [
+        {"kind": "checklist", "title": "After the restart", "items": ["Watch the node's log for one minute", "Confirm cluster status shows every node green", "Note the restart in the shift log"]}
+      ],
+      "appendix[+]:steps": [
+        {"kind": "steps", "title": "If the node will not drain", "items": ["Cancel the drain and re-check counts", "Look for a stuck long query", "Escalate before forcing it out"]}
+      ],
+      "appendix[+]:code": [
+        {"kind": "code", "title": "Drain the node", "command": "acmedb node drain --wait"}
+      ],
+      "appendix[+]:quote": [
+        {"kind": "quote", "text": "A restarted node rejoins the load balancer pool only after its health check stays green."}
       ]
     },
     "callouts": {
