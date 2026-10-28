@@ -9,6 +9,7 @@
 const std = @import("std");
 const Ctx = @import("../ctx.zig").Ctx;
 const density = @import("../density.zig");
+const formatcheck = @import("../formatcheck.zig");
 const policy = @import("../policy.zig");
 
 const max_doc_bytes = 64 * 1024 * 1024;
@@ -158,14 +159,20 @@ pub fn auditTree(ctx: *Ctx, o: Opts) ![]Row {
 
     var rows: std.ArrayList(Row) = .empty;
     var skipped: usize = 0;
+    // The doc and the scorer's working state live in a scratch arena
+    // reset per file — peak memory tracks the largest matched file, not
+    // the corpus. Only the small retained Score crosses into ctx.arena.
+    var scratch: std.heap.ArenaAllocator = .init(ctx.gpa);
+    defer scratch.deinit();
     for (matched.items) |rel| {
-        const full = try std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ o.dir, rel });
-        const doc = std.Io.Dir.readFileAlloc(.cwd(), ctx.io, full, ctx.arena, .limited(max_doc_bytes)) catch {
+        defer _ = scratch.reset(.retain_capacity);
+        const full = try std.fmt.allocPrint(scratch.allocator(), "{s}/{s}", .{ o.dir, rel });
+        const doc = std.Io.Dir.readFileAlloc(.cwd(), ctx.io, full, scratch.allocator(), .limited(max_doc_bytes)) catch {
             std.debug.print("knap-mcp: audit: cannot read '{s}' — skipped\n", .{full});
             skipped += 1;
             continue;
         };
-        const sc = try density.score(ctx.arena, doc);
+        const sc = try retainScore(ctx.arena, try density.score(scratch.allocator(), doc));
         var row: Row = .{ .rel = rel, .group = groupName(rel, o), .sc = sc };
         if (o.policy) |p| {
             row.coll = p.match(rel);
@@ -183,6 +190,21 @@ pub fn auditTree(ctx: *Ctx, o: Opts) ![]Row {
     if (skipped > 0)
         std.debug.print("knap-mcp: audit: {d} file(s) unreadable, skipped\n", .{skipped});
     return rows.items;
+}
+
+/// The scorer ran in the per-file scratch arena that the next file
+/// resets; dup the parts a Row keeps — the signal table and each
+/// warning's rule and detail — into the rows' arena.
+fn retainScore(a: std.mem.Allocator, sc: density.Score) !density.Score {
+    var out = sc;
+    out.signals = try a.dupe(density.Signal, sc.signals);
+    const warnings = try a.dupe(formatcheck.Warning, sc.warnings);
+    for (warnings) |*w| {
+        w.rule = try a.dupe(u8, w.rule);
+        w.detail = try a.dupe(u8, w.detail);
+    }
+    out.warnings = warnings;
+    return out;
 }
 
 /// Depth-first walk of `root`; appends '/'-joined paths relative to
