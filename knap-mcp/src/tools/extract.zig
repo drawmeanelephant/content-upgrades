@@ -124,8 +124,10 @@ fn normalize(a: std.mem.Allocator, s: []const u8) ![]const u8 {
         if (s[i] == '{') {
             if (std.mem.indexOfScalarPos(u8, s, i, '}')) |e| {
                 i = e + 1;
-                continue;
+            } else {
+                i += 1; // unterminated '{': drop it instead of spinning
             }
+            continue;
         }
         while (i < s.len and !std.ascii.isAlphanumeric(s[i]) and s[i] != '{') i += 1;
         const st = i;
@@ -246,7 +248,7 @@ fn parseDoc(a: std.mem.Allocator, doc: []const u8) !DocModel {
         off += line.len + 1;
     }
     if (cur) |ci| {
-        secs.items[ci].body = std.mem.trim(u8, body[body_start..body.len], " \t\r\n");
+        secs.items[ci].body = std.mem.trim(u8, body[@min(body_start, body.len)..body.len], " \t\r\n");
         secs.items[ci].line_hi = ln - 1;
     }
     m.sections = secs.items;
@@ -834,6 +836,39 @@ test "parseDoc splits preamble and sections, consumes the title heading" {
     try testing.expectEqualStrings("bio\n\n### Sub\n\n### Still inside", m.sections[0].body);
     try testing.expectEqualStrings("res", m.sections[1].body);
     try testing.expectEqualStrings("mascots/M-0003", str(m.fm, "id").?);
+}
+
+test "normalize drops an unterminated {" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("cue", try normalize(a, "Cue {"));
+    try testing.expectEqualStrings("cue", try normalize(a, "Cue {#x-1} {"));
+}
+
+test "parseDoc terminates on an unterminated { in a heading or fm title" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const m1 = try parseDoc(a, "---\ntitle: T\n---\n# T\n\n## Cue {\n\nbody text\n");
+    try testing.expectEqual(@as(usize, 1), m1.sections.len);
+    try testing.expectEqualStrings("cue", m1.sections[0].norm);
+    const m2 = try parseDoc(a, "---\ntitle: \"Cue {\"\n---\n# T\n\nbody\n");
+    try testing.expect(!m2.title_heading);
+    try testing.expectEqualStrings("Cue {", str(m2.fm, "title").?);
+}
+
+test "parseDoc on a doc whose last line is a heading" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const m1 = try parseDoc(a, "---\ntitle: T\n---\n# T\n\n## Last");
+    try testing.expectEqual(@as(usize, 1), m1.sections.len);
+    try testing.expectEqualStrings("Last", m1.sections[0].heading);
+    try testing.expectEqualStrings("", m1.sections[0].body);
+    const m2 = try parseDoc(a, "---\ntitle: T\n---\n# T\n\n## Last\n");
+    try testing.expectEqual(@as(usize, 1), m2.sections.len);
+    try testing.expectEqualStrings("", m2.sections[0].body);
 }
 
 test "prelude is byte-identical across filed templates" {
