@@ -7,11 +7,11 @@ BEGIN {
 	PROFANITY = " shit shits shitty bullshit fuck fucks fucked fucking damn damned goddamn hell crap crappy ass asses piss pissed "
 	FWORDS = " fuck fucks fucked fucking "
 	# Locked markup: a reply may neither add nor drop these (`$` is locked
-	# because dogbed renders `$…$` as math). `*`, `` ` `` and `~` are the
-	# insertable set: drops still fail, adds are checked by the pairing
+	# because dogbed renders `$…$` as math). `*`, `` ` ``, `~` and `=` are
+	# the insertable set: drops still fail, adds are checked by the pairing
 	# rules below and the plain-slot rule.
 	LOCKED = "_|#<>[]{}^@\\\"$"
-	INSERT = "*`~"
+	INSERT = "*`~="
 	# Emoji allowlist as UTF-8 byte patterns (LC_ALL=C: bytes, not chars):
 	# the dingbats ✨ ⚡ ⚠ ✅ ❌ ☕ plus a curated pictograph set
 	# (🔥 💀 🙄 🎁 🪣 🏛 🚀 🐛 🎉 📉). A named list — every other
@@ -262,6 +262,35 @@ function starscan(s,    i, n, l, run, prev, nxt, op, cl, sp, use, stack, t, left
 	return left
 }
 
+# Counts resolved ==highlight== spans in s, `…` spans hidden first. A run
+# must be exactly two `=` and obey the emphasis flanking rule: it can open
+# when the next byte isn't space (a punctuation next byte needs space or
+# punctuation on the left), can close when the previous isn't space (a
+# punctuation previous byte needs space or punctuation on the right); doing
+# both, it closes iff the stack is non-empty. Anything else — `===x===`,
+# `a == b`, a stray `==`, `==` hugging `[^1]` — resolves to no span, so the
+# char-vs-span accounting in guard() reports it as unbalanced.
+function eqscan(s,    i, n, l, run, prev, nxt, op, cl, sp, cnt) {
+	gsub(/`[^`]*`/, "x", s)
+	n = length(s); i = 1; sp = 0; cnt = 0
+	while (i <= n) {
+		if (substr(s, i, 1) != "=") { i++; continue }
+		l = 0; while (i + l <= n && substr(s, i + l, 1) == "=") l++
+		run = l
+		if (l != 2) { i += run; continue }
+		prev = (i == 1) ? " " : substr(s, i - 1, 1)
+		nxt = (i + l > n) ? " " : substr(s, i + l, 1)
+		op = (nxt !~ /[ \t]/ && (nxt !~ /[[:punct:]]/ || prev ~ /[ \t]/ || prev ~ /[[:punct:]]/))
+		cl = (prev !~ /[ \t]/ && (prev !~ /[[:punct:]]/ || nxt ~ /[ \t]/ || nxt ~ /[[:punct:]]/))
+		if (op && cl) { if (sp > 0) op = 0; else cl = 0 }
+		if (cl) {
+			if (sp > 0) { sp--; cnt++ }
+		} else if (op) sp++
+		i += run
+	}
+	return cnt
+}
+
 # Runs of ch in out that the input's multiset can't cover, in AR[len].
 function addruns(in_, out, ch,    i, l, rin) {
 	split("", rin); split("", AR); i = 1
@@ -315,9 +344,9 @@ function emojiscan(in_, out,    i, n, b, l, seq, prev, p) {
 	}
 }
 
-# Bytes of s minus `*`, `` ` ``, `~`, allowed emoji and VS16.
+# Bytes of s minus `*`, `` ` ``, `~`, `=`, allowed emoji and VS16.
 function textlen(s,    t, i, n, b, l, seq) {
-	t = s; n = length(t); n -= gsub(/[*`~]/, "", t)
+	t = s; n = length(t); n -= gsub(/[*`~=]/, "", t)
 	i = 1; n = length(t)
 	while (i <= n) {
 		b = substr(t, i, 1)
@@ -340,7 +369,7 @@ function plainrole(role,    t, n, a, i, w, prev) {
 	for (i = 1; i <= n; i++) {
 		w = a[i]
 		if (w == "") continue
-		if (w == "frontmatter" || (prev == "rendered" && (w == "bold" || w == "italic")) || \
+		if (w == "frontmatter" || (prev == "rendered" && (w == "bold" || w == "italic" || w == "highlight")) || \
 				(prev == "alt" && w == "text") || (prev == "page" && w == "heading"))
 			return 1
 		prev = w
@@ -437,7 +466,7 @@ function strikeinnerok(inner,    NF2, CW2, t, w, c, j, k) {
 }
 
 # Sets REASONS to every way `out` breaks the voice contract for `in_`.
-function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, din, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, DROPSEEN) {
+function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, din, hl_in, hl_ou, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, DROPSEEN) {
 	REASONS = ""
 	if (in_ == "") why("empty input")
 	if (out == "") { why("empty output"); return }
@@ -475,15 +504,19 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 			why("drops non-ASCII character U+" sprintf("%04X", cpof(seq)))
 	}
 
-	# W2, as pairing: every added `*`, `` ` `` or `~` must resolve into
-	# spans; leftovers are compared against the input's own leftovers.
+	# W2, as pairing: every added `*`, `` ` ``, `~` or `=` must resolve
+	# into spans; leftovers are compared against the input's own leftovers.
 	split("", SPAN); lin = starscan(in_); em_in = SPAN["em"]; st_in = SPAN["strong"]
 	split("", SPAN); lou = starscan(out); em_ou = SPAN["em"]; st_ou = SPAN["strong"]
 	if (lou > lin) why("unbalanced *")
 	addruns(in_, out, "`"); if (added_runs_bad(1)) why("unbalanced `")
 	addruns(in_, out, "~"); if (added_runs_bad(2)) why("unbalanced ~")
+	# `=` gets the char-vs-span accounting the zig guard uses: every added
+	# `=` char must belong to an `==…==` span eqscan resolved.
+	hl_in = eqscan(in_); hl_ou = eqscan(out)
+	if (countchar(out, "=") - countchar(in_, "=") != 4 * (hl_ou - hl_in)) why("unbalanced =")
 	din = int(countchar(in_, "~") / 4)  # each input ~~x~~ is two runs of two
-	nspans = em_ou + st_ou + AR[2] / 2 - em_in - st_in - din
+	nspans = em_ou + st_ou + AR[2] / 2 + hl_ou - em_in - st_in - din - hl_in
 
 	# W3: a strike retracts meaning, so ~~ may only surround words the
 	# reply itself added — no input fact, negation or content word.
@@ -507,7 +540,7 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 	emojiscan(in_, out)
 	if (plainrole(role) && (countchar(out, "*") != countchar(in_, "*") || \
 			countchar(out, "`") != countchar(in_, "`") || countchar(out, "~") != countchar(in_, "~") || \
-			EMOJI_COUNT > 0))
+			countchar(out, "=") != countchar(in_, "=") || EMOJI_COUNT > 0))
 		why("formatting in a plain slot")
 
 	# W6: an added code span may only quote text the input already has,
@@ -526,10 +559,9 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 	}
 
 	if (index(out, "![") && !index(in_, "![")) why("adds ![ (renders as image syntax)")
-	pj = in_; pk = out; gsub(/[*`~]/, "", pj); gsub(/[*`~]/, "", pk)
+	pj = in_; pk = out; gsub(/[*`~=]/, "", pj); gsub(/[*`~=]/, "", pk)
 	if (index(pk, "!!") && !index(pj, "!!")) why("adds !!")
 	if (index(pk, "??") && !index(pj, "??")) why("adds ??")
-	if (index(out, "==") && !index(in_, "==")) why("adds ==")
 	rest = out
 	while (match(rest, /&(#|[A-Za-z])[A-Za-z0-9]*;/)) {
 		ent = substr(rest, RSTART, RLENGTH)
@@ -564,7 +596,7 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 	tmp = out; nbang = gsub(/!/, "", tmp)
 	if (nbang > MAXBANG[tone]) why(tone ": " nbang " exclamation marks, max " MAXBANG[tone])
 	if (nspans > MAXSPANS[tone]) why(tone ": " nspans " formatting spans, max " MAXSPANS[tone])
-	if (tone == "mild" && (st_ou - st_in) + (AR[2] / 2 - din) > 0) why("mild: only *italic*")
+	if (tone == "mild" && (st_ou - st_in) + (AR[2] / 2 - din) + (hl_ou - hl_in) > 0) why("mild: only *italic*")
 	if (EMOJI_COUNT > MAXEMOJI[tone]) why(tone ": " EMOJI_COUNT " emoji, max " MAXEMOJI[tone])
 }
 

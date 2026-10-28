@@ -2,8 +2,8 @@
 # Checks every few-shot example and mock reply against the voice contract:
 # facts, names, numbers, urls, quotes and footnote refs kept verbatim, no
 # markup dropped (markup chars and non-ASCII code points alike) and only
-# balanced inline formatting (`**`, `*`, `~~` only over words the reply
-# added, code spans quoting the input, allowlisted emoji) added, plain
+# balanced inline formatting (`**`, `*`, `==`, `~~` only over words the
+# reply added, code spans quoting the input, allowlisted emoji) added, plain
 # slots kept plain, text length bounds, tone budgets, and the same inputs
 # across all three tones. testdata/bad.jsonl proves the guard bites.
 set -eu
