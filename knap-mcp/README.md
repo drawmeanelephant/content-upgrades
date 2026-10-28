@@ -6,8 +6,9 @@ One Zig binary: a stdio JSON-RPC MCP server **and** a direct CLI — same
 tools either way. The server is a dispatcher + orchestration layer —
 rendering goes through `k4o` (markdown/oliver) and `dogbed` (html) as
 external binaries. The model writes JSON values and repair patches only;
-templates are shipped, server-side, human-authored. Nothing ships
-unverified.
+templates are shipped, server-side, human-authored. Layout, markup and
+fact-shaped tokens are verified before anything ships; the meaning of
+plain-word prose is not.
 
 ## Build
 
