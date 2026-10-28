@@ -46,6 +46,51 @@ pin_dir() {
     echo "$ENGINES_DIR/$1-$(printf '%.7s' "$sha")"
 }
 
+sha256_file() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+# verify <name>: an existing pin dir is only used when its PROVENANCE proves
+# the binary came from the full pinned SHA and matches its recorded digest.
+# A pre-digest PROVENANCE (or none) warns and is accepted so existing caches
+# keep working. On mismatch this fails; the dir is never removed or
+# overwritten — inspect it by hand.
+verify() {
+    v_name=$1
+    v_sha=$(pin_sha "$v_name")
+    v_dest=$(pin_dir "$v_name")
+    v_prov=$v_dest/PROVENANCE
+    if [ ! -f "$v_prov" ]; then
+        echo "engines: $v_dest has no PROVENANCE (pre-digest cache); accepting as-is" >&2
+        return 0
+    fi
+    v_any=
+    v_rec=$(sed -n 's/^sha=//p' "$v_prov" | head -n 1)
+    if [ -n "$v_rec" ]; then
+        v_any=1
+        if [ "$v_rec" != "$v_sha" ]; then
+            echo "engines: $v_dest records sha=$v_rec but the pin is $v_sha; refusing to use it" >&2
+            return 1
+        fi
+    fi
+    v_rec=$(sed -n 's/^sha256=//p' "$v_prov" | head -n 1)
+    if [ -n "$v_rec" ]; then
+        v_any=1
+        v_got=$(sha256_file "$v_dest/$v_name")
+        if [ "$v_rec" != "$v_got" ]; then
+            echo "engines: $v_dest/$v_name digest mismatch (recorded $v_rec, actual $v_got); refusing to use it" >&2
+            return 1
+        fi
+    fi
+    if [ -z "$v_any" ]; then
+        echo "engines: $v_dest has a pre-digest PROVENANCE; accepting as-is" >&2
+    fi
+}
+
 # fetch_repo <name>: shallow-fetch the pinned commit into a scratch repo —
 # the recipe CI used — and set FETCHED to its path. $SRC_DIR is read-only;
 # the scratch repo is removed by the EXIT trap.
@@ -67,7 +112,10 @@ build() {
     name=$1
     sha=$(pin_sha "$name")
     dest=$(pin_dir "$name")
-    [ -x "$dest/$name" ] && return 0
+    if [ -x "$dest/$name" ]; then
+        verify "$name"
+        return
+    fi
     if [ -e "$dest" ]; then
         echo "engines: $dest exists but has no $name binary; inspect it by hand" >&2
         return 1
@@ -95,7 +143,11 @@ build() {
         echo "engines: $name build failed" >&2
         return 1
     fi
-    echo "$name built from git archive $sha -Doptimize=ReleaseSafe -Dcpu=baseline" >"$tmp/out/PROVENANCE"
+    {
+        echo "$name built from git archive $sha -Doptimize=ReleaseSafe -Dcpu=baseline"
+        echo "sha=$sha"
+        echo "sha256=$(sha256_file "$tmp/out/$name")"
+    } >"$tmp/out/PROVENANCE"
     if [ -e "$dest" ]; then
         echo "engines: $dest appeared during the build; keeping it"
     else
