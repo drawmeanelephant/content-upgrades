@@ -1,0 +1,7 @@
+# Raw run litter from scripts/live.sh --out knap-mcp/eval/results/live.
+# What stays tracked and why: docs/tracks/LIVE-HYGIENE.md.
+*.err
+*.stderr.txt
+voice-*.json
+# I3's `time` output, the source of the 76.7 s wall figure in I3.md.
+!/acp.stderr.txt

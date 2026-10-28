@@ -8,7 +8,10 @@
 # Options:
 #   --suite <s,...>  smoke (default) | repair | ratchet | voice | all
 #   --full           repair also runs the 167-break eval/seeds.2nap.json
-#   --out <dir>      results root (default knap-mcp/eval/results/live)
+#   --out <dir>      results root (default ${XDG_CACHE_HOME:-~/.cache}/knap-live,
+#                    outside the repo; pass --out knap-mcp/eval/results/live
+#                    to update the committed record, see
+#                    docs/tracks/LIVE-HYGIENE.md)
 #   --force          keep going after a failed smoke
 #
 # `all` means every ready profile except `fake`. smoke always runs first: it
@@ -127,7 +130,7 @@ if [ ! -x "$bin" ]; then
     (cd "$knap" && zig build) || die "zig build failed"
 fi
 out_given=$out
-out=${out:-$knap/eval/results/live}
+out=${out:-${XDG_CACHE_HOME:-$HOME/.cache}/knap-live}
 case $out in /*) ;; *) out=$(pwd)/$out ;; esac
 
 git_sha=$(git -C "$root" rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -140,9 +143,10 @@ trap 'rm -f "$summary"' EXIT
 status=0
 
 # KNAP_DEBUG makes acp.zig inherit agent stderr and drops other internals
-# into .err; suite() lands whatever a run prints into committed .err files,
-# and agent stderr may carry account details. Debug knap-mcp itself with a
-# direct invocation, not through this harness.
+# into .err; suite() lands whatever a run prints into .err files (ignored
+# under the committed record, not deleted), and agent stderr may carry
+# account details. Debug knap-mcp itself with a direct invocation, not
+# through this harness.
 unset KNAP_DEBUG
 
 # suite <name> <file-stem> <cmd...>: run one suite with stdout/stderr in
