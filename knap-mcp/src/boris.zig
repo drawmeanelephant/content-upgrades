@@ -1,15 +1,25 @@
 //! knap_publish_check core: stage one rendered markdown doc into a
-//! throwaway copy of the frozen boris site and run `boris validate` there.
+//! throwaway copy of a boris site and run `boris validate` there.
 //! A port of boris-site/stage-check.sh (--validate mode); keep the two in
 //! parity, rule for rule (docs/tracks/B2.md).
 //!
-//! Staging adapts the doc without adding or removing body lines, so every
-//! diagnostic maps back to the rendered doc exactly:
+//! The staging profile says how the doc is adapted. `frozen` (the
+//! default, and the only behavior stage-check.sh has) adapts the doc
+//! without adding or removing body lines, so every diagnostic maps back
+//! to the rendered doc exactly:
 //!   - the frontmatter becomes `title` only (boris keys are a closed set);
 //!   - `[[T]]` -> `[[slug(T)|T]]`, `[[T|L]]` -> `[[slug(T)|L]]`, `#frag`
-//!     kept, slug-form targets untouched;
-//!   - `![[T]]` loses its `!`: boris 0.8.2 cannot embed a page (it renders
-//!     an image of T.html, EASSET), so an embed is checked as a link.
+//!     kept, slug-form targets untouched.
+//! `raw` (for canonical-id sites like filed.fyi, where `[[T]]` is an
+//! identity, not a slug) is a passthrough:
+//!   - the frontmatter block passes through verbatim;
+//!   - `[[T]]` / `[[T|L]]` pass through unmodified — no slug, no label;
+//!   - the doc lands at its source-relative path under content/ (`--as`,
+//!     else `staged/<name>.md`), so path- and frontmatter-derived
+//!     identity exercise the real graph.
+//! In both profiles `![[T]]` loses its `!`: boris 0.8.2 cannot embed a
+//! page (it renders an image of T.html, EASSET), so an embed is checked
+//! as a link.
 
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
@@ -31,9 +41,17 @@ pub const Diagnostic = struct {
     target: ?[]const u8 = null,
 };
 
+/// How staging adapts the doc. `frozen` is the default and keeps the
+/// frozen demo site's conventions; `raw` passes a canonical-id site's
+/// records through untouched. See the module comment for the rules.
+pub const Profile = enum { frozen, raw };
+
 pub const Report = struct {
     ok: bool,
-    /// Entity id of the staged doc: `staged/<name>`.
+    /// The staging profile this run used, for auditability.
+    profile: Profile,
+    /// Entity id of the staged doc: `staged/<name>` under frozen, the
+    /// content-relative source path under raw.
     staged_as: []const u8,
     /// Pages in the staged site, the doc included.
     pages: usize,
@@ -50,28 +68,93 @@ pub fn siteDir(ctx: *Ctx) Error![]const u8 {
     return std.fmt.allocPrint(ctx.arena, "{s}/../../boris-site", .{ctx.templates_dir});
 }
 
-/// Check that every wiki-link in `doc` (rendered markdown) resolves against
-/// the frozen site. `name` names the staged copy (`staged/<name>`); bytes
-/// outside [A-Za-z0-9._-] become `-`. Fails (ctx.err_msg) when the doc
-/// cannot be staged or boris cannot run; content problems are diagnostics.
-pub fn check(ctx: *Ctx, doc: []const u8, name: []const u8) Error!Report {
+/// The resolved site configuration: the staging profile plus the knobs
+/// `boris validate` needs for a non-default site.
+pub const SiteConfig = struct {
+    profile: Profile = .frozen,
+    /// Theme root for `boris validate --theme` (validate renders pages,
+    /// so a site whose layout is not `themes/boris` must name it). null
+    /// keeps boris's built-in default.
+    theme: ?[]const u8 = null,
+};
+
+/// `<site>/knap-site.json`, discovered next to `content/`:
+/// `{"staging": "frozen"|"raw", "theme": "<theme root, site-relative>"}`.
+/// Each key has an env override — `KNAP_BORIS_STAGING`, `KNAP_BORIS_THEME`
+/// — and a default (frozen; boris's own theme default). A set-but-unknown
+/// staging name, a malformed file, or an escaping theme path fails
+/// loudly — never a silent fallback.
+pub fn siteConfig(ctx: *Ctx, site: []const u8) Error!SiteConfig {
+    var c: SiteConfig = .{};
+    const path = try std.fmt.allocPrint(ctx.arena, "{s}/knap-site.json", .{site});
+    const bytes = std.Io.Dir.readFileAlloc(.cwd(), ctx.io, path, ctx.arena, .limited(1024 * 1024)) catch |e| switch (e) {
+        error.FileNotFound => null,
+        else => return ctx.fail("cannot read {s} ({s})", .{ path, @errorName(e) }),
+    };
+    if (bytes) |b| {
+        const SiteProfile = struct {
+            staging: ?[]const u8 = null,
+            theme: ?[]const u8 = null,
+        };
+        const p = std.json.parseFromSliceLeaky(SiteProfile, ctx.arena, b, .{ .ignore_unknown_fields = true }) catch
+            return ctx.fail("cannot parse {s} as JSON", .{path});
+        if (p.staging) |s| c.profile = std.meta.stringToEnum(Profile, s) orelse
+            return ctx.fail("{s}: staging '{s}' is not a staging profile (frozen|raw)", .{ path, s });
+        c.theme = p.theme;
+    }
+    if (ctx.environ.get("KNAP_BORIS_STAGING")) |v| {
+        const s = std.mem.trim(u8, v, " \t\r\n");
+        if (s.len > 0) c.profile = std.meta.stringToEnum(Profile, s) orelse
+            return ctx.fail("KNAP_BORIS_STAGING '{s}' is not a staging profile (frozen|raw)", .{s});
+    }
+    if (ctx.environ.get("KNAP_BORIS_THEME")) |v| {
+        const s = std.mem.trim(u8, v, " \t\r\n");
+        if (s.len > 0) c.theme = s;
+    }
+    if (c.theme) |t| {
+        if (std.fs.path.isAbsolute(t) or std.mem.indexOf(u8, t, "..") != null)
+            return ctx.fail("theme '{s}' must stay inside the site (a relative path like themes/boris)", .{t});
+    }
+    return c;
+}
+
+/// Check that every wiki-link in `doc` (rendered markdown) resolves
+/// against the site. `name` names the staged copy (`staged/<name>`;
+/// bytes outside [A-Za-z0-9._-] become `-`); `as` overrides that with a
+/// source path the doc occupies under content/ (raw profile only).
+/// Fails (ctx.err_msg) when the doc cannot be staged or boris cannot
+/// run; content problems are diagnostics.
+pub fn check(ctx: *Ctx, doc: []const u8, name: []const u8, as: ?[]const u8) Error!Report {
     const t0 = std.Io.Clock.Timestamp.now(ctx.io, .awake);
     const arena = ctx.arena;
 
-    const staged = stage(arena, doc) catch |e| switch (e) {
+    const site = try siteDir(ctx);
+    const config = try siteConfig(ctx, site);
+    const profile = config.profile;
+    if (as != null and profile != .raw)
+        return ctx.fail("--as sets the staged source path; it needs the raw staging profile", .{});
+
+    const staged = stage(arena, doc, profile) catch |e| switch (e) {
         error.UnclosedFrontmatter => return ctx.fail("doc has an unclosed frontmatter block", .{}),
         error.OutOfMemory => return error.OutOfMemory,
     };
-    const base = try stagedName(arena, name);
-    const rel = try std.fmt.allocPrint(arena, "staged/{s}.md", .{base});
+    const rel = if (as) |a|
+        try sourceRelPath(ctx, a)
+    else
+        try std.fmt.allocPrint(arena, "staged/{s}.md", .{try stagedName(arena, name)});
 
     const dir = try store.scratchFile(ctx, "boris");
     defer std.Io.Dir.deleteTree(.cwd(), ctx.io, dir) catch {};
-    const site = try siteDir(ctx);
-    const pages = try copyTree(ctx, site, dir, "content") + 1;
+    var pages = try copyTree(ctx, site, dir, "content");
     _ = try copyTree(ctx, site, dir, "themes");
 
     const doc_path = try std.fmt.allocPrint(arena, "{s}/content/{s}", .{ dir, rel });
+    // Under raw the doc can land on an existing record's path — replacing
+    // it is the point — so it adds a page only when the path was free.
+    std.Io.Dir.access(.cwd(), ctx.io, doc_path, .{}) catch |e| switch (e) {
+        error.FileNotFound => pages += 1,
+        else => {},
+    };
     std.Io.Dir.createDirPath(.cwd(), ctx.io, std.fs.path.dirname(doc_path).?) catch
         return ctx.fail("cannot create staging dir", .{});
     std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = doc_path, .data = staged.text }) catch
@@ -90,8 +173,11 @@ pub fn check(ctx: *Ctx, doc: []const u8, name: []const u8) Error!Report {
     // The deadline is absolute (not an idle timeout) and run() kills the
     // child when it fires.
     const secs = ctx.envSecs("KNAP_BORIS_TIMEOUT", 60);
+    var argv: std.ArrayList([]const u8) = .empty;
+    try argv.appendSlice(arena, &.{ exe, "validate", "--input", "content", "--report", "report.json", "--quiet" });
+    if (config.theme) |t| try argv.appendSlice(arena, &.{ "--theme", t });
     const result = std.process.run(arena, ctx.io, .{
-        .argv = &.{ exe, "validate", "--input", "content", "--report", "report.json", "--quiet" },
+        .argv = argv.items,
         .cwd = .{ .path = dir },
         .stdout_limit = .limited(1024 * 1024),
         .stderr_limit = .limited(4 * 1024 * 1024),
@@ -122,6 +208,7 @@ pub fn check(ctx: *Ctx, doc: []const u8, name: []const u8) Error!Report {
     const elapsed = t0.untilNow(ctx.io).raw.nanoseconds;
     return .{
         .ok = errors == 0,
+        .profile = profile,
         .staged_as = rel[0 .. rel.len - ".md".len],
         .pages = pages,
         .links = staged.links.len,
@@ -154,6 +241,43 @@ fn firstLine(s: []const u8) []const u8 {
     return t[0 .. std.mem.indexOfScalar(u8, t, '\n') orelse t.len];
 }
 
+/// A `--as` source path becomes the doc's path under content/: the part
+/// after the first `content` component when one is present (so both
+/// `content/mascots/x.md` and `/site/content/mascots/x.md` land at
+/// `mascots/x.md`), else the path itself (`mascots/x.md`). `.`
+/// components are dropped; `..`, empty results, and non-`.md` names are
+/// rejected — the staged doc must land inside content/ where boris
+/// picks it up as a page.
+fn sourceRelPath(ctx: *Ctx, as: []const u8) Error![]const u8 {
+    const absolute = as.len > 0 and as[0] == '/';
+    var comps: std.ArrayList([]const u8) = .empty;
+    var it = std.mem.splitScalar(u8, as, '/');
+    while (it.next()) |c| {
+        if (c.len == 0 or std.mem.eql(u8, c, ".")) continue;
+        if (std.mem.eql(u8, c, ".."))
+            return ctx.fail("--as path '{s}' cannot contain '..'", .{as});
+        try comps.append(ctx.arena, c);
+    }
+    var start: usize = 0;
+    var saw_content = false;
+    for (comps.items, 0..) |c, i| {
+        if (std.mem.eql(u8, c, "content")) {
+            start = i + 1;
+            saw_content = true;
+            break;
+        }
+    }
+    if (absolute and !saw_content)
+        return ctx.fail("--as path '{s}' is absolute but names no content/ dir", .{as});
+    const parts = comps.items[start..];
+    if (parts.len == 0)
+        return ctx.fail("--as path '{s}' ends at the content root", .{as});
+    const rel = try std.mem.join(ctx.arena, "/", parts);
+    if (!std.mem.endsWith(u8, rel, ".md"))
+        return ctx.fail("--as path '{s}' must name a .md file", .{as});
+    return rel;
+}
+
 /// stage-check.sh naming: bytes outside [A-Za-z0-9._-] become `-`; an
 /// empty or dot-leading name gets a `doc` prefix.
 fn stagedName(arena: std.mem.Allocator, name: []const u8) Error![]const u8 {
@@ -182,6 +306,9 @@ pub const Link = struct {
 pub const Staged = struct {
     text: []const u8,
     links: []Link,
+    /// The profile the text was staged under; report mapping needs it
+    /// (raw keeps doc coordinates, so frontmatter lines need no remap).
+    profile: Profile = .frozen,
     /// Original line count minus staged line count (the frontmatter shrink).
     delta: i64,
     /// Doc lines of the title and the closing `---`; 0 when absent.
@@ -219,10 +346,10 @@ fn findLink(s: []const u8) ?[2]usize {
     return null;
 }
 
-pub fn stage(arena: std.mem.Allocator, doc: []const u8) error{ UnclosedFrontmatter, OutOfMemory }!Staged {
+pub fn stage(arena: std.mem.Allocator, doc: []const u8, profile: Profile) error{ UnclosedFrontmatter, OutOfMemory }!Staged {
     var out: std.ArrayList(u8) = .empty;
     var links: std.ArrayList(Link) = .empty;
-    var st: Staged = .{ .text = "", .links = &.{}, .delta = 0 };
+    var st: Staged = .{ .text = "", .links = &.{}, .profile = profile, .delta = 0 };
     var fm: enum { none, open, closed } = .none;
     var title: []const u8 = "";
     var nr: u32 = 0;
@@ -234,9 +361,22 @@ pub fn stage(arena: std.mem.Allocator, doc: []const u8) error{ UnclosedFrontmatt
         nr += 1;
         if (nr == 1 and std.mem.eql(u8, line, "---")) {
             fm = .open;
+            if (profile == .frozen) continue;
+            staged += 1;
+            try out.appendSlice(arena, "---\n");
             continue;
         }
         if (fm == .open) {
+            if (profile == .raw) {
+                if (std.mem.eql(u8, line, "---")) {
+                    fm = .closed;
+                    st.fm_close_line = nr;
+                }
+                staged += 1;
+                try out.appendSlice(arena, line);
+                try out.append(arena, '\n');
+                continue;
+            }
             if (std.mem.eql(u8, line, "---")) {
                 fm = .closed;
                 st.fm_close_line = nr;
@@ -257,10 +397,12 @@ pub fn stage(arena: std.mem.Allocator, doc: []const u8) error{ UnclosedFrontmatt
             continue;
         }
         staged += 1;
-        try rewriteLine(arena, &out, &links, line, nr, staged);
+        try rewriteLine(arena, &out, &links, line, nr, staged, profile);
         try out.append(arena, '\n');
     }
-    if (fm == .open) return error.UnclosedFrontmatter;
+    // raw is a passthrough: an unclosed frontmatter block reaches boris
+    // as-is and comes back as a real diagnostic, not a staging failure.
+    if (fm == .open and profile == .frozen) return error.UnclosedFrontmatter;
     st.text = out.items;
     st.links = links.items;
     st.delta = @as(i64, nr) - staged;
@@ -274,6 +416,7 @@ fn rewriteLine(
     line: []const u8,
     nr: u32,
     staged_line: u32,
+    profile: Profile,
 ) !void {
     const line_start = out.items.len;
     var consumed: usize = 0;
@@ -294,8 +437,10 @@ fn rewriteLine(
             frag = target[h..];
             target = target[0..h];
         }
-        const id = try slug(arena, target);
-        const rewritten = id.len > 0 and !std.mem.eql(u8, id, target);
+        // raw: the target is a canonical id, emitted byte-for-byte; the
+        // recorded id is the pre-frag, pre-label target boris looks up.
+        const id = if (profile == .raw) target else try slug(arena, target);
+        const rewritten = profile == .frozen and id.len > 0 and !std.mem.eql(u8, id, target);
         const emitted: u32 = @intCast(if (rewritten)
             "[[|]]".len + id.len + frag.len + label.len
         else
@@ -405,7 +550,9 @@ pub fn mapReport(
                 };
                 o.column = clampU32(@as(i64, bc) - drift);
             } else {
-                o.line = switch (bl) {
+                // frozen rewrote the frontmatter to a fixed 3-line block;
+                // raw staged it verbatim, so boris lines are doc lines.
+                o.line = if (st.profile == .raw) bl else switch (bl) {
                     2 => st.title_line,
                     3 => st.fm_close_line,
                     else => bl,
@@ -501,7 +648,7 @@ test "stage rewrites frontmatter, links and embeds without moving body lines" {
         \\![[AcmeDB 2.0 migration guide]] [[Sources#reliability-scale|scale]]
         \\
     ;
-    const st = try stage(a.allocator(), doc);
+    const st = try stage(a.allocator(), doc, .frozen);
     try testing.expectEqualStrings(
         \\---
         \\title: "Verdict: AcmeDB"
@@ -536,15 +683,15 @@ test "stage edge cases: no title, no frontmatter, unclosed frontmatter" {
     var a = std.heap.ArenaAllocator.init(testing.allocator);
     defer a.deinit();
     const ar = a.allocator();
-    const no_title = try stage(ar, "---\nyear: 1\n---\nbody");
+    const no_title = try stage(ar, "---\nyear: 1\n---\nbody", .frozen);
     try testing.expectEqualStrings("body\n", no_title.text);
     try testing.expectEqual(@as(i64, 3), no_title.delta);
-    const quoted = try stage(ar, "---\ntitle:  say \"hi\" \n---\n");
+    const quoted = try stage(ar, "---\ntitle:  say \"hi\" \n---\n", .frozen);
     try testing.expectEqualStrings("---\ntitle: say \"hi\"\n---\n", quoted.text);
-    const plain = try stage(ar, "# x\n\n[[a b]]\n");
+    const plain = try stage(ar, "# x\n\n[[a b]]\n", .frozen);
     try testing.expectEqualStrings("# x\n\n[[a-b|a b]]\n", plain.text);
     try testing.expectEqual(@as(i64, 0), plain.delta);
-    try testing.expectError(error.UnclosedFrontmatter, stage(ar, "---\ntitle: x\n"));
+    try testing.expectError(error.UnclosedFrontmatter, stage(ar, "---\ntitle: x\n", .frozen));
 }
 
 test "mapReport maps links, body lines, frontmatter and routes back to the doc" {
@@ -552,7 +699,7 @@ test "mapReport maps links, body lines, frontmatter and routes back to the doc" 
     defer a.deinit();
     const ar = a.allocator();
     const doc = "---\ntitle: \"T\"\nyear: 1\n---\n# T\n\n- [[AcmeDB SOC 2 audit report]] x\n[a](Full%20changelog) ![[Gone]]\n";
-    const st = try stage(ar, doc);
+    const st = try stage(ar, doc, .frozen);
     const report =
         \\{"ok":false,"diagnostics":[
         \\{"severity":"error","code":"EREFERENCEMISSING","message":"wiki-link target \"acmedb-soc-2-audit-report\" not found in the page graph","sourcePath":"staged/t.md","line":6,"column":3,"id":"acmedb-soc-2-audit-report"},
@@ -592,7 +739,7 @@ test "mapReport clamps out-of-range positions and undoes per-line column drift" 
     defer a.deinit();
     const ar = a.allocator();
     const doc = "# T\n\n- [[AcmeDB docs — backups]] tail\n";
-    const st = try stage(ar, doc);
+    const st = try stage(ar, doc, .frozen);
     const report =
         \\{"ok":false,"diagnostics":[
         \\{"severity":"error","code":"EXYZ","message":"huge","sourcePath":"staged/t.md","line":99999999999,"column":-5},
@@ -614,4 +761,137 @@ test "stagedName follows stage-check.sh" {
     try testing.expectEqualStrings("doc-1-2", try stagedName(a.allocator(), "doc-1-2"));
     try testing.expectEqualStrings("a-b-c", try stagedName(a.allocator(), "a b/c"));
     try testing.expectEqualStrings("doc.x", try stagedName(a.allocator(), ".x"));
+}
+
+test "stage raw: frontmatter and link targets pass through, embeds stay link-checked" {
+    var a = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a.deinit();
+    const doc =
+        \\---
+        \\title: "Blamey McTypoface"
+        \\id: mascots/M-0003
+        \\parent: mascots
+        \\status: archived
+        \\tags: ["mascots"]
+        \\---
+        \\# Blamey
+        \\- Mentored by [[limericks/LIM-0155|Patchy Mx.CLI]]
+        \\- Also [[limericks/LIM-0155]] and ![[aphorisms/APH-0008]]
+        \\
+    ;
+    const st = try stage(a.allocator(), doc, .raw);
+    // Byte-identical except the dropped embed bang; no slug, no label
+    // injection, frontmatter untouched, delta 0.
+    try testing.expectEqualStrings(
+        \\---
+        \\title: "Blamey McTypoface"
+        \\id: mascots/M-0003
+        \\parent: mascots
+        \\status: archived
+        \\tags: ["mascots"]
+        \\---
+        \\# Blamey
+        \\- Mentored by [[limericks/LIM-0155|Patchy Mx.CLI]]
+        \\- Also [[limericks/LIM-0155]] and [[aphorisms/APH-0008]]
+        \\
+    , st.text);
+    try testing.expectEqual(@as(i64, 0), st.delta);
+    try testing.expectEqual(@as(usize, 3), st.links.len);
+    try testing.expectEqualStrings("limericks/LIM-0155", st.links[0].id);
+    try testing.expectEqualStrings("[[limericks/LIM-0155|Patchy Mx.CLI]]", st.links[0].text);
+    // The embed's staged [[ lands one column left of the doc's bang.
+    try testing.expectEqual(@as(u32, 36), st.links[2].col);
+    try testing.expectEqual(@as(u32, 35), st.links[2].staged_col);
+    try testing.expectEqualStrings("![[aphorisms/APH-0008]]", st.links[2].text);
+    // Raw is a passthrough: unclosed frontmatter stages, not an error.
+    const open = try stage(a.allocator(), "---\ntitle: x\n", .raw);
+    try testing.expectEqualStrings("---\ntitle: x\n", open.text);
+    try testing.expectEqual(@as(usize, 0), open.links.len);
+}
+
+fn testCtx(a: std.mem.Allocator, env: *std.process.Environ.Map) Ctx {
+    return .{
+        .arena = a,
+        .gpa = a,
+        .io = testing.io,
+        .environ = env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = "x",
+        .project_root = ".",
+    };
+}
+
+test "siteConfig: env wins, file next, default frozen, unknown fails" {
+    var a = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a.deinit();
+    const ar = a.allocator();
+    var env: std.process.Environ.Map = .init(ar);
+    var ctx = testCtx(ar, &env);
+    const writeProfile = struct {
+        fn f(dir: std.testing.TmpDir, data: []const u8) !void {
+            try dir.dir.writeFile(std.testing.io, .{ .sub_path = "knap-site.json", .data = data });
+        }
+    }.f;
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const site = try std.fmt.allocPrint(ar, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+
+    // No env, no file: frozen, boris's default theme.
+    var c = try siteConfig(&ctx, site);
+    try testing.expectEqual(Profile.frozen, c.profile);
+    try testing.expect(c.theme == null);
+    // File pins raw and a theme.
+    try writeProfile(tmp, "{\"staging\":\"raw\",\"theme\":\"themes/cantilever\"}");
+    c = try siteConfig(&ctx, site);
+    try testing.expectEqual(Profile.raw, c.profile);
+    try testing.expectEqualStrings("themes/cantilever", c.theme.?);
+    // File without a staging key still defaults frozen.
+    try writeProfile(tmp, "{\"schema\":{}}");
+    try testing.expectEqual(Profile.frozen, (try siteConfig(&ctx, site)).profile);
+    // Unknown file value and malformed JSON fail, no silent fallback.
+    try writeProfile(tmp, "{\"staging\":\"bogus\"}");
+    try testing.expectError(error.ToolFailed, siteConfig(&ctx, site));
+    try writeProfile(tmp, "not json");
+    try testing.expectError(error.ToolFailed, siteConfig(&ctx, site));
+    // A theme escaping the site fails too.
+    try writeProfile(tmp, "{\"theme\":\"../outside\"}");
+    try testing.expectError(error.ToolFailed, siteConfig(&ctx, site));
+    try writeProfile(tmp, "{\"theme\":\"/abs/theme\"}");
+    try testing.expectError(error.ToolFailed, siteConfig(&ctx, site));
+    // Env overrides the file; an unknown env value fails the same way.
+    try writeProfile(tmp, "{\"staging\":\"raw\",\"theme\":\"themes/cantilever\"}");
+    try env.put("KNAP_BORIS_STAGING", " frozen ");
+    try env.put("KNAP_BORIS_THEME", "themes/local");
+    c = try siteConfig(&ctx, site);
+    try testing.expectEqual(Profile.frozen, c.profile);
+    try testing.expectEqualStrings("themes/local", c.theme.?);
+    try env.put("KNAP_BORIS_STAGING", "bogus");
+    try testing.expectError(error.ToolFailed, siteConfig(&ctx, site));
+    try testing.expectEqualStrings(
+        "KNAP_BORIS_STAGING 'bogus' is not a staging profile (frozen|raw)",
+        ctx.err_msg,
+    );
+}
+
+test "sourceRelPath maps --as onto a content-relative .md path" {
+    var a = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a.deinit();
+    const ar = a.allocator();
+    var env: std.process.Environ.Map = .init(ar);
+    var ctx = testCtx(ar, &env);
+
+    try testing.expectEqualStrings("mascots/x.md", try sourceRelPath(&ctx, "content/mascots/x.md"));
+    try testing.expectEqualStrings("mascots/x.md", try sourceRelPath(&ctx, "mascots/x.md"));
+    try testing.expectEqualStrings("mascots/x.md", try sourceRelPath(&ctx, "./content/mascots/x.md"));
+    try testing.expectEqualStrings("mascots/x.md", try sourceRelPath(&ctx, "/site/filed/content/mascots/x.md"));
+    // Canonical ids keep their case and their dots.
+    try testing.expectEqualStrings("limericks/LIM-0155.md", try sourceRelPath(&ctx, "limericks/LIM-0155.md"));
+
+    try testing.expectError(error.ToolFailed, sourceRelPath(&ctx, "content/../out.md"));
+    try testing.expectError(error.ToolFailed, sourceRelPath(&ctx, "content/"));
+    try testing.expectError(error.ToolFailed, sourceRelPath(&ctx, "content/mascots/x"));
+    try testing.expectError(error.ToolFailed, sourceRelPath(&ctx, "/tmp/x.md"));
 }
