@@ -46,6 +46,15 @@ pub const max_slice_bytes = 4096;
 const default_stub_words = 8;
 /// Growth bound for an array slot with no `max_items` annotation.
 const default_max_items = 3;
+/// Fallback `max_words` for a string field with `words` but no
+/// `max_words`: `words` sizes the probe stub, not a target length, so the
+/// default is a bounded multiple of it. The corpus's own values run to
+/// ~5x the stub (a 21-word bullet on a `words: 4` slot) and its no-gain
+/// wall to ~13x, so 16 bounds a runaway reply — before this, only the
+/// backend's stdout cap did — without re-tuning every expectation.
+/// Fields that need real length discipline still set `max_words`
+/// (the callouts shape does, at ~2x).
+const default_max_words_factor = 16;
 const max_input = 16 * 1024 * 1024;
 
 /// The system prompt for every enrich call; identical on every call so a
@@ -496,8 +505,9 @@ fn filled(data: ObjectMap, slots: []const Slot) usize {
 
 // --- Guards (plan section 2.6) ----------------------------------------------
 
-/// Type, enum, max_words, URL scheme, item shape, and `ref` integrity.
-/// Returns the rejection detail, or null when the value fits.
+/// Type, enum, max_words (explicit, else `words` times
+/// `default_max_words_factor`), URL scheme, item shape, and `ref`
+/// integrity. Returns the rejection detail, or null when the value fits.
 pub fn checkSchema(arena: std.mem.Allocator, s: Slot, value: Value, data: ObjectMap) !?[]const u8 {
     switch (s.field.kind) {
         .string, .strings, .keyed => {
@@ -586,10 +596,9 @@ fn checkString(arena: std.mem.Allocator, f: Field, v: Value) !?[]const u8 {
             if (std.mem.eql(u8, e, s)) break;
         } else return try std.fmt.allocPrint(arena, "enum: '{s}' is not one of {s}", .{ s, try std.mem.join(arena, "|", f.enum_values) });
     }
-    if (f.max_words) |m| {
-        const n = countWords(s);
-        if (n > m) return try std.fmt.allocPrint(arena, "max_words: {d} > {d}", .{ n, m });
-    }
+    const word_cap = f.max_words orelse f.words *| default_max_words_factor;
+    const n = countWords(s);
+    if (n > word_cap) return try std.fmt.allocPrint(arena, "max_words: {d} > {d}", .{ n, word_cap });
     if (f.url) {
         const scheme = std.mem.startsWith(u8, s, "https://") or std.mem.startsWith(u8, s, "http://");
         if (!scheme or std.mem.indexOfAny(u8, s, " \t") != null) return "url: needs an http/https URL";
@@ -670,6 +679,20 @@ fn countWords(s: []const u8) usize {
 /// or reshape the block it lands in, which is the model touching layout.
 const inert_tokens = [_][]const u8{ "![[", "[[", "[^", "](", "> [!", "```", "{{", "{%", "**", "__", "~~", "==", "`", "|" };
 
+/// A `*` or `_` that can open an emphasis run: a word character on its
+/// right and a non-word boundary (or the string start) on its left. The
+/// token list covers the paired forms (`**`, `__`); this catches the lone
+/// delimiters, which still style runs (`_a_ _b_ …`) and so are not inert.
+/// Requiring a non-word left edge keeps intraword underscores legal —
+/// `snake_case` cannot open emphasis, so values like `wal_dir` pass — and
+/// keeps a `*` with no word to its right (`2 * 3`) plain math.
+fn opensEmphasis(s: []const u8, i: usize) bool {
+    const c = s[i];
+    if (c != '*' and c != '_') return false;
+    if (i + 1 >= s.len or !std.ascii.isAlphanumeric(s[i + 1])) return false;
+    return i == 0 or !std.ascii.isAlphanumeric(s[i - 1]);
+}
+
 /// The first contract violation in any string inside `value`, or null.
 pub fn inertViolation(value: Value) ?[]const u8 {
     switch (value) {
@@ -689,6 +712,9 @@ fn inertString(s: []const u8) ?[]const u8 {
     if (std.mem.indexOfAny(u8, s, "\r\n") != null) return "newline";
     for (inert_tokens) |t| {
         if (std.mem.indexOf(u8, s, t) != null) return t;
+    }
+    for (s, 0..) |_, i| {
+        if (opensEmphasis(s, i)) return if (s[i] == '*') "*emphasis" else "_emphasis";
     }
     for (s, 0..) |c, i| {
         if (c != '<' or i + 1 >= s.len) continue;
@@ -1639,6 +1665,20 @@ test "schema check: enum, url, unknown and missing fields, ref, row width" {
     const row = try std.json.parseFromSliceLeaky(Value, a, "[\"a\",\"b\",\"c\"]", .{});
     try testing.expectEqualStrings("row has 3 cells, table has 2", (try checkSchema(a, slotNamed(sh, "grid[+]"), row, d)).?);
     try testing.expectEqualStrings("expected a string", (try checkSchema(a, slotNamed(sh, "author"), .{ .integer = 3 }, d)).?);
+
+    // With no `max_words` the cap is `words` x default_max_words_factor
+    // (author: 3 x 16); an explicit `max_words` always wins.
+    const wall = comptime blk: {
+        var s: []const u8 = "";
+        for (0..3 * default_max_words_factor + 2) |_| s = s ++ "word ";
+        break :blk s;
+    };
+    try testing.expectEqualStrings("max_words: 50 > 48", (try checkSchema(a, slotNamed(sh, "author"), .{ .string = wall }, d)).?);
+    const sh2 = try parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "s":{"type":"string","optional":true,"apparatus":"list","max_items":2,"words":2,"max_words":3}}}
+    );
+    try testing.expectEqualStrings("max_words: 4 > 3", (try checkSchema(a, slotNamed(sh2, "s"), .{ .string = "one two three four" }, d)).?);
 }
 
 test "schema check: ref integrity applies to scalar and array<string> slots" {
@@ -1767,12 +1807,14 @@ test "isInert rejects markup anywhere in a value" {
         .{ "{{ x }}", "{{" },
         .{ "{% if %}", "{%" },
         .{ "very **bold**", "**" },
+        .{ "single *styled* run", "*emphasis" },
+        .{ "_a_ _b_ _c_", "_emphasis" },
         .{ "two\nparagraphs", "newline" },
         .{ "- a list", "list marker" },
         .{ "1. first", "list marker" },
     };
     for (bad) |b| try testing.expectEqualStrings(b[1], inertString(b[0]).?);
-    const good = [_][]const u8{ "Plain prose, with commas.", "3 < 4 and 5 > 2", "1.9.x", "C# is fine-ish" };
+    const good = [_][]const u8{ "Plain prose, with commas.", "3 < 4 and 5 > 2", "1.9.x", "C# is fine-ish", "wal_dir and storage.wal_path", "2 * 3 = 6", "a*b" };
     for (good) |g| try testing.expect(inertString(g) == null);
 }
 
