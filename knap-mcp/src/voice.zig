@@ -703,7 +703,7 @@ fn containsCp(s: []const u8, cp: u21) bool {
 /// curated pictograph list. Each may be followed by U+FE0F. A named
 /// list, not blocks, so a new emoji needs an explicit entry here.
 const allowed_emoji = [_]u21{
-    0x2728,  0x26A1,  0x26A0,  0x2705,  0x274C,  0x2615, // ✨ ⚡ ⚠ ✅ ❌ ☕
+    0x2728, 0x26A1, 0x26A0, 0x2705, 0x274C, 0x2615, // ✨ ⚡ ⚠ ✅ ❌ ☕
     0x1F525, 0x1F480, 0x1F644, 0x1F381, 0x1FAA3, 0x1F3DB, // 🔥 💀 🙄 🎁 🪣 🏛
     0x1F680, 0x1F41B, 0x1F389, 0x1F4C9, // 🚀 🐛 🎉 📉
 };
