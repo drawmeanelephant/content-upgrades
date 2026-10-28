@@ -57,7 +57,10 @@ pub const SignalRule = struct {
 };
 
 /// Doc regions a voice pass may rewrite. Policy declares; the voice
-/// walker (FILED-VOICE) classifies.
+/// walker (FILED-VOICE) classifies. `verse` and `headings` are named
+/// regions but frozen: the walker never rewrites them, so naming one
+/// in `voice.regions` is a load error (#359) — only `paragraphs` and
+/// `list_items` may be granted.
 pub const Region = enum {
     /// Prose paragraphs.
     paragraphs,
@@ -359,10 +362,16 @@ const Parser = struct {
 
     fn voice(p: *Parser, v: std.json.Value, where: []const u8) !Voice {
         const o = try p.object(v, where, &.{ "tones", "regions" });
-        return .{
-            .tones = try p.enumList(Tone, o.get("tones") orelse return p.err("{s}: missing \"tones\" ([] denies voice)", .{where}), try p.fmtPath("{s}.tones", .{where})),
-            .regions = try p.enumList(Region, o.get("regions") orelse return p.err("{s}: missing \"regions\" ([] denies voice)", .{where}), try p.fmtPath("{s}.regions", .{where})),
+        const tones = try p.enumList(Tone, o.get("tones") orelse return p.err("{s}: missing \"tones\" ([] denies voice)", .{where}), try p.fmtPath("{s}.tones", .{where}));
+        const regions = try p.enumList(Region, o.get("regions") orelse return p.err("{s}: missing \"regions\" ([] denies voice)", .{where}), try p.fmtPath("{s}.regions", .{where}));
+        // The doc-voice gate only covers paragraphs and list_items, so
+        // granting verse or headings is a silent no-op (#359). Fail the
+        // load instead of accepting a meaningless grant.
+        for (regions, 0..) |r, i| switch (r) {
+            .verse, .headings => return p.err("{s}.regions[{d}]: '{s}' is frozen — voice regions may only grant 'paragraphs' and 'list_items'", .{ where, i, @tagName(r) }),
+            else => {},
         };
+        return .{ .tones = tones, .regions = regions };
     }
 
     fn enumList(p: *Parser, comptime E: type, v: std.json.Value, where: []const u8) ![]const E {
@@ -494,6 +503,12 @@ test "parse rejects unknown keys, signals, modes, tones, regions loudly" {
     try expectRejects(
         \\{"schema":"knap-policy/1","collections":[{"name":"a","glob":"a/**","voice":{"tones":[],"regions":["stanzas"]}}]}
     , "voice.regions[0]: unknown value 'stanzas'");
+    try expectRejects(
+        \\{"schema":"knap-policy/1","collections":[{"name":"a","glob":"a/**","voice":{"tones":["mild"],"regions":["verse"]}}]}
+    , "voice.regions[0]: 'verse' is frozen");
+    try expectRejects(
+        \\{"schema":"knap-policy/1","collections":[{"name":"a","glob":"a/**","voice":{"tones":["mild"],"regions":["paragraphs","headings"]}}]}
+    , "voice.regions[1]: 'headings' is frozen");
     try expectRejects(
         \\{"schema":"knap-policy/1","collections":[{"name":"a","glob":"a/**","voice":{"tones":["mild"]}}]}
     , "missing \"regions\"");
