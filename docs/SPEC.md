@@ -5,7 +5,9 @@ AI that barfs out perfect, sassy markdown. One Zig binary. Zero JavaScript.
 Pitch line: **AI can't do layout. So we don't let it.**
 Precisely: the model never *authors* or *chooses* layout. Templates are fixed,
 server-side, human-authored. Voice writes JSON values; repair patches
-fragments that the compiler must re-verify. **Nothing ships unverified.**
+fragments that the compiler must re-verify. **Nothing ships unverified** at
+the token level: layout, markup and fact-shaped tokens are checked; the
+meaning of plain-word prose is not.
 Second line: **sourcing is what builds but isn't published.**
 
 ## The product, concretely
@@ -149,7 +151,9 @@ Fourteen tools, in `tools/list` order:
   constrained inline formatting — `**`, `*`, `~~` on words they added,
   code spans quoting the input, allowlisted emoji — within the tone's
   budget; an insert-only guard keeps values layout-safe. Same template
-  renders all tones — layout untouched.
+  renders all tones — layout untouched. The guard verifies tokens (facts,
+  markup, structure), not meaning: a new claim or a negation flip written
+  in plain words passes (`docs/tracks/VOICE-SCOPE.md`).
 - `knap_structure_hash(doc_id, strict?, ignore_formatting?)` — layout
   skeleton hash of a rendered doc: block and inline kinds with all text
   dropped; equal hashes mean the same layout. `strict` also keeps link
