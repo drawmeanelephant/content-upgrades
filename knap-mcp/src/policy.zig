@@ -28,6 +28,12 @@ pub const env_var = "KNAP_POLICY";
 
 const max_policy_bytes = 1 << 20;
 
+/// Per-glob `**` segment limit, enforced at load: a real collection
+/// glob uses one or two (`docs/**`, `**/*.md`), and even with the
+/// polynomial matcher a policy file can carry thousands — an absurd
+/// count only ever comes from a planted file, so it fails loudly.
+const max_globstar_segments = 64;
+
 /// What a signal is to a collection.
 pub const Mode = enum {
     /// Counts toward the policy score as it does toward the raw total.
@@ -285,19 +291,32 @@ const Parser = struct {
 
     fn globs(p: *Parser, v: std.json.Value, where: []const u8) ![]const []const u8 {
         if (v == .string) {
-            if (v.string.len == 0) return p.err("{s}: empty glob", .{where});
             const one = try p.ctx.arena.alloc([]const u8, 1);
-            one[0] = v.string;
+            one[0] = try p.glob(v.string, where);
             return one;
         }
         const items = p.array(v, where) catch return p.err("{s}: expected a glob string or an array of them", .{where});
         if (items.len == 0) return p.err("{s}: empty glob list", .{where});
         const out = try p.ctx.arena.alloc([]const u8, items.len);
         for (items, out, 0..) |item, *g, i| {
-            g.* = try p.string(item, try p.fmtPath("{s}[{d}]", .{ where, i }));
-            if (g.len == 0) return p.err("{s}[{d}]: empty glob", .{ where, i });
+            g.* = try p.glob(try p.string(item, try p.fmtPath("{s}[{d}]", .{ where, i })), try p.fmtPath("{s}[{d}]", .{ where, i }));
         }
         return out;
+    }
+
+    /// One validated glob string: non-empty, and under the `**` segment
+    /// cap — whole-segment `**` is what the matcher expands, so e.g.
+    /// `a/**b` doesn't count.
+    fn glob(p: *Parser, g: []const u8, where: []const u8) ![]const u8 {
+        if (g.len == 0) return p.err("{s}: empty glob", .{where});
+        var stars: usize = 0;
+        var it = std.mem.splitScalar(u8, g, '/');
+        while (it.next()) |seg| {
+            if (std.mem.eql(u8, seg, "**")) stars += 1;
+        }
+        if (stars > max_globstar_segments)
+            return p.err("{s}: too many '**' segments ({d}; limit {d})", .{ where, stars, max_globstar_segments });
+        return g;
     }
 
     fn signals(p: *Parser, v: std.json.Value, where: []const u8, out: *std.EnumArray(density.Id, SignalRule)) !void {
@@ -485,6 +504,28 @@ test "parse rejects unknown keys, signals, modes, tones, regions loudly" {
         \\{"schema":"knap-policy/1","collections":[{"name":"a"}]}
     , "missing \"glob\"");
     try expectRejects("{\"schema\":", "invalid JSON");
+}
+
+test "parse: globs over the '**' segment cap are rejected at load" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+
+    var src: std.ArrayList(u8) = .empty;
+    try src.appendSlice(a, "{\"schema\":\"knap-policy/1\",\"collections\":[{\"name\":\"a\",\"glob\":\"");
+    for (0..max_globstar_segments + 1) |_| try src.appendSlice(a, "**/");
+    try src.appendSlice(a, "x\"}]}");
+    try expectRejects(src.items, "too many '**' segments");
+
+    // At the cap the glob still loads; the count only applies to whole
+    // `**` segments, so `a/**b` is fine.
+    var ok: std.ArrayList(u8) = .empty;
+    try ok.appendSlice(a, "{\"schema\":\"knap-policy/1\",\"collections\":[{\"name\":\"a\",\"glob\":\"a/**b/");
+    for (0..max_globstar_segments) |_| try ok.appendSlice(a, "**/");
+    try ok.appendSlice(a, "x\"}]}");
+    _ = try parse(&ctx, "p.json", ok.items);
 }
 
 test "judge: a haiku with a table is out of policy; exempt signals don't drag" {
