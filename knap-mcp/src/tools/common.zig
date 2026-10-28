@@ -81,6 +81,50 @@ pub fn resolveDoc(ctx: *Ctx, arg: []const u8) ?DocArg {
     return .{ .bytes = bytes, .file_path = null };
 }
 
+/// Link/image destinations a value for --target html may carry. dogbed
+/// does no escaping, so anything without one of these schemes — relative
+/// or `#` targets included — can smuggle a live URL into the published
+/// page and is rejected outright.
+const html_schemes = [_][]const u8{ "http:", "https:", "mailto:" };
+
+fn htmlSchemeOk(dest: []const u8) bool {
+    for (html_schemes) |s| {
+        if (std.ascii.startsWithIgnoreCase(dest, s)) return true;
+    }
+    return false;
+}
+
+fn htmlString(s: []const u8) ?[]const u8 {
+    if (std.mem.indexOfScalar(u8, s, '<') != null) return "contains '<'";
+    var i: usize = 0;
+    while (std.mem.indexOfPos(u8, s, i, "](")) |p| {
+        var d = p + 2;
+        while (d < s.len and std.ascii.isWhitespace(s[d])) d += 1;
+        if (!htmlSchemeOk(s[d..])) return "has a link/image target outside http:|https:|mailto:";
+        i = p + 2;
+    }
+    return null;
+}
+
+/// The first html-target violation in any string inside `value`, or
+/// null. Same recursive walk as ratchet.inertViolation, different
+/// contract: markdown emphasis in a value is fine for html, but raw HTML
+/// (`<`, which also covers autolinks and `<...>`-wrapped destinations)
+/// and off-scheme link/image targets are not. Reject rather than escape.
+pub fn htmlDataViolation(value: std.json.Value) ?[]const u8 {
+    switch (value) {
+        .string => |s| return htmlString(s),
+        .array => |a| for (a.items) |v| {
+            if (htmlDataViolation(v)) |why| return why;
+        },
+        .object => |o| for (o.values()) |v| {
+            if (htmlDataViolation(v)) |why| return why;
+        },
+        else => {},
+    }
+    return null;
+}
+
 /// The store extension a file path implies: .md/.markdown → "md", other
 /// extensions pass through as-is, none → "txt".
 pub fn docExtForPath(path: []const u8) []const u8 {
@@ -144,4 +188,57 @@ test "requireData rejects non-objects and keeps number_string verbatim" {
     , .{});
     try std.testing.expectError(error.ToolFailed, requireData(&ctx, bad.object));
     try std.testing.expectEqualStrings("data must be a JSON object", ctx.err_msg);
+}
+
+test "htmlDataViolation rejects raw HTML and off-scheme link targets" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const bad = [_][]const u8{
+        \\{"title":"X <script>alert(1)</script>","summary":"s","take":"t"}
+        ,
+        \\{"title":"t","summary":"s <img src=x onerror=alert(1)> [l](javascript:alert(1))","take":"t"}
+        ,
+        \\{"title":"t","summary":"s","take":"<b>raw</b>"}
+        ,
+        \\{"nested":{"list":["ok","x ](JaVaScRiPt:alert(1))"]}}
+        ,
+        \\{"u":"[d](data:text/html,x) [v](\tvbscript:x) [r](/rel) [f](#frag) [e]()"}
+        ,
+    };
+    for (bad) |r| {
+        const v = try std.json.parseFromSliceLeaky(std.json.Value, a, r, .{});
+        try std.testing.expect(htmlDataViolation(v) != null);
+    }
+
+    const good = [_][]const u8{
+        \\{"u":"[ok](https://x.y) [m](mailto:a@b) [h](HTTP://x) [s]( http://x )"}
+        ,
+        \\{"n":3,"b":true,"u":null,"o":{"k":"v"},"a":["x","**emphasis**"]}
+        ,
+    };
+    for (good) |r| {
+        const v = try std.json.parseFromSliceLeaky(std.json.Value, a, r, .{});
+        try std.testing.expect(htmlDataViolation(v) == null);
+    }
+}
+
+test "htmlDataViolation passes every shipped data sample" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var d = try std.Io.Dir.openDir(.cwd(), std.testing.io, "data", .{ .iterate = true });
+    defer d.close(std.testing.io);
+    var it = d.iterate();
+    var n: usize = 0;
+    while (try it.next(std.testing.io)) |e| {
+        if (e.kind != .file or !std.mem.endsWith(u8, e.name, ".sample.json")) continue;
+        const text = try std.Io.Dir.readFileAlloc(d, std.testing.io, e.name, a, .limited(1 << 20));
+        const v = try std.json.parseFromSliceLeaky(std.json.Value, a, text, .{});
+        try std.testing.expect(htmlDataViolation(v) == null);
+        n += 1;
+    }
+    try std.testing.expect(n > 0);
 }
