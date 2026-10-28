@@ -5,11 +5,19 @@
   "status": "finished",
   "source_url": "https://www.gutenberg.org/cache/epub/72890/pg72890-images.html",
   "cover": "https://example.com/covers/the-machine-stops.jpg",
+  "epigraph": "Above her, beneath her, and around her, the Machine hummed eternally; she did not notice the noise, for she had been born with it in her ears.",
   "verdict": "read it tonight",
   "gaf": "high",
   "take": "a 1909 short story that called video calls, content about content, and the outage nobody knows how to fix",
   "tags": ["sci-fi", "short-story", "public-domain", "machines"],
   "summary": "Humanity lives underground in identical hexagonal rooms, talks to everyone through glowing plates, and quietly worships the Machine that runs it all. Kuno wants to see the sky with his own eyes. His mother Vashti finds this deeply embarrassing. Then the Machine starts to glitch, and nobody remembers how to fix it.",
+  "thesis": "A civilization that hands every need to a machine loses the knowledge, and then the will, to live without it.",
+  "argument": [
+    "Vashti's generation trades direct experience for comfort until second-hand ideas become the only respectable kind.",
+    "Kuno's walk to the surface proves the Machine's world is a choice, not a necessity, and that the body still works.",
+    "When the Machine begins to fail, nobody alive understands it well enough to repair what everyone depends on.",
+    "The Machine stops, and the people it infantilized die with it, while Kuno and Vashti finally meet without a plate between them."
+  ],
   "quotes": [
     {
       "text": "Imagine, if you can, a small room, hexagonal in shape, like the cell of a bee.",
@@ -41,6 +49,12 @@
     "Vashti is not a villain. She is just very, very comfortable, which is scarier.",
     "The Machine never turns evil. It just decays, and nobody remembers how it works. No robot uprising required.",
     "Forster wrote this before radio broadcasting existed. Before. Radio."
+  ],
+  "follow_ups": [
+    "Read Forster's 'The Celestial Omnibus' for the counter-argument.",
+    "Check Neil Postman's Technopoly for the same warning, decades later.",
+    "Compare the Mending Apparatus with your own incident runbook.",
+    "Revisit H. G. Wells's The Time Machine, the heaven Forster answered."
   ],
   "spoilers": "The Machine stops. Nobody can restart it, because nobody has understood it for generations, and even the Mending Apparatus is broken. Kuno and Vashti finally meet face to face as the cities collapse, with no plate between them, and it is the only real conversation in the whole story.",
   "bottom_line": "Read it tonight. It is free, it takes about an hour, and it will make your next outage feel personal.",
