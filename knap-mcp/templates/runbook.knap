@@ -2,10 +2,12 @@
    Preflight checks as a task list, numbered steps with per-step code
    blocks and expect notes, phases broken by `---` rules, rollback folded
    away, an escalation table, an error-budget formula and the postmortem
-   receipt. Optional fields vanish with their block; `lang` falls back to
-   sh. Callout kinds, callout titles and section headings are
-   template-owned: the model writes values only. Shape descriptor:
-   shapes/runbook.json.
+   receipt. An optional `appendix` palette closes the body: each item's
+   `kind` is server-picked (checklist, steps, code, quote) and the if
+   chain owns how it renders. Optional fields vanish with their block;
+   `lang` falls back to sh. Callout kinds, callout titles and section
+   headings are template-owned: the model writes values only. Shape
+   descriptor: shapes/runbook.json.
    Spacing: optional blocks open with a blank line and close with
    `{{ "" }}{% endif %}`, which shields the last content line's newline
    from the standalone-endif trim so every block ends exactly one newline.
@@ -84,7 +86,17 @@ Availability target: {{ slo_target | bold }} — monthly error budget:
 
 {{ postmortem_url | link:"Postmortem" }}
 {% endif %}
-{{ "" }}{% endif %}{% if related %}
+{{ "" }}{% endif %}{% if appendix %}
+{% for s in appendix %}
+{% if s.kind == "checklist" %}{{ s.title | h2 }}
+
+{{ s.items | list:"task" }}{% elseif s.kind == "steps" %}{{ s.title | h2 }}
+
+{{ s.items | list:"numbered" }}{% elseif s.kind == "code" %}{{ s.title | h2 }}
+
+{{ s.command | code_block:"sh" }}{% elseif s.kind == "quote" %}{{ s.text | blockquote }}{% endif %}
+
+{% endfor %}{{ "" }}{% endif %}{% if related %}
 
 See also: {{ related | wikilink | join:" · " }}
 {{ "" }}{% endif %}{% if notes %}

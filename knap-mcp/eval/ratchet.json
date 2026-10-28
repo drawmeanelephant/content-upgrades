@@ -30,7 +30,7 @@
       "id": "runbook-min",
       "template_id": "runbook",
       "data": "@../data/runbook.min.json",
-      "expect": {"min_gain": 20}
+      "expect": {"min_gain": 40}
     },
     {
       "id": "release-notes-sample",
