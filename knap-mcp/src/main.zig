@@ -189,6 +189,9 @@ pub fn main(init: std.process.Init) !u8 {
         report("init failed: {s}", .{@errorName(e)});
         return 1;
     };
+    // Reclaim scratch files from dead processes once per run — a
+    // SIGKILLed run's defers never ran, and nobody else sweeps them.
+    store.sweepStale(&ctx);
     // A lazily spawned acp agent must not outlive this process: shutdown
     // closes its stdin, gives a short grace, then kills and reaps it.
     // Idempotent — serve() defers its own call too.
@@ -321,15 +324,16 @@ fn schemaHasProp(schema: []const u8, prop: []const u8) bool {
     return std.mem.indexOf(u8, schema, needle) != null;
 }
 
-/// `-` reads all of stdin; anything else is a file path of JSON.
+/// `-` reads stdin (bounded by max_input, like the file branch);
+/// anything else is a file path of JSON.
 fn readData(ctx: *Ctx, path: []const u8) !std.json.Value {
     const bytes = if (std.mem.eql(u8, path, "-")) blk: {
         var buf: [8192]u8 = undefined;
         var r = std.Io.File.stdin().readerStreaming(ctx.io, &buf);
-        var aw: std.Io.Writer.Allocating = .init(ctx.arena);
-        _ = r.interface.streamRemaining(&aw.writer) catch
-            return ctx.fail("cannot read stdin", .{});
-        break :blk aw.written();
+        break :blk r.interface.allocRemaining(ctx.arena, .limited(max_input)) catch |e| switch (e) {
+            error.StreamTooLong => return ctx.fail("stdin data exceeds {d} bytes", .{max_input}),
+            else => return ctx.fail("cannot read stdin", .{}),
+        };
     } else std.Io.Dir.readFileAlloc(.cwd(), ctx.io, path, ctx.arena, .limited(max_input)) catch
         return ctx.fail("cannot read data file '{s}'", .{path});
 

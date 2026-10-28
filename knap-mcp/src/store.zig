@@ -31,8 +31,8 @@ pub fn put(ctx: *Ctx, extension: []const u8, bytes: []const u8) Error![]const u8
     counter += 1;
     const doc_id = try std.fmt.allocPrint(
         ctx.arena,
-        "doc-{d}-{d}",
-        .{ stamp(ctx), counter },
+        "doc-{d}-{d}-{d}",
+        .{ stamp(ctx), processId(), counter },
     );
     const rel = try std.fmt.allocPrint(ctx.arena, "{s}/{s}.{s}", .{ artifactsPath(ctx), doc_id, extension });
     std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = rel, .data = bytes }) catch
@@ -123,6 +123,27 @@ pub fn sweepScratch(ctx: *Ctx) void {
     }
 }
 
+/// Delete any process's `scratch-*` files older than an hour. main calls
+/// this once at startup so leftovers of a SIGKILLed or crashed run —
+/// 0600 request bodies holding full prompts, staged data files — don't
+/// linger forever; sweepScratch still handles the live pid's files per
+/// request. Non-`scratch-` names are never touched.
+pub fn sweepStale(ctx: *Ctx) void {
+    const dir_path = std.fmt.allocPrint(ctx.arena, "{s}/tmp", .{ctx.store_dir}) catch return;
+    var d = std.Io.Dir.openDir(.cwd(), ctx.io, dir_path, .{ .iterate = true }) catch return;
+    defer d.close(ctx.io);
+    const cutoff = std.Io.Timestamp.now(ctx.io, .real).nanoseconds - std.time.ns_per_hour;
+    var it = d.iterate();
+    while (it.next(ctx.io) catch null) |entry| {
+        if (entry.kind != .file) continue;
+        if (!std.mem.startsWith(u8, entry.name, "scratch-")) continue;
+        const stat = d.statFile(ctx.io, entry.name, .{}) catch continue;
+        if (stat.mtime.nanoseconds >= cutoff) continue;
+        const rel = std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ dir_path, entry.name }) catch continue;
+        std.Io.Dir.deleteFile(.cwd(), ctx.io, rel) catch {};
+    }
+}
+
 /// The artifacts FIFO cap: `KNAP_STORE_MAX_ARTIFACTS`, default 256, 0
 /// disables pruning.
 fn maxArtifacts(ctx: *Ctx) usize {
@@ -156,6 +177,7 @@ fn prune(ctx: *Ctx) void {
     std.mem.sort(Victim, docs.items, {}, struct {
         fn less(_: void, a: Victim, b: Victim) bool {
             if (a.key.ns != b.key.ns) return a.key.ns < b.key.ns;
+            if (a.key.pid != b.key.pid) return a.key.pid < b.key.pid;
             return a.key.counter < b.key.counter;
         }
     }.less);
@@ -165,22 +187,44 @@ fn prune(ctx: *Ctx) void {
     }
 }
 
-const Key = struct { ns: u64, counter: u64 };
+const Key = struct { ns: u64, pid: u64, counter: u64 };
 
-/// Sort key parsed from `doc-<ns>-<counter>.<ext>`; unparseable names
-/// sort oldest-first.
+/// Sort key parsed from `doc-<ns>-<pid>-<counter>.<ext>` and legacy
+/// `doc-<ns>-<counter>.<ext>` ids (pid 0, so old stores still prune
+/// oldest-first); unparseable names sort oldest-first.
 fn artifactKey(name: []const u8) Key {
     var rest = name["doc-".len..];
     rest = rest[0 .. std.mem.lastIndexOfScalar(u8, rest, '.') orelse rest.len];
     var parts = std.mem.splitScalar(u8, rest, '-');
-    return .{
-        .ns = std.fmt.parseInt(u64, parts.next() orelse "", 10) catch 0,
-        .counter = std.fmt.parseInt(u64, parts.next() orelse "", 10) catch 0,
+    const ns = std.fmt.parseInt(u64, parts.next() orelse "", 10) catch 0;
+    const second = std.fmt.parseInt(u64, parts.next() orelse "", 10) catch 0;
+    return if (parts.next()) |third| .{
+        .ns = ns,
+        .pid = second,
+        .counter = std.fmt.parseInt(u64, third, 10) catch 0,
+    } else .{
+        .ns = ns,
+        .pid = 0,
+        .counter = second,
     };
 }
 
 fn artifactsPath(ctx: *Ctx) []const u8 {
     return std.fmt.allocPrint(ctx.arena, "{s}/artifacts", .{ctx.store_dir}) catch ".knap-mcp/artifacts";
+}
+
+fn testCtx(a: std.mem.Allocator, env: *std.process.Environ.Map, tmp: *std.testing.TmpDir) !Ctx {
+    return .{
+        .arena = a,
+        .gpa = a,
+        .io = std.testing.io,
+        .environ = env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path[0..]}),
+        .project_root = ".",
+    };
 }
 
 test "scratchFile names carry the pid; put prunes to the newest N" {
@@ -191,17 +235,7 @@ test "scratchFile names carry the pid; put prunes to the newest N" {
     try env.put("KNAP_STORE_MAX_ARTIFACTS", "3");
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var ctx: Ctx = .{
-        .arena = a,
-        .gpa = a,
-        .io = std.testing.io,
-        .environ = &env,
-        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
-        .backend_kind = .mock,
-        .templates_dir = "templates",
-        .store_dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path[0..]}),
-        .project_root = ".",
-    };
+    var ctx = try testCtx(a, &env, &tmp);
 
     const scratch = try scratchFile(&ctx, "json");
     const prefix = try std.fmt.allocPrint(a, "scratch-{d}-", .{processId()});
@@ -218,4 +252,72 @@ test "scratchFile names carry the pid; put prunes to the newest N" {
     for (ids[2..]) |id| try std.testing.expect((try read(&ctx, id)) != null);
     const entries = try list(&ctx);
     try std.testing.expectEqual(@as(usize, 4), entries.len); // 3 doc-* + frozen
+}
+
+test "put ids carry the pid" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+
+    const id = try put(&ctx, "md", "x");
+    const pid_part = try std.fmt.allocPrint(a, "-{d}-", .{processId()});
+    try std.testing.expect(std.mem.indexOf(u8, id, pid_part) != null);
+}
+
+test "sweepStale removes only aged scratch files" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+
+    const dir = try scratchDir(&ctx);
+    const stale = try std.fmt.allocPrint(a, "{s}/scratch-1-1-1.json", .{dir}); // foreign pid
+    const fresh = try std.fmt.allocPrint(a, "{s}/scratch-1-2-2.json", .{dir});
+    const keeper = try std.fmt.allocPrint(a, "{s}/keep.txt", .{dir});
+    for ([_][]const u8{ stale, fresh, keeper }) |p|
+        try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = p, .data = "{}" });
+    // Two hours old — past the sweep cutoff.
+    const old: std.Io.Timestamp = .{
+        .nanoseconds = std.Io.Timestamp.now(std.testing.io, .real).nanoseconds - 2 * std.time.ns_per_hour,
+    };
+    for ([_][]const u8{ stale, keeper }) |p|
+        try std.Io.Dir.setTimestamps(.cwd(), std.testing.io, p, .{ .modify_timestamp = .{ .new = old } });
+
+    sweepStale(&ctx);
+
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.statFile(.cwd(), std.testing.io, stale, .{}));
+    _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, fresh, .{});
+    // Stale files that aren't scratch-* are left alone.
+    _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, keeper, .{});
+}
+
+test "prune orders mixed legacy and new doc ids by stamp" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    try env.put("KNAP_STORE_MAX_ARTIFACTS", "3");
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+
+    _ = try put(&ctx, "md", "x"); // creates the artifacts dir; newest stamp
+    const dir = artifactsPath(&ctx);
+    // Same stamp, two id shapes: the legacy two-part id (pid 0) sorts
+    // older than the three-part one.
+    const legacy = try std.fmt.allocPrint(a, "{s}/doc-5-9.md", .{dir});
+    const three = try std.fmt.allocPrint(a, "{s}/doc-5-{d}-1.md", .{ dir, processId() });
+    for ([_][]const u8{ legacy, three }) |p|
+        try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = p, .data = "x" });
+
+    _ = try put(&ctx, "md", "x"); // 4 files over cap 3: evicts the oldest
+    try std.testing.expect((try read(&ctx, "doc-5-9")) == null);
+    try std.testing.expect((try read(&ctx, try std.fmt.allocPrint(a, "doc-5-{d}-1", .{processId()}))) != null);
 }
