@@ -1,0 +1,16 @@
+{# palette.knap: ratchet eval fixture (lane MD-PAL). A block palette: each
+   `sections` item carries a server-picked `kind`, and the template owns
+   how every kind renders. The model never sees this chain; it is handed
+   one kind and fills only that kind's fields. #}{{ title | h1 }}
+
+{{ intro }}{% for s in sections %}
+
+
+
+{% if s.kind == "steps" %}{{ s.title | h2 }}
+
+{{ s.items | list:numbered }}{% elseif s.kind == "checklist" %}{{ s.title | h2 }}
+
+{{ s.items | list:task }}{% elseif s.kind == "code" %}{{ s.title | h2 }}
+
+{{ s.command | code_block:"sh" }}{% elseif s.kind == "quote" %}{{ s.text | blockquote }}{% endif %}{% endfor %}
