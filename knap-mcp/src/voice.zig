@@ -499,6 +499,13 @@ fn present(s: []const u8, tok: Token) bool {
     return hasWord(s, tok.text);
 }
 
+/// A URL token ends at whitespace, a quote, `<`, `>`, `)` or a
+/// backtick — so a code span may quote the input's URL (W6, #334).
+/// Trailing `.,;:!?` is trimmed: that is the sentence's punctuation,
+/// not the target's — `script: https://x/b` and `script, https://x/b,`
+/// carry the same URL (dogbed renders bare URLs as text, and linkifiers
+/// exclude trailing punctuation from the target). The trim is the
+/// documented rule (prompts/voice/README.md); it may change.
 fn urls(a: Allocator, s: []const u8, f: *Facts) !void {
     var i: usize = 0;
     while (i < s.len) {
@@ -509,7 +516,7 @@ fn urls(a: Allocator, s: []const u8, f: *Facts) !void {
         else
             0;
         var e = i + scheme;
-        while (scheme > 0 and e < s.len and std.mem.indexOfScalar(u8, " \t\"'<>)", s[e]) == null) e += 1;
+        while (scheme > 0 and e < s.len and std.mem.indexOfScalar(u8, " \t\"'<>`)", s[e]) == null) e += 1;
         if (scheme == 0 or e == i + scheme) {
             i += 1;
             continue;
@@ -750,6 +757,34 @@ fn containsCp(s: []const u8, cp: u21) bool {
         i += d.len;
     }
     return false;
+}
+
+/// Unicode White_Space — so a word cap cannot be evaded by joining the
+/// words with NBSP, thin space or friends instead of U+0020 (#334).
+fn isWordSpace(cp: u21) bool {
+    return switch (cp) {
+        0x09...0x0D, 0x20, 0x85, 0xA0, 0x1680 => true,
+        0x2000...0x200A, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000 => true,
+        else => false,
+    };
+}
+
+/// Words are runs separated by any Unicode whitespace.
+fn wordCount(s: []const u8) usize {
+    var n: usize = 0;
+    var i: usize = 0;
+    var in_word = false;
+    while (i < s.len) {
+        const d = nextCp(s, i);
+        if (isWordSpace(d.cp)) {
+            in_word = false;
+        } else if (!in_word) {
+            in_word = true;
+            n += 1;
+        }
+        i += d.len;
+    }
+    return n;
 }
 
 /// The emoji allowlist: a named set — the listed dingbats plus a short
@@ -1209,9 +1244,7 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     if (o_len < lo) try H.add(a, &c.hard, "too short: {d} bytes, min {d}", .{ o_len, lo });
     if (o_len > hi) try H.add(a, &c.hard, "too long: {d} bytes, max {d}", .{ o_len, hi });
     if (std.mem.indexOf(u8, role, "one-word") != null or std.mem.indexOf(u8, role, "four word") != null) {
-        var nw: usize = 0;
-        var it = std.mem.tokenizeAny(u8, out, " \t\n");
-        while (it.next()) |_| nw += 1;
+        const nw = wordCount(out);
         if (nw > 4) try H.add(a, &c.hard, "word-limited role, {d} words, max 4", .{nw});
     }
 
@@ -1815,7 +1848,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 62), lines.len);
+    try testing.expectEqual(@as(usize, 66), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, l.footnote_abutting, l.input, l.output);
         const all = try joined(a, c.hard.items);
@@ -2237,6 +2270,47 @@ test "guard: added HTML entities are rejected" {
     try testing.expect(!addsEntity(in_, "the boring &amp database that actually ships"));
     try testing.expect(addsEntity(in_, "the &#42;boring&#42; database that actually ships"));
     try testing.expect(addsEntity(in_, "the boring&nbsp;database that actually ships"));
+}
+
+test "guard: word cap splits on Unicode whitespace (#334)" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Five words joined by NBSP, thin space or ideographic space still
+    // count as five — the cap is not evaded by swapping U+0020 out.
+    for ([_][]const u8{
+        "it \xc2\xa0actually \xc2\xa0ships \xc2\xa0every \xc2\xa0day",
+        "it\xe2\x80\x89actually\xe2\x80\x89ships\xe2\x80\x89every\xe2\x80\x89day",
+        "it\xe3\x80\x80actually\xe3\x80\x80ships\xe3\x80\x80every\xe3\x80\x80day",
+    }) |out| {
+        const c = try guard(a, .spicy, "one-word verdict", false, "it ships", out);
+        try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "word-limited role, 5 words") != null);
+    }
+    // And the ASCII baseline still bites.
+    const c = try guard(a, .spicy, "one-word verdict", false, "it ships", "it actually ships every day");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "word-limited role, 5 words") != null);
+}
+
+test "guard: a code span may quote the input's URL (#334)" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // The URL token ends at the backtick, so quoting the input's URL in
+    // a code span is allowed the way W6 intends.
+    var c = try guard(a, .spicy, "r", false, "docs at https://example.com/bench today", "docs at `https://example.com/bench` today");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "adds url") == null);
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "drops url") == null);
+    // A different URL inside the span is still an invented URL.
+    c = try guard(a, .spicy, "r", false, "docs at https://example.com/bench today", "docs at `https://example.com/other` today");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "adds url https://example.com/other") != null);
+    // Trailing .,;:!? is sentence punctuation, not the target — it may
+    // change (the documented rule; see urls()).
+    c = try guard(a, .spicy, "r", false, "docs at https://example.com/bench today", "docs at https://example.com/bench, today");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "adds url") == null);
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "drops url") == null);
+    // Punctuation mid-URL is part of the target and cannot change.
+    c = try guard(a, .spicy, "r", false, "docs at https://example.com/bench?p=1 today", "docs at https://example.com/bench today");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "drops url https://example.com/bench?p=1") != null);
 }
 
 test "guard: length bounds count text, not formatting" {
