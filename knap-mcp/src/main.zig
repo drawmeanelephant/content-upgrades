@@ -119,8 +119,9 @@ const usage_tail =
     \\  --force                 ingest: admit non-markdown extensions
     \\  --glob <p>              audit file glob (default **/*.md)
     \\  --per-dir | --per-glob <name=glob,...>   audit rollup grouping
-    \\  --below <s>             audit: list docs whose total is under s
+    \\  --below <s|band>        audit: list docs whose total is under s (a policy band.min wins)
     \\  --jsonl <file>          audit: per-doc rows to file (default stdout)
+    \\  --policy <file> | --no-policy   audit: collection policy (default $KNAP_POLICY, else knap-policy.json in or above <dir>)
     \\  --as <path>             publish-check: staged source path (raw profile)
     \\  --probe                 backends: GET /models per live backend, acp handshake
     \\  -h, --help              this text; <command> -h shows that command's usage
@@ -626,6 +627,7 @@ test {
     _ = @import("formatcheck.zig");
     _ = @import("frontmatter.zig");
     _ = @import("mcp.zig");
+    _ = @import("policy.zig");
     _ = @import("ratchet.zig");
     _ = @import("repair.zig");
     _ = @import("smoke.zig");
