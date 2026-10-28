@@ -8,11 +8,11 @@ Each request has three lines:
 
 - `Field:` where the value sits in the data. For orientation only.
 - `Role:` what the value does on the page: a heading, a one-line take, a table cell, a footnote.
-- `Input:` the current value, as plain text.
+- `Input:` the current value. It may already contain inline markup such as `**bold**` or a `[^1]` marker.
 
 ## The reply
 
-Reply with the rewritten value as plain text and nothing else. No quotation marks around it, no `Output:` label, no notes, no alternatives, no code fences.
+Reply with the rewritten value on one line and nothing else. No quotation marks around it, no `Output:` label, no notes, no alternatives, no code fences.
 
 ## Rules
 
@@ -21,8 +21,8 @@ Reply with the rewritten value as plain text and nothing else. No quotation mark
 3. References stay exact. Copy URLs, `[[wikilinks]]`, footnote markers like `[^1]`, citation ids like `s1`, and anything inside quotation marks without changing a character. Quoted text is a quote: never reword it, and never put new text in quotation marks.
 4. Add nothing. No new numbers, names, sources, links, quotes or claims. Change how it sounds, not what it says.
 5. Keep the meaning and the certainty. A verdict keeps its direction: yes stays yes, no stays no. Hedges stay hedged ("vendor-reported", "unreplicated", "coming soon", "yet", "in our test"). Don't turn a doubt into a fact, or a fact into a doubt.
-6. No layout. The template owns all structure. Add no markdown or markup of any kind: no `#`, bullets, numbered lists, `|`, `*` or `_` for emphasis, backticks, `>`, square or curly brackets, `<tags>`, `~`, `^`, `@`, `??`, `!!`, or emoji. And keep the markup the input already has: `**`, backticks or `[^n]` markers in the input must come through unchanged — never strip them. Add no line breaks: one line in, one line out.
-7. Length: between half and double the input. Short inputs may grow by a short clause, no more. A "one-word" role gets four words at most.
+6. The template owns the layout; you own the emphasis. Keep every markup character the input has, in place: `**`, `*`, `~~`, backticks, `[^n]` markers, `[[wikilinks]]`. You may add inline formatting inside the line: `**bold**` and `*italic*` on the words that deserve the stress, `~~strikethrough~~` only on words you added yourself (never on the input's words, numbers, names or hedges), backticks around a command, file name, config key or flag the input already names, and emoji — within your tone's limits. Close every marker you open. Never format inside quotation marks, a URL, a `[[wikilink]]` or a `[^n]` marker, and never put `!` directly before `[`. If the Role says rendered bold, rendered italic, alt text, page heading or frontmatter, add no formatting and no emoji: that slot is already styled or copied into metadata. Add nothing else: no `#`, bullets, numbered lists, `|`, `>`, `_` or `==` for emphasis, extra `$` signs, square or curly brackets, `<tags>`, `^`, `@`, `\`, links, images, `??` or `!!`. Add no line breaks: one line in, one line out.
+7. Length: between half and double the input, not counting formatting marks and emoji. Short inputs may grow by a short clause, no more. A "one-word" role gets four words at most.
 8. Stay in bounds in every tone: no slurs, no insults about identity, bodies, disability or mental health, no sexual content, no threats, no harassment of real people. Roast the product, never a person or group.
 9. Never mention the tone, these rules, the template, or the fact that you rewrote anything.
 10. If you can't improve the value without breaking a rule, return it unchanged.

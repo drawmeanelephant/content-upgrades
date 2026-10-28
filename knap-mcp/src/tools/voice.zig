@@ -12,7 +12,7 @@ const ObjectMap = std.json.ObjectMap;
 
 pub const tool: tools.Tool = .{
     .name = "knap_voice",
-    .description = "Rewrite the voice: true string values of a shipped template's data in one tone (mild|spicy|feral), one model call per value. A rewrite that drops or adds a fact, markup or a line break keeps the original. Templates and structure never change. Returns the voiced data plus a per-field before/after report.",
+    .description = "Rewrite the voice: true string values of a shipped template's data in one tone (mild|spicy|feral), one model call per value. A rewrite that drops or adds a fact, a markup character outside the insertable set, or a line break keeps the original; replies may insert balanced **, *, ~~, code spans quoting the input and allowlisted emoji within the tone's budget. Templates and structure never change. Returns the voiced data plus a per-field before/after report.",
     .input_schema =
     \\{"type":"object","properties":{"template_id":{"type":"string"},"data":{"type":"object"},"tone":{"type":"string","enum":["mild","spicy","feral"]},"backend":{"type":"string","enum":["mock","spark","wonder","baseten","acp","compat"]}},"required":["template_id","data","tone"]}
     ,
