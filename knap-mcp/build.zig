@@ -22,7 +22,18 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     const unit = b.addTest(.{ .root_module = mod });
-    test_step.dependOn(&b.addRunArtifact(unit).step);
+    const run_unit = b.addRunArtifact(unit);
+    // Run the test binary in terminal mode, not through the build runner's
+    // --listen test server. Three lanes saw the same one-off flake: the run
+    // step died with a bare `failed command: .../test --listen=-` and no
+    // attributed test — a failure mode that lives in the IPC channel itself
+    // (every mid-test death is attributed to a test name; only a propagated
+    // runner error or a death between test_results messages produces no
+    // name). The same binary has run clean hundreds of times standalone.
+    // Terminal mode removes the channel and names the last completed test
+    // if the binary ever does die.
+    run_unit.stdio = .inherit;
+    test_step.dependOn(&run_unit.step);
 }
 
 /// Reads `.version = "..."` from build.zig.zon at configure time.
