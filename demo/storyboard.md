@@ -288,7 +288,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   (the misses are measured model shortfall against the mock-tuned bar, not
   harness breakage). Conformance 187/188 (the one accepted
   `diagnostics/unknown-filter` buffered-output diff, 0 unsupported). Server
-  22,393 lines of Zig.
+  23,932 lines of Zig.
 
 ## Not on tape
 
