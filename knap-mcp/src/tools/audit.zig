@@ -262,6 +262,15 @@ fn optVal(args: [][]const u8, i: *usize, comptime opt: []const u8) !?[]const u8 
 // `*` and `?` match within a path segment; `**` as a whole segment
 // matches zero or more segments, so the default `**/*.md` covers both
 // `a.md` and `deep/nested/b.md`.
+//
+// Matching is a left-to-right scan with a single backtrack point: a
+// `**` segment first covers zero path segments, and on a later
+// mismatch it swallows one more and the scan resumes just past it.
+// Re-entering the pattern only ever from the last `**` keeps the
+// worst case O(pattern segments × path segments) — a recursion that
+// retried every path suffix per `**` was O(n^k) in the `**` count,
+// which a planted policy glob exploited (policy globs parse in
+// policy.zig, whose load-time `**` cap is a second bound).
 
 pub fn globMatch(pattern: []const u8, path: []const u8) bool {
     return matchSegs(pattern, path);
@@ -276,20 +285,32 @@ fn restSegs(s: []const u8) []const u8 {
 }
 
 fn matchSegs(pat: []const u8, path: []const u8) bool {
-    if (pat.len == 0) return path.len == 0;
-    const p = firstSeg(pat);
-    const prest = restSegs(pat);
-    if (std.mem.eql(u8, p, "**")) {
-        var rest = path;
-        while (true) {
-            if (matchSegs(prest, rest)) return true;
-            if (rest.len == 0) return false;
-            rest = restSegs(rest);
+    var p = pat;
+    var s = path;
+    // `star_pat`/`star_path`: where to resume when the last `**` seen
+    // swallows one more segment — the pattern just past it and the
+    // next unconsumed path position.
+    var star_pat: ?[]const u8 = null;
+    var star_path: []const u8 = "";
+    while (s.len > 0) {
+        const pseg = firstSeg(p);
+        if (std.mem.eql(u8, pseg, "**")) {
+            star_pat = restSegs(p);
+            star_path = s;
+            p = star_pat.?;
+        } else if (segMatch(pseg, firstSeg(s))) {
+            p = restSegs(p);
+            s = restSegs(s);
+        } else if (star_pat) |sp| {
+            p = sp;
+            star_path = restSegs(star_path);
+            s = star_path;
+        } else {
+            return false;
         }
     }
-    if (path.len == 0) return false;
-    if (!segMatch(p, firstSeg(path))) return false;
-    return matchSegs(prest, restSegs(path));
+    while (p.len > 0 and std.mem.eql(u8, firstSeg(p), "**")) p = restSegs(p);
+    return p.len == 0;
 }
 
 /// Single-segment wildcard match with `*` and `?` (backtracking).
@@ -724,6 +745,21 @@ test "globMatch: ** crosses segments, * and ? stay inside one" {
     try std.testing.expect(globMatch("**", "anything/at/all.md"));
 }
 
+test "globMatch: a `**`-heavy glob stays polynomial" {
+    // A planted knap-policy.json glob of 12 `**` segments against a
+    // 19-segment path took ~18s with the per-suffix rescan (O(n^k) in
+    // `**` count); the single-backtrack scan finishes in milliseconds.
+    const pat = "**/**/**/**/**/**/**/**/**/**/**/**/x";
+    const deep = "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s";
+    const t0 = std.Io.Timestamp.now(std.testing.io, .awake);
+    try std.testing.expect(!globMatch(pat, deep));
+    try std.testing.expect(globMatch("**/**/**/**/**/**/**/**/**/**/**/**/**/s", deep));
+    // Same exponential shape inside a literal run, not just at the end.
+    try std.testing.expect(!globMatch("a/**/**/**/**/**/**/**/**/**/**/**/**/x/t", deep ++ "/t"));
+    const elapsed_ms = t0.durationTo(std.Io.Timestamp.now(std.testing.io, .awake)).toMilliseconds();
+    try std.testing.expect(elapsed_ms < 1000);
+}
+
 test "percentile interpolates between order statistics" {
     var vals = [_]f64{ 10, 20, 30, 40 };
     try std.testing.expectEqual(@as(f64, 17.5), percentile(&vals, 25));
@@ -919,4 +955,37 @@ test "policy: haiku with a table is out of policy, bands drive --below, rows car
     try writeRollup(&ctx, &out.writer, rows, true);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "0.0-20.0") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "unpoliced:posts") != null);
+}
+
+test "auditTree: a planted `**`-heavy policy can't wedge the audit" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/content", .{tmp.sub_path});
+    // A 19-segment path — the shape the exponential `**` rescan hung on.
+    try std.Io.Dir.createDirPath(.cwd(), std.testing.io, try std.fmt.allocPrint(a, "{s}/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r", .{root}));
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{
+        .sub_path = try std.fmt.allocPrint(a, "{s}/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/doc.md", .{root}),
+        .data = "# T\n\nwords\n",
+    });
+    // Discovered via <dir>/../knap-policy.json, as a hostile tree plants it.
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{
+        .sub_path = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/knap-policy.json", .{tmp.sub_path}),
+        .data =
+        \\{"schema":"knap-policy/1","collections":[
+        \\ {"name":"evil","glob":"**/**/**/**/**/**/**/**/**/**/**/**/x","score":{"min":0}}]}
+        ,
+    });
+    var ctx = testCtx(a, &env, root);
+    const pol = try policy.load(&ctx, (try policy.discover(&ctx, root)).?);
+    const t0 = std.Io.Timestamp.now(std.testing.io, .awake);
+    const rows = try auditTree(&ctx, .{ .dir = root, .policy = &pol });
+    const elapsed_ms = t0.durationTo(std.Io.Timestamp.now(std.testing.io, .awake)).toMilliseconds();
+    try std.testing.expect(elapsed_ms < 1000);
+    try std.testing.expectEqual(@as(usize, 1), rows.len);
+    try std.testing.expect(rows[0].coll == null);
+    try std.testing.expectEqualStrings("unpoliced:a", rows[0].group);
 }
