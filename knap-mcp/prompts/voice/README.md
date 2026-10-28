@@ -22,7 +22,7 @@ The `.md` files are prompt text, sent byte for byte apart from trailing whitespa
 
 ## JSONL format
 
-One JSON object per line: UTF-8, LF line endings, no blank lines, no comments. Every value is a string. Write non-ASCII characters raw (`—`, not `\u2014`). The checker accepts only these escapes: `\"`, `\\`, `\/`, `\n`, `\t`, `\r`.
+One JSON object per line: UTF-8, LF line endings, no blank lines, no comments. Every value is a string, except `footnote_abutting`, which is a bare `true`/`false` literal. Write non-ASCII characters raw (`—`, not `\u2014`). The checker accepts only these escapes: `\"`, `\\`, `\/`, `\n`, `\t`, `\r`.
 
 | Key | Meaning |
 |---|---|
@@ -31,6 +31,7 @@ One JSON object per line: UTF-8, LF line endings, no blank lines, no comments. E
 | `field_role` | The shape descriptor's `role` for the field, verbatim. An element of an `array<string>` adds ` (one item)`. |
 | `input` | The value before the voice pass. |
 | `output` | The value in this file's tone. |
+| `footnote_abutting` | Optional, bare `true`/`false` (no quotes). `true` marks a slot the template follows with a `[^note]` marker — see rule 3's trailing-`!` ban. |
 
 Lines in `testdata/bad.jsonl` add `tone` and `expect`, a substring of the failure reason the guard must report.
 
@@ -110,7 +111,7 @@ Caching: there are exactly three system messages, one per tone, each 6.8 to 7.7 
 
 ## The guard
 
-These are the rules `voice.awk` applies to the examples. C1 ports the hard rules to Zig and runs them on every reply. Lengths are in UTF-8 bytes.
+These are the rules `voice.awk` applies to the examples. C1 ports the hard rules to Zig and runs them on every reply. Lengths are in UTF-8 bytes. The two guards enforce the same contract with one exception: the insert-only skeleton clause of rule 3 is runtime-only (marked in place); everything else is mirrored in `voice.awk`.
 
 Scope: the guard verifies tokens — facts, markup and structure — not meaning. At runtime a reply that adds a claim in plain words (`ships on schedule; vendor recalled units, refunded buyers`) or flips the input with a negation (`never ships on schedule`) passes every rule. A cap on new content words can't tell those from legitimate voice, so there is none; the measurements are in `docs/tracks/VOICE-SCOPE.md`.
 
@@ -119,13 +120,14 @@ Hard rules. A failure keeps the original value.
 1. Every protected token in the input appears unchanged in the reply:
    - URLs: `http://` or `https://` up to whitespace, a quote, `<`, `>` or `)`, minus trailing `.,;:!?`.
    - `[[wikilinks]]` and footnote markers like `[^1]`.
+   - The boris atoms: `![[embeds]]`, `{{include …}}` includes, and `<Aside …>`/`<Details …>` component tags — open and close tags are one atom each, so a reply can neither rewrap a component nor slip markup inside the tag text. An unterminated tag protects the rest of the value.
    - Quoted spans: `"..."`, and `'...'` where the opening quote doesn't follow a letter or digit and the closing quote isn't followed by one. Apostrophes don't count.
    - Number tokens: maximal runs of `[$#~<>A-Za-z0-9.,%/:_+-]` that contain a digit, minus trailing `.,:/_+-`. Examples: `p99`, `2ms`, `$400`, `2026-10-20`, `256MB`.
    - Names: letter runs with two or more capitals (`AcmeDB`, `PhD`, `WAL`), and capitalized words of two or more letters that don't start a sentence (`Redis`, `Enterprise`). A word starts a sentence if it comes first, or if the nearest character before it, skipping spaces, quotes, `(` and `[`, is `.`, `!` or `?`.
 
    Number tokens and names must match as whole words, with no letter or digit on either side. The other tokens match as substrings.
-2. The reply adds no new URL, wikilink, footnote marker, quoted span, number token, or mixed-case name like `QuuxQueue`. New all-caps words and new capitalized words are allowed, because that is how shouting and title case look.
-3. The reply keeps the input's markup and may insert only inline formatting. `_ | # < > [ ] { } ^ @ \ " $` are locked in both directions; `*`, `` ` ``, `~` and `=` may be added but never dropped. The reply's inline structure skeleton must equal the input's with only `strong`/`em`/`del`/`hl`/`code` tokens inserted (`structhash.isFormatting` names the set; `structhash --ignore-formatting` is the same projection for whole documents) — a code span around `[^1]` or around the input's own `**bold**` still fails, and a `[[wikilink]]`, link or `delim:` run can never appear. Added `*`, `` ` ``, `~` and `=` must resolve into spans (no leftover delimiters, no single `~`, no spaced `a == b`, no multi-backtick spans); a `~~` span may only cover words the reply added itself (no input content word or inflection sharing its stem, no fact or negation); a backtick span's text must occur verbatim in the input and may not be the whole input. Added `![`, `!!` or `??`, HTML entities, and block markers (the previous list, plus ` ``` ` and `~~~` fences) are rejected. Where a field's descriptor marks `footnote_abutting` and the element carries a `note`, the template emits `[^note]` right after the value, so a reply may not end in `!` (`![^n]` reads as image syntax).
+2. The reply adds no new URL, wikilink, embed, footnote marker, quoted span, number token, `{{include}}`, component tag, or mixed-case name like `QuuxQueue`. New all-caps words and new capitalized words are allowed, because that is how shouting and title case look.
+3. The reply keeps the input's markup and may insert only inline formatting. `_ | # < > [ ] { } ^ @ \ " $` are locked in both directions; `*`, `` ` ``, `~` and `=` may be added but never dropped. The reply's inline structure skeleton must equal the input's with only `strong`/`em`/`del`/`hl`/`code` tokens inserted (`structhash.isFormatting` names the set; `structhash --ignore-formatting` is the same projection for whole documents) — a code span around `[^1]` or around the input's own `**bold**` still fails, and a `[[wikilink]]`, link or `delim:` run can never appear. *(Runtime-only: rebuilding the structhash skeleton is beyond POSIX awk, so `voice.awk`/`check.sh` enforce the pairing, strike and code-span clauses around it instead.)* Added `*`, `` ` ``, `~` and `=` must resolve into spans (no leftover delimiters, no single `~`, no spaced `a == b`, no multi-backtick spans); a `~~` span may only cover words the reply added itself (no input content word or inflection sharing its stem, no fact or negation); a backtick span's text must occur verbatim in the input and may not be the whole input. Added `![`, `!!` or `??`, HTML entities, and block markers (the previous list, plus ` ``` ` and `~~~` fences) are rejected. Where a field's descriptor marks `footnote_abutting` and the element carries a `note`, the template emits `[^note]` right after the value, so a reply may not end in `!` (`![^n]` reads as image syntax).
 4. No control characters, no line breaks, valid UTF-8. Emoji: a named allowlist — the dingbats ✨ ⚡ ⚠ ✅ ❌ ☕ plus the pictographs 🔥 💀 🙄 🎁 🪣 🏛 🚀 🐛 🎉 📉 — each optionally followed by U+FE0F, within the tone budget. Every other emoji-block code point (a gesture, face, food, weapon, blood, skin tone, anything unlisted) is a hard failure, along with a ZWJ or other invisible character, a bare U+FE0F, `‼`/`⁉`, an astral symbol like mathematical bold, and a non-allowlisted dingbat. A reply may not drop a non-ASCII code point the input carried — an emoji, a curly quote, an accent — just as it may not drop a markup character. Roles whose normalized words (lowercase, split on non-alphanumerics) include `rendered bold`, `rendered italic`, `rendered highlight`, `alt text`, `page heading` or `frontmatter` are plain slots: no added formatting and no added emoji.
 5. The length is between ceil(L/2) and max(2L, L + 40) text bytes — `*`, `` ` ``, `~`, `=`, allowed emoji and U+FE0F don't count — where L is the input's text length. A role containing "one-word" or "four word" (as in "two-to-four word upgrade verdict") allows four words at most. The reply must keep at least half of the input's content words (stopword-free, stemmed — verifier.zig's tokenizing), and a reply that contains the input verbatim may not lead with two or more content words the input lacks: `Sure! Here is the take: <value>` is meta prose, not a rewrite.
 6. The reply is not empty.

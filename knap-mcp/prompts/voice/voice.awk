@@ -50,7 +50,9 @@ BEGIN {
 	}
 }
 
-# ---- JSONL: one flat object per line, every value a string ----------------
+# ---- JSONL: one flat object per line ---------------------------------------
+# Every value is a string, except the true/false/null literals a flag like
+# footnote_abutting takes. A literal decodes to its spelling.
 
 function jstring(s, i,    n, c, out, start) {
 	if (substr(s, i, 1) != "\"") return -1
@@ -91,9 +93,20 @@ function jparse(s,    i, n, c, key) {
 		key = JSTR
 		i = skipws(s, i)
 		if (substr(s, i, 1) != ":") return jerr("expected : after \"" key "\"")
-		i = jstring(s, skipws(s, i + 1))
-		if (i == -2) return jerr("\\u escape in \"" key "\"; write raw UTF-8 instead")
-		if (i < 0) return jerr("value of \"" key "\" must be a string")
+		i = skipws(s, i + 1)
+		if (substr(s, i, 1) == "\"") {
+			i = jstring(s, i)
+			if (i == -2) return jerr("\\u escape in \"" key "\"; write raw UTF-8 instead")
+			if (i < 0) return jerr("value of \"" key "\" must be a string")
+		} else {
+			if (substr(s, i, 4) == "true") { JSTR = JRAW = "true"; i += 4 }
+			else if (substr(s, i, 5) == "false") { JSTR = JRAW = "false"; i += 5 }
+			else if (substr(s, i, 4) == "null") { JSTR = JRAW = "null"; i += 4 }
+			else return jerr("value of \"" key "\" must be a string or a true/false/null literal")
+			c = substr(s, i, 1)
+			if (c != "" && c != "," && c != "}" && !index(" \t\r", c))
+				return jerr("bad literal in \"" key "\"")
+		}
 		if (key in J) return jerr("duplicate key \"" key "\"")
 		J[key] = JSTR; JR[key] = JRAW; n++
 		i = skipws(s, i)
@@ -126,7 +139,8 @@ function hasword(s, w,    off, p, b, a) {
 }
 
 function present(s, t, kind) {
-	if (kind == "url" || kind == "wikilink" || kind == "footnote ref" || kind == "quote") return index(s, t) > 0
+	if (kind == "url" || kind == "wikilink" || kind == "embed" || kind == "footnote ref" || \
+			kind == "quote" || kind == "include" || kind == "component") return index(s, t) > 0
 	return hasword(s, t)
 }
 
@@ -197,11 +211,49 @@ function names(s, T,    rest, off, p, w, up, lo, nu, nl, pre) {
 	}
 }
 
+# End of the <Aside …>/</Details> tag starting at s[p] == '<', as an
+# exclusive index (0 when no component tag starts there). An unterminated
+# tag covers the rest of the string, like an unclosed span.
+function componentend(s, p,    rest, nl, bound, q, j, c) {
+	rest = substr(s, p + 1)
+	if (substr(rest, 1, 1) == "/") rest = substr(rest, 2)
+	if (substr(rest, 1, 5) == "Aside") nl = 5
+	else if (substr(rest, 1, 7) == "Details") nl = 7
+	else return 0
+	bound = substr(rest, nl + 1, 1)
+	if (bound != "" && !index(" \t>/", bound)) return 0
+	q = ""
+	for (j = p; j <= length(s); j++) {
+		c = substr(s, j, 1)
+		if (q != "") { if (c == q) q = "" }
+		else if (c == "\"" || c == Q) q = c
+		else if (c == ">") return j + 1
+	}
+	return length(s) + 1
+}
+
+# <Aside …>/<Details …> open tags and </…> closes: one atom per tag, so a
+# reply can neither rewrap a component nor slip markup inside the tag text.
+function components(s, T,    i, p, e) {
+	i = 1
+	while ((p = index(substr(s, i), "<")) > 0) {
+		p += i - 1
+		i = p + 1
+		e = componentend(s, p)
+		if (e == 0) continue
+		T[substr(s, p, e - p)] = "component"
+		i = e
+	}
+}
+
 function facts(s, T) {
 	split("", T)
 	urls(s, T)
+	spans(s, T, "![[", "]]", "embed")
 	spans(s, T, "[[", "]]", "wikilink")
 	spans(s, T, "[^", "]", "footnote ref")
+	spans(s, T, "{{", "}}", "include")
+	components(s, T)
 	quotes(s, T)
 	numbers(s, T)
 	names(s, T)
@@ -496,7 +548,8 @@ function strikeinnerbad(inner,    NF2, CW2, t, w, c, j, k) {
 }
 
 # Sets REASONS to every way `out` breaks the voice contract for `in_`.
-function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, del_in, del_ou, hl_in, hl_ou, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, msk, badw, DROPSEEN) {
+# `fab` marks slots the template follows with a [^note] marker.
+function guard(tone, role, fab, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, del_in, del_ou, hl_in, hl_ou, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, msk, badw, kept, nci, extra, DROPSEEN) {
 	REASONS = ""
 	if (in_ == "") why("empty input")
 	if (out == "") { why("empty output"); return }
@@ -609,6 +662,10 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 		rest = substr(rest, RSTART + RLENGTH)
 		if (!index(in_, ent)) { why("adds HTML entity"); break }
 	}
+	# W3's footnote_abutting tail: the template emits [^note] right after
+	# the value, so a trailing ! reads as image syntax (![^n]).
+	if (fab && substr(out, length(out), 1) == "!") \
+		why("ends with ! where a footnote marker follows (renders as image syntax)")
 	if (out ~ /^[-+*=>#] / || out ~ /^[0-9]+[.)] / || out ~ /^(h[1-6]|p|bq|bc|pre|fn[0-9]+)\. / || \
 		out ~ /^---/ || out ~ /^```/ || out ~ /^~~~/)
 		why("starts with a block marker")
@@ -620,6 +677,27 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 	if (index(role, "one-word") || index(role, "four word")) {
 		nw = split(out, words, " ")
 		if (nw > 4) why("word-limited role, " nw " words, max 4")
+	}
+
+	# W5's retention half: a rewrite must reword the value, not abandon it
+	# or wrap it in meta prose — keep at least half the input's content
+	# words, and a reply containing the input verbatim may not lead with
+	# two or more content words the input lacks ("Sure! Here is the
+	# take: ..." is meta prose, not a rewrite).
+	split("", COW); contentwords(out, COW)
+	nci = 0
+	for (t in CIWORDS) nci++
+	if (nci >= 3) {
+		kept = 0
+		for (t in CIWORDS) if (t in COW) kept++
+		if (kept * 2 < nci) why("keeps only " kept " of " nci " input content words")
+	}
+	p = index(out, in_)
+	if (p > 0) {
+		split("", LEAD); contentwords(substr(out, 1, p - 1), LEAD)
+		extra = 0
+		for (t in LEAD) if (!(t in CIWORDS)) extra++
+		if (extra >= 2) why("wraps the input with extra prose")
 	}
 
 	if (!(tone in MAXPROF)) { why("unknown tone " tone); return }
@@ -659,15 +737,18 @@ mode == "check" {
 
 	if (jparse($0) < 0) { bad(loc, "bad JSON: " JERR); next }
 	for (k in J)
-		if (!(k in REQ) && !(kind == "testdata" && (k == "tone" || k == "expect"))) { bad(loc, "unknown key " k); next }
+		if (!(k in REQ) && k != "footnote_abutting" && \
+				!(kind == "testdata" && (k == "tone" || k == "expect"))) { bad(loc, "unknown key " k); next }
 	missing = ""
 	for (k in REQ) if (!(k in J)) missing = missing " " k
 	if (kind == "testdata" && !("tone" in J)) missing = missing " tone"
 	if (kind == "testdata" && !("expect" in J)) missing = missing " expect"
 	if (missing != "") { bad(loc, "missing keys:" missing); next }
+	if ("footnote_abutting" in J && J["footnote_abutting"] != "true" && J["footnote_abutting"] != "false") {
+		bad(loc, "footnote_abutting must be true or false"); next }
 
 	tone = (kind == "testdata") ? J["tone"] : base
-	guard(tone, J["field_role"], J["input"], J["output"])
+	guard(tone, J["field_role"], J["footnote_abutting"] == "true", J["input"], J["output"])
 
 	if (kind == "testdata") {
 		ncase++
@@ -682,7 +763,7 @@ mode == "check" {
 		warn(loc " " J["field"], "input is not a data/*.sample.json value; this mock reply is stale")
 
 	n = ++COUNT[kind, tone]
-	SEQ[kind, tone, n] = J["template"] SUBSEP J["field"] SUBSEP J["field_role"] SUBSEP J["input"]
+	SEQ[kind, tone, n] = J["template"] SUBSEP J["field"] SUBSEP J["field_role"] SUBSEP J["input"] SUBSEP J["footnote_abutting"]
 	TOTAL[kind]++
 	next
 }
