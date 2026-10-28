@@ -1,6 +1,6 @@
 {
   "template_id": "runbook",
-  "description": "An operational procedure, written to be run at 3am: YAML frontmatter built key by key, an owner/severity meta line, a 'When to use this' abstract callout, the one step people skip highlighted in a danger callout, a preflight task list, phases of numbered steps — each step an h3 with an optional fenced code block, an 'Expect' h4 and footnote refs — separated by `---` rules, rollback folded into a collapsed warning callout, an escalation pipe table, an error-budget formula as a $$ math block, the postmortem lesson as a plain blockquote with its link, a 'See also' wikilink cloud and object-keyed footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. The template does all layout; strings hold text, not markup.",
+  "description": "An operational procedure, written to be run at 3am: YAML frontmatter built key by key, an owner/severity meta line, a 'When to use this' abstract callout, the one step people skip highlighted in a danger callout, a preflight task list, phases of numbered steps — each step an h3 with an optional fenced code block, an 'Expect' h4 and footnote refs — separated by `---` rules, rollback folded into a collapsed warning callout, an escalation pipe table, an error-budget formula as a $$ math block, the postmortem lesson as a plain blockquote with its link, a 'See also' wikilink cloud and object-keyed footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. The template does all layout; strings hold text, not markup — except that `voice: true` fields may carry constrained inline formatting (**, *, ~~ on words the reply added, code spans quoting the input, allowlisted emoji within the tone's budget).",
   "fields": {
     "service":       {"type": "string", "role": "service or system name; frontmatter `service`, and the page heading when `title` is absent"},
     "title":         {"type": "string", "role": "page heading and frontmatter `title`; falls back to `service` via ??", "optional": true},
@@ -8,20 +8,20 @@
     "severity":      {"type": "string", "role": "the severity this runbook answers to; frontmatter `severity`, rendered as inline code in the meta line", "enum": ["sev1", "sev2", "sev3"]},
     "last_reviewed": {"type": "string", "role": "last review date, YYYY-MM-DD; frontmatter `last_reviewed` and the meta line"},
     "tags":          {"type": "array<string>", "role": "frontmatter tags, lowercase kebab-case", "optional": true, "apparatus": "frontmatter", "max_items": 5, "words": 1},
-    "summary":       {"type": "string", "role": "when to reach for this runbook, 2-4 sentences, single paragraph, body of the 'When to use this' abstract callout"},
-    "danger":        {"type": "string", "role": "the one step people skip; highlighted with == == inside the 'Do not skip' danger callout", "optional": true, "apparatus": "callout", "words": 25},
-    "preflight":     {"type": "array<string>", "role": "checks to run before touching anything, one task item each, under 'Before you start'", "optional": true, "apparatus": "list", "max_items": 5, "words": 6},
+    "summary":       {"type": "string", "role": "when to reach for this runbook, 2-4 sentences, single paragraph, body of the 'When to use this' abstract callout", "voice": true},
+    "danger":        {"type": "string", "role": "the one step people skip, a rendered highlight inside the 'Do not skip' danger callout", "optional": true, "voice": true, "apparatus": "callout", "words": 25},
+    "preflight":     {"type": "array<string>", "role": "checks to run before touching anything, one task item each, under 'Before you start'", "optional": true, "voice": true, "apparatus": "list", "max_items": 5, "words": 6},
     "phases":        {"type": "array<object>", "role": "the procedure, one h2 each; `---` thematic breaks separate phases", "fields": {
       "name":  {"type": "string", "role": "phase name, one line, h2 heading"},
       "steps": {"type": "array<object>", "role": "the steps of this phase, in order", "fields": {
-        "do":      {"type": "string", "role": "what to do, imperative, one line, h3 heading", "footnote_abutting": true},
+        "do":      {"type": "string", "role": "what to do, imperative, one line, h3 heading", "voice": true, "footnote_abutting": true},
         "command": {"type": "string", "role": "the exact command or query to run, one fenced code block", "optional": true},
         "lang":    {"type": "string", "role": "fence language for `command`; falls back to sh", "optional": true, "enum": ["sh", "sql", "yaml", "json", "zig"]},
-        "expect":  {"type": "string", "role": "what success looks like, one paragraph under the 'Expect' h4", "optional": true},
+        "expect":  {"type": "string", "role": "what success looks like, one paragraph under the 'Expect' h4", "optional": true, "voice": true},
         "note":    {"type": "string", "role": "key into `notes`; renders a [^key] footnote ref after the step heading. Must match a `notes` key exactly", "optional": true, "ref": "notes"}
       }}
     }},
-    "rollback":      {"type": "array<string>", "role": "how to undo it, one numbered step each, folded into the collapsed 'Rollback' warning callout", "optional": true, "apparatus": "callout", "max_items": 4, "words": 8},
+    "rollback":      {"type": "array<string>", "role": "how to undo it, one numbered step each, folded into the collapsed 'Rollback' warning callout", "optional": true, "voice": true, "apparatus": "callout", "max_items": 4, "words": 8},
     "escalation":    {"type": "array<object>", "role": "rows of the 'Escalation' pipe table; the header (who | when | how) is fixed in the template. `who` is the contact, `when` the trigger, `how` the channel. No | or newlines in values", "optional": true, "apparatus": "table", "max_items": 4, "words": 6, "fields": {
       "who":  {"type": "string"},
       "when": {"type": "string"},
