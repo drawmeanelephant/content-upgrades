@@ -50,9 +50,10 @@ pub fn cmd(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
         return 1;
     }
     var out: Allocating = .init(ctx.arena);
-    if (std.Io.Dir.readFileAlloc(.cwd(), ctx.io, args[0], ctx.arena, .limited(64 * 1024 * 1024))) |doc| {
-        try scoreInto(ctx, doc, &out.writer);
-    } else |_| {
+    const r = common.resolveDoc(ctx, args[0]);
+    if (r != null and r.?.file_path != null) {
+        try scoreInto(ctx, r.?.bytes, &out.writer);
+    } else {
         var a: ObjectMap = .empty;
         try a.put(ctx.arena, "doc_id", .{ .string = args[0] });
         tools.dispatch(ctx, tool.name, a, &out) catch {

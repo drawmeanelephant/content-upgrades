@@ -60,6 +60,47 @@ pub fn stageData(ctx: *Ctx, data_json: []const u8) Error![]const u8 {
     return path;
 }
 
+/// Cap on doc bytes read straight off disk — same bound store.read uses.
+pub const max_doc_bytes = 64 * 1024 * 1024;
+
+/// A `<doc_id|file>` positional resolved to bytes.
+pub const DocArg = struct {
+    bytes: []const u8,
+    /// The argument when it named a readable file; null for a doc_id.
+    file_path: ?[]const u8,
+};
+
+/// CLI `<doc_id|file>` resolution: a readable file wins over a doc_id
+/// spelled the same; the artifact store is the fallback. null when
+/// neither resolves.
+pub fn resolveDoc(ctx: *Ctx, arg: []const u8) ?DocArg {
+    if (std.Io.Dir.readFileAlloc(.cwd(), ctx.io, arg, ctx.arena, .limited(max_doc_bytes))) |bytes| {
+        return .{ .bytes = bytes, .file_path = arg };
+    } else |_| {}
+    const bytes = (store.read(ctx, arg) catch null) orelse return null;
+    return .{ .bytes = bytes, .file_path = null };
+}
+
+/// The store extension a file path implies: .md/.markdown → "md", other
+/// extensions pass through as-is, none → "txt".
+pub fn docExtForPath(path: []const u8) []const u8 {
+    const ext = std.fs.path.extension(path);
+    if (ext.len <= 1) return "txt";
+    const e = ext[1..];
+    if (std.ascii.eqlIgnoreCase(e, "md") or std.ascii.eqlIgnoreCase(e, "markdown")) return "md";
+    return e;
+}
+
+/// `arg` → a doc_id for tools that only take handles: a readable file is
+/// staged into the artifact store byte-for-byte under its own extension
+/// and the fresh doc_id returned; anything else passes through so the
+/// tool resolves (or rejects) it as a doc_id.
+pub fn docIdOrStage(ctx: *Ctx, arg: []const u8) Error![]const u8 {
+    const r = resolveDoc(ctx, arg) orelse return arg;
+    if (r.file_path == null) return arg;
+    return store.put(ctx, docExtForPath(arg), r.bytes);
+}
+
 pub fn writeDiags(out: *Allocating, diags: []engine.Diag) !void {
     try out.writer.writeAll("\"diagnostics\":[");
     for (diags, 0..) |d, i| {

@@ -7,7 +7,8 @@
 //!     knap-mcp render <id> [-d <file|->] [--target <t>] [--out <file>]
 //!     knap-mcp repair <id> [-d <file|->] [--backend <b>]
 //!     knap-mcp lint <file.knap>             k4o lint passthrough
-//!     knap-mcp format-check <doc_id>        advisory structure lint on a doc
+//!     knap-mcp ingest <file>... [--force]   copy markdown docs into the store
+//!     knap-mcp format-check <doc_id|file>   advisory structure lint on a doc
 //!     knap-mcp eval [--corpus <seeds.json>] [--backend <b>]
 //!     knap-mcp backends [--probe]           backend availability + models
 //!     knap-mcp smoke [--backend <b>]        one live call per backend.Task
@@ -68,13 +69,14 @@ const commands = [_]Command{
     .{ .name = "render", .usage = "render <id> [options]", .summary = "render via k4o/dogbed, print doc", .run = .{ .tool = .{ .tool = "knap_render", .key = "template_id" } } },
     .{ .name = "repair", .usage = "repair <id> [options]", .summary = "bounded repair loop (max 4)", .run = .{ .tool = .{ .tool = "knap_repair", .key = "template_id" } } },
     .{ .name = "lint", .usage = "lint <file.knap>", .summary = "k4o lint passthrough", .run = .{ .tool = .{ .tool = "knap_lint", .key = "template_text", .exactly_one = "template file", .read_file = true } } },
-    .{ .name = "format-check", .usage = "format-check <doc_id>", .summary = "advisory structure lint (warnings only)", .run = .{ .tool = .{ .tool = "knap_format_check", .key = "doc_id", .exactly_one = "doc_id" } } },
+    .{ .name = "ingest", .usage = "ingest <file>... [--force]", .summary = "copy existing markdown docs into the store", .run = .{ .custom = @import("tools/ingest.zig").cli } },
+    .{ .name = "format-check", .usage = "format-check <doc_id|file>", .summary = "advisory structure lint (warnings only)", .run = .{ .custom = @import("tools/format_check.zig").cli } },
     .{ .name = "voice", .usage = "voice <id> --tone <t>", .summary = "rewrite voice: true values in a tone", .run = .{ .tool = .{ .tool = "knap_voice", .key = "template_id" } } },
     .{ .name = "structhash", .usage = "structhash <doc_id|file>...", .summary = "layout skeleton hash, text dropped", .run = .{ .custom = @import("tools/structure_hash.zig").cli } },
     .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "boris-ask", .usage = "boris-ask <query> [--limit n]", .summary = "ranked snippets from the boris artifact", .run = .{ .tool = .{ .tool = "boris_ask", .key = "query", .exactly_one = "query" } } },
     .{ .name = "boris-check", .usage = "boris-check <claim>", .summary = "yes/no/unknown from boris claim pages", .run = .{ .tool = .{ .tool = "boris_check", .key = "claim", .exactly_one = "claim" } } },
-    .{ .name = "publish-check", .usage = "publish-check <doc_id>", .summary = "stage md doc in boris site; exit 1 unless ok", .run = .{ .custom = @import("tools/publish_check.zig").cli } },
+    .{ .name = "publish-check", .usage = "publish-check <doc_id|file>", .summary = "stage md doc in boris site; exit 1 unless ok", .run = .{ .custom = @import("tools/publish_check.zig").cli } },
     .{ .name = "density", .usage = "density <doc_id|file>", .summary = "formatting-density score (markdown)", .run = .{ .custom = @import("tools/density.zig").cmd } },
     .{ .name = "ratchet", .usage = "ratchet <id> [options]", .summary = "values-only density ratchet", .run = .{ .tool = .{ .tool = "knap_ratchet", .key = "template_id" } } },
     .{ .name = "ratchet-eval", .usage = "ratchet-eval [--corpus f]", .summary = "ratchet climb table (eval/ratchet.json)", .run = .{ .custom = @import("ratchet.zig").cmdEval } },
@@ -113,6 +115,7 @@ const usage_tail =
     \\  --verifier <v>          heuristic (default) | none | decision
     \\  --limit <n>             boris-ask hits (default 5)
     \\  --max-iters <n>         ratchet iteration cap (default 6)
+    \\  --force                 ingest: admit non-markdown extensions
     \\  --probe                 backends: GET /models per live backend, acp handshake
     \\  -h, --help              this text; <command> -h shows that command's usage
     \\
@@ -565,6 +568,7 @@ test {
     _ = @import("tools/common.zig");
     _ = @import("tools/density.zig");
     _ = @import("tools/format_check.zig");
+    _ = @import("tools/ingest.zig");
     _ = @import("tools/lint.zig");
     _ = @import("tools/publish_check.zig");
     _ = @import("tools/ratchet.zig");
