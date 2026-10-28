@@ -520,6 +520,21 @@ fn envFor(ctx: *Ctx, kind: Kind, comptime suffix: []const u8) ?[]const u8 {
     return if (t.len == 0) null else t;
 }
 
+/// `KNAP_<KIND>_<suffix>` for a runtime `kind` — for errors that name
+/// the env var an operator must fix.
+fn envVarName(kind: Kind, comptime suffix: []const u8) []const u8 {
+    return switch (kind) {
+        inline else => |k| comptime envName(k, suffix),
+    };
+}
+
+/// curl speaks far more than HTTP — file://, dict://, ftp://,
+/// gopher:// — and an env-set endpoint goes straight into its argv.
+/// http:// and https:// are the only legitimate model endpoints.
+fn isHttpUrl(url: []const u8) bool {
+    return std.mem.startsWith(u8, url, "https://") or std.mem.startsWith(u8, url, "http://");
+}
+
 /// Resolve `kind`'s endpoint, model and sampling settings. A malformed
 /// temperature fails here, before any request is staged.
 pub fn endpoint(ctx: *Ctx, kind: Kind) error{ToolFailed}!Endpoint {
@@ -531,10 +546,21 @@ pub fn endpoint(ctx: *Ctx, kind: Kind) error{ToolFailed}!Endpoint {
         if (url.len == 0) return ctx.fail("backend 'compat' needs KNAP_COMPAT_URL", .{});
         if (model.len == 0) return ctx.fail("backend 'compat' needs KNAP_COMPAT_MODEL", .{});
     }
+    // The URL lands in curl argv. Scheme validation keeps `file://` and
+    // friends from becoming curl fetch targets; argv also passes the URL
+    // after `--` so a value like `--output=/tmp/x` can never parse as a
+    // curl option (#209).
+    if (!isHttpUrl(url))
+        return ctx.fail("{s} must start with http:// or https://", .{envVarName(kind, "URL")});
+    const models_url = envFor(ctx, kind, "MODELS_URL") orelse modelsUrlFrom(ctx.arena, url);
+    if (models_url) |m| {
+        if (!isHttpUrl(m))
+            return ctx.fail("{s} must start with http:// or https://", .{envVarName(kind, "MODELS_URL")});
+    }
     return .{
         .url = url,
         .model = model,
-        .models_url = envFor(ctx, kind, "MODELS_URL") orelse modelsUrlFrom(ctx.arena, url),
+        .models_url = models_url,
         .temperature = try temperatureFor(ctx, kind),
     };
 }
@@ -660,9 +686,22 @@ fn acpReply(ctx: *Ctx, task: Task, system: []const u8, user: []const u8) Error!R
 /// is what local proxies (CLIProxyAPI, ollama, llama.cpp) expect.
 /// MODEL_API_KEY is never consulted for compat.
 fn apiKey(ctx: *Ctx, kind: Kind) error{ToolFailed}![]const u8 {
-    if (kind == .compat) return envFor(ctx, kind, "KEY") orelse "";
+    if (kind == .compat) return checkKey(ctx, envFor(ctx, kind, "KEY") orelse "", "KNAP_COMPAT_KEY");
     const key = ctx.environ.get("MODEL_API_KEY") orelse "";
     if (key.len == 0) return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
+    return checkKey(ctx, key, "MODEL_API_KEY");
+}
+
+/// The key is interpolated into a quoted curl `-K` config string; a
+/// `"`, `\` or control byte would break out of the quotes and inject
+/// arbitrary curl directives, and none of them is valid in a bearer
+/// token anyway. The error names the env var, never the key — key
+/// material must not appear in argv, logs or errors (#209).
+fn checkKey(ctx: *Ctx, key: []const u8, env_var: []const u8) error{ToolFailed}![]const u8 {
+    for (key) |c| {
+        if (c == '"' or c == '\\' or std.ascii.isControl(c))
+            return ctx.fail("{s} contains a '\"', '\\' or control character", .{env_var});
+    }
     return key;
 }
 
@@ -673,9 +712,7 @@ pub fn listModels(ctx: *Ctx, kind: Kind) Error![]const []const u8 {
     const key = try apiKey(ctx, kind);
     const ep = try endpoint(ctx, kind);
     const url = ep.models_url orelse
-        return ctx.fail("cannot derive a models URL from '{s}'; set {s}", .{ ep.url, switch (kind) {
-            inline else => |k| comptime envName(k, "MODELS_URL"),
-        } });
+        return ctx.fail("cannot derive a models URL from '{s}'; set {s}", .{ ep.url, envVarName(kind, "MODELS_URL") });
     warnProjectTreeStore(ctx);
     const r = try curl(ctx, url, key, null);
     if (r.exit != 0) return httpFail(ctx, r);
@@ -764,7 +801,7 @@ fn curl(ctx: *Ctx, url: []const u8, key: []const u8, payload: ?[]const u8) Error
     // `-w` appends the HTTP status after the body so `--fail-with-body`
     // can keep the provider's error payload.
     try argv.appendSlice(ctx.arena, &.{
-        "curl", "-sS",                                                   "--fail-with-body",  "-X",                                                                                      if (payload != null) "POST" else "GET", url,
+        "curl", "-sS",                                                   "--fail-with-body",  "-X",                                                                                      if (payload != null) "POST" else "GET",
         "-m",   try std.fmt.allocPrint(ctx.arena, "{d}", .{total_secs}), "--connect-timeout", try std.fmt.allocPrint(ctx.arena, "{d}", .{ctx.envSecs("KNAP_CURL_CONNECT_TIMEOUT", 10)}), "-K",                                   "-",
         "-w",   "\n%{http_code}",
     });
@@ -789,6 +826,11 @@ fn curl(ctx: *Ctx, url: []const u8, key: []const u8, payload: ?[]const u8) Error
         });
     }
 
+    // The URL goes last, behind `--`: curl's end-of-options marker means
+    // even a value that survived endpoint()'s http(s) check can never be
+    // read as a curl option (#209). Nothing may follow it.
+    try argv.appendSlice(ctx.arena, &.{ "--", url });
+
     const config = try authConfig(ctx.arena, key);
     const result = try runCurl(ctx, argv.items, config, if (total_secs == 0) .none else ctx.deadline(total_secs + 15));
     const exit = switch (result.term) {
@@ -801,7 +843,9 @@ fn curl(ctx: *Ctx, url: []const u8, key: []const u8, payload: ?[]const u8) Error
 
 /// The curl `-K -` config stream: just the Authorization header, or empty
 /// when `key` is "" — an empty `Bearer ` token is worse than no header
-/// (some proxies reject it outright).
+/// (some proxies reject it outright). `key` must come from `apiKey`,
+/// which vets it for `"`/`\`/control bytes that would escape the quoted
+/// string.
 fn authConfig(arena: std.mem.Allocator, key: []const u8) ![]const u8 {
     if (key.len == 0) return "";
     return std.fmt.allocPrint(arena, "header = \"Authorization: Bearer {s}\"\n", .{key});
@@ -1364,6 +1408,78 @@ test "endpoint: defaults, per-kind overrides and derived models URL" {
     try env.put("KNAP_SPARK_MODELS_URL", "https://proxy.example/models");
     try testing.expectEqualStrings("https://proxy.example/models", (try endpoint(&ctx, .spark)).models_url.?);
     try testing.expectError(error.ToolFailed, endpoint(&ctx, .mock));
+}
+
+test "endpoint: non-http(s) URL env values are rejected before reaching curl" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+    // curl fetches all of these happily; none is a model endpoint. A
+    // leading '-' would parse as a curl option wherever it lands in argv.
+    for ([_][]const u8{
+        "file:///etc/passwd",
+        "dict://localhost:2628/show:db",
+        "gopher://example/x",
+        "ftp://example/x",
+        "--output=/tmp/pwned",
+        "-d@/etc/passwd",
+        "api.example.com/v1/chat/completions", // no scheme at all
+    }) |bad| {
+        try env.put("KNAP_SPARK_URL", bad);
+        try testing.expectError(error.ToolFailed, endpoint(&ctx, .spark));
+        try testing.expectEqualStrings("KNAP_SPARK_URL must start with http:// or https://", ctx.err_msg);
+    }
+    // compat goes through the same gate once its required vars exist.
+    try env.put("KNAP_COMPAT_URL", "file:///etc/passwd");
+    try env.put("KNAP_COMPAT_MODEL", "m");
+    try testing.expectError(error.ToolFailed, endpoint(&ctx, .compat));
+    try testing.expectEqualStrings("KNAP_COMPAT_URL must start with http:// or https://", ctx.err_msg);
+    // A poisoned model-list URL is rejected too.
+    try env.put("KNAP_COMPAT_URL", "https://proxy.example/v1/chat/completions");
+    try env.put("KNAP_COMPAT_MODELS_URL", "file:///etc/passwd");
+    try testing.expectError(error.ToolFailed, endpoint(&ctx, .compat));
+    try testing.expectEqualStrings("KNAP_COMPAT_MODELS_URL must start with http:// or https://", ctx.err_msg);
+    // http:// stays legitimate for local proxies.
+    try env.put("KNAP_COMPAT_MODELS_URL", "http://127.0.0.1:8317/v1/models");
+    const ep = try endpoint(&ctx, .compat);
+    try testing.expectEqualStrings("https://proxy.example/v1/chat/completions", ep.url);
+    try testing.expectEqualStrings("http://127.0.0.1:8317/v1/models", ep.models_url.?);
+}
+
+test "apiKey: a quote, backslash or control byte is rejected before the curl config" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+    // Each of these would break out of `header = "…Bearer {s}"` in the
+    // -K stream and inject curl directives.
+    for ([_][]const u8{
+        "k\" , url = \"file:///etc/passwd",
+        "k\\",
+        "k\nurl = file:///etc/passwd",
+        "k\tk",
+        "k\x7f",
+    }) |bad| {
+        try env.put("MODEL_API_KEY", bad);
+        try testing.expectError(error.ToolFailed, apiKey(&ctx, .spark));
+        try testing.expectEqualStrings("MODEL_API_KEY contains a '\"', '\\' or control character", ctx.err_msg);
+        // The error names the env var; key material never leaks into it.
+        try testing.expect(std.mem.indexOf(u8, ctx.err_msg, "file:///etc/passwd") == null);
+        try testing.expect(std.mem.indexOf(u8, ctx.err_msg, bad) == null);
+    }
+    // compat's KNAP_COMPAT_KEY is vetted the same way.
+    try env.put("KNAP_COMPAT_KEY", "k\"x");
+    try testing.expectError(error.ToolFailed, apiKey(&ctx, .compat));
+    try testing.expectEqualStrings("KNAP_COMPAT_KEY contains a '\"', '\\' or control character", ctx.err_msg);
+    // A clean key still flows to the quoted header line verbatim.
+    try env.put("KNAP_COMPAT_KEY", "sk-live.abc_123~");
+    try testing.expectEqualStrings(
+        "header = \"Authorization: Bearer sk-live.abc_123~\"\n",
+        try authConfig(a, try apiKey(&ctx, .compat)),
+    );
 }
 
 test "endpoint: temperature is configurable, omittable and guarded" {
