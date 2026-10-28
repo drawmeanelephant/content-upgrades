@@ -124,7 +124,7 @@ not a message pump. Rules:
 
 ## Tool surface (MCP)
 
-Fourteen tools, in `tools/list` order:
+Seventeen tools, in `tools/list` order:
 
 - `knap_templates` — list templates + per-template JSON shape descriptor,
   inlined in the catalog.
@@ -175,7 +175,7 @@ Fourteen tools, in `tools/list` order:
   page. Returns graph diagnostics: unresolvable references caught
   *pre-publish*. This is the layer-3 surface and a demo beat.
 - `knap_density(doc_id)` — deterministic formatting-density score
-  (density/2, 0–100) of a rendered markdown doc: per-signal breakdown plus
+  (density/3, 0–100) of a rendered markdown doc: per-signal breakdown plus
   format_check penalties. No model call; markdown renders only.
 - `knap_ratchet(template_id, data, …)` — values-only density ratchet: the
   server probes which empty data slot raises the density score most, asks
@@ -183,6 +183,27 @@ Fourteen tools, in `tools/list` order:
   schema, markup and evidence checks pass and the markdown score rises.
   Never changes a non-empty value or the template. Returns `data_id` and
   `doc_id` handles.
+- `knap_ingest(path | paths, force?)` — copy existing markdown files into
+  the artifact store under fresh `doc_id` handles, byte-preserving (no
+  normalization, no frontmatter rewriting), so doc tools and `knap://docs`
+  resources work on docs that never went through `knap_render`.
+  Non-markdown extensions are rejected unless `force` is true.
+- `knap_doc_voice(doc_id, tone, as, policy?, backend?)` — guarded voice
+  pass over an ingested markdown record in one tone (`mild | spicy |
+  feral`). Only prose paragraphs and single-line list items the policy
+  grants go to the backend, one call each; every other byte copies
+  verbatim. Each reply must pass the voice guard, and the patched doc must
+  keep structhash (formatting dropped), frontmatter bytes, wiki-link
+  targets and protected atoms identical, not lose density, and pass
+  publish-check; only then is it stored (`out_doc_id`). Never writes into
+  the source tree.
+- `knap_extract(doc_id, template_id, data?)` — map a filed record into the
+  JSON data object whose render through a `filed-*` template most closely
+  matches it: canon sections map to slots (exact then fuzzy heading
+  match), non-canon sections are captured verbatim in `extra_sections`,
+  and every range the data cannot carry is reported in `unmapped`. With a
+  ratcheted `data` object it returns insert fragments — the rendered block
+  for each newly filled canon slot plus the doc anchor it writes back to.
 
 ## Engine contract
 

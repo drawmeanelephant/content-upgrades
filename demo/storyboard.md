@@ -29,7 +29,7 @@ Status key:
 
 | # | Beat | Target | Last render | Tape | Depends on | Status |
 |---|---|---|---|---|---|---|
-| 1 | Cold open: the generic AI doc (density/2 25.7) | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
+| 1 | Cold open: the generic AI doc (density/3 24.7) | 5s | 4.9s | `01-cold-open.tape` | fixture only | ready |
 | 2 | Ask for a verdict: model drafts data only | 20s | 20.7s | `02-verdict-data.tape` | frozen drafted take (I5); `boris_ask` (B3) | ready |
 | 3 | Seeded failure -> diagnostic -> repair -> clean | 25s | 25.0s | `03-repair.tape` | frozen live take (I5); seed + diag: main | ready |
 | 4 | The doc | 30s | 28.9s | `04-the-doc.tape` | main; hero still: `demo/hero/`; art overlay: #102 (human) | ready |
@@ -72,7 +72,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
 - **Commands (hidden):** `glow fixtures/generic-ai-doc.md` with a dim `printf`
   caption row chained on the same line: `model output: gpt-5-5-none via ACP (devin)`.
 - **Depends on:** `demo/fixtures/generic-ai-doc.md`, the frozen real flat output
-  (I5/#140; density/2 25.7, 479 words — the number for the Kdenlive overlay).
+  (I5/#140; density/3 24.7, 479 words — the number for the Kdenlive overlay).
 
 ### 2. Ask for a verdict (20s): ready
 
@@ -165,7 +165,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   predate it. Whether it gets a slot is the captain's call.
 - **On screen:** the required-fields-only doc renders, then one `ratchet` call,
   then the accepted steps (slot + gain per iteration) and the score summary:
-  start 39.2 -> final 82.5 against a 82.8 ceiling, 5/9 slots filled, stop
+  start 38.0 -> final 81.8 against a 81.8 ceiling, 5/13 slots filled, stop
   reason `ceiling`. Deterministic on the mock backend.
 - **Commands:**
   ```sh
@@ -288,7 +288,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   (the misses are measured model shortfall against the mock-tuned bar, not
   harness breakage). Conformance 187/188 (the one accepted
   `diagnostics/unknown-filter` buffered-output diff, 0 unsupported). Server
-  14,494 lines of Zig.
+  22,393 lines of Zig.
 
 ## Not on tape
 
