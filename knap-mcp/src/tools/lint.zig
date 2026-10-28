@@ -28,7 +28,7 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     } else if (common.getStr(args, "template_text")) |text| {
         tpl = try store.scratchFile(ctx, "knap");
         staged = tpl;
-        std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = tpl, .data = text }) catch
+        store.writePrivate(ctx, tpl, text) catch
             return ctx.fail("cannot stage template_text", .{});
     } else return ctx.fail("provide template_id or template_text", .{});
 

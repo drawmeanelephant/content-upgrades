@@ -177,7 +177,7 @@ pub fn check(ctx: *Ctx, doc: []const u8, name: []const u8, as: ?[]const u8) Erro
     };
     std.Io.Dir.createDirPath(.cwd(), ctx.io, std.fs.path.dirname(doc_path).?) catch
         return ctx.fail("cannot create staging dir", .{});
-    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = doc_path, .data = staged.text }) catch
+    store.writePrivate(ctx, doc_path, staged.text) catch
         return ctx.fail("cannot write staged doc", .{});
 
     // boris resolves output paths against its working directory, so it runs
