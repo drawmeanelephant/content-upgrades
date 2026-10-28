@@ -28,8 +28,19 @@ for d in data templates eval src prompts; do ln -s "$DEMO_ROOT/knap-mcp/$d" "$DE
 ln -s "$DEMO_ROOT/demo/fixtures" "$DEMO_WORK/fixtures"
 ln -s "$DEMO_ROOT/boris-site" "$DEMO_WORK/boris-site"
 export KNAP_MCP_HOME="$DEMO_WORK/.knap-mcp"
-# rm -r removes the symlinks themselves, never their targets.
-trap 'rm -rf "$DEMO_WORK"' EXIT
+# rm -r removes the symlinks themselves, never their targets. The path is
+# expanded now so sourcing twice still cleans each take's own workdir.
+# A caller's EXIT trap is chained after ours (bash only — `trap -p` is a
+# bash builtin and emits the trap as a re-quoted `trap -- '...' EXIT`
+# line, so strip the wrapper and eval the handler text). In a non-bash
+# caller our trap still overrides theirs.
+demo_prev_exit=
+if [ -n "${BASH_VERSION:-}" ]; then
+  demo_prev_exit=$(trap -p EXIT)
+  demo_prev_exit=${demo_prev_exit#trap -- }
+  demo_prev_exit=${demo_prev_exit% EXIT}
+fi
+trap "rm -rf \"$DEMO_WORK\"${demo_prev_exit:+; eval $demo_prev_exit}" EXIT
 cd "$DEMO_WORK" || return
 
 glow() { command glow --config "$DEMO_ROOT/demo/lib/glow.yml" "$@"; }
@@ -95,4 +106,4 @@ for eng in "$KNAP_K4O_PATH" "$KNAP_DOGBED_PATH"; do
 done
 # Leave errors on screen so a broken take is obvious in the render.
 [ "$demo_ok" = 1 ] && clear
-unset demo_ok bin eng d
+unset demo_ok bin eng d demo_prev_exit
