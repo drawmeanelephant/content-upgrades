@@ -54,23 +54,10 @@ jobs:
           path: ~/.cache/knap-engines
           key: knap-engines-v2-${{ runner.os }}-${{ steps.pins.outputs.hash }}
 
-      # scripts/engines.sh builds each pin from `git archive` of a source repo
-      # that contains the pinned commit, so a shallow fetch of just that SHA
-      # into $RUNNER_TEMP/src/<name> is enough.
+      # engines.sh shallow-fetches a pinned SHA itself when no local checkout
+      # has it, so `make engines` is the whole recipe on a fresh runner.
       - name: Build pinned engines
-        run: |
-          set -eu
-          export KNAP_ENGINES_SRC="$RUNNER_TEMP/src"
-          export KNAP_ENGINES_DIR="$HOME/.cache/knap-engines"
-          while IFS='=' read -r key sha; do
-            name=$(echo "$key" | sed 's/_SHA$//' | tr '[:upper:]' '[:lower:]')
-            repo="$KNAP_ENGINES_SRC/$name"
-            mkdir -p "$repo"
-            git -C "$repo" init -q
-            git -C "$repo" remote add origin "https://github.com/drawmeanelephant/$name"
-            git -C "$repo" fetch -q --depth 1 origin "$sha"
-          done < "$RUNNER_TEMP/engine-pins.txt"
-          make engines
+        run: make engines
 
       - name: Test
         run: make test
@@ -113,19 +100,7 @@ jobs:
           key: knap-engines-v2-${{ runner.os }}-${{ steps.pins.outputs.hash }}
 
       - name: Build pinned engines
-        run: |
-          set -eu
-          export KNAP_ENGINES_SRC="$RUNNER_TEMP/src"
-          export KNAP_ENGINES_DIR="$HOME/.cache/knap-engines"
-          while IFS='=' read -r key sha; do
-            name=$(echo "$key" | sed 's/_SHA$//' | tr '[:upper:]' '[:lower:]')
-            repo="$KNAP_ENGINES_SRC/$name"
-            mkdir -p "$repo"
-            git -C "$repo" init -q
-            git -C "$repo" remote add origin "https://github.com/drawmeanelephant/$name"
-            git -C "$repo" fetch -q --depth 1 origin "$sha"
-          done < "$RUNNER_TEMP/engine-pins.txt"
-          make engines
+        run: make engines
 
       # boris has no prebuilt release binaries; v0.8.2 is a source tag built
       # with Zig 0.16.0 (boris moved to Zig 0.17.0 after v0.8.2, so the repo's
@@ -141,7 +116,7 @@ jobs:
 
       # KNAP_BORIS_PATH makes beat 5 (publish-check) run instead of skipping.
       - name: Demo
-        run: KNAP_BORIS_PATH="$HOME/.cache/knap-boris/v0.8.2/boris" KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" KNAP_ENGINES_SRC="$RUNNER_TEMP/src" make demo
+        run: KNAP_BORIS_PATH="$HOME/.cache/knap-boris/v0.8.2/boris" KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" make demo
 
       # The B-lane gate: exercises far more of the boris binary (check,
       # validate, artifact regen) than publish-check alone — catches a subtly
