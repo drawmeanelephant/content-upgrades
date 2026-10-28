@@ -169,6 +169,9 @@ pub const Slot = struct {
     /// Row width for table slots; 0 means "match the existing rows".
     cells: usize,
     role: []const u8,
+    /// The shape's `"section"` canon heading, when declared. Grounded
+    /// records use it (with the field name) as the slot's topic.
+    section: []const u8 = "",
     /// The shape entry as JSON, quoted into the enrich slice.
     schema: []const u8,
     /// `name` for scalars, `name[+]` for arrays, `name{+}` for keyed maps.
@@ -287,6 +290,7 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
             .max_items = int(spec.object, "max_items") orelse default_max_items,
             .cells = int(spec.object, "cells") orelse 0,
             .role = str(spec.object, "role") orelse "",
+            .section = str(spec.object, "section") orelse "",
             .schema = try std.json.Stringify.valueAlloc(arena, Value{ .object = schema }, .{}),
             .path = name,
             .hosts = hosts.items,
@@ -1024,6 +1028,207 @@ pub fn borisEvidence(arena: std.mem.Allocator, art: *const borisrag.Artifact, da
     return out.items;
 }
 
+// --- Grounding (extracted records) -------------------------------------------
+//
+// A data object that came out of `extract` is a real archive record, not
+// a draft brief: asking the model to draft canon prose from nothing is
+// asking it to fabricate, and a well-behaved model declines (#377). The
+// grounding contract rewrites the ask — compose the value from quoted or
+// near-quoted spans of the record's own prose — and gives the evidence
+// gate teeth to check it. `evidence: "record"` forces the mode on for a
+// hand-built data object; `isExtracted` detects the real thing.
+
+/// An extracted filed record: `extra_sections` is extraction's verbatim
+/// capture of non-canon sections and `card` its preamble slot — either
+/// key says the data is a record, not a brief.
+pub fn isExtracted(data: ObjectMap) bool {
+    return data.get("extra_sections") != null or data.get("card") != null;
+}
+
+/// Shortest span worth quoting or matching on; keeps fm scalars like
+/// `"yes"` out of the pool.
+const min_span_bytes = 4;
+
+/// The record's own prose, in key order: every string in the data long
+/// enough to quote — card, extra_sections bodies and headings, mapped
+/// canon values, fm scalars, and `sources` quotes (they are data strings
+/// too), so a grounded fill draws on all of it.
+pub fn recordSpans(arena: std.mem.Allocator, data: ObjectMap) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    try collectStrings(arena, .{ .object = data }, &out);
+    return out.items;
+}
+
+fn collectStrings(arena: std.mem.Allocator, v: Value, out: *std.ArrayList([]const u8)) !void {
+    switch (v) {
+        .string => |s| {
+            if (std.mem.trim(u8, s, " \t\r\n").len >= min_span_bytes) try out.append(arena, s);
+        },
+        .array => |a| for (a.items) |x| try collectStrings(arena, x, out),
+        .object => |o| for (o.values()) |x| try collectStrings(arena, x, out),
+        else => {},
+    }
+}
+
+/// `needle` occurs in `hay` starting and ending on non-word bytes — the
+/// same boundary rule as the verifier's verbatim check, without the
+/// normalization (the caller lowercases).
+fn containsWord(hay: []const u8, needle: []const u8) bool {
+    if (needle.len == 0) return false;
+    var from: usize = 0;
+    while (std.mem.indexOfPos(u8, hay, from, needle)) |at| : (from = at + 1) {
+        const end = at + needle.len;
+        const left = at == 0 or !std.ascii.isAlphanumeric(hay[at - 1]);
+        const right = end == hay.len or !std.ascii.isAlphanumeric(hay[end]);
+        if (left and right) return true;
+    }
+    return false;
+}
+
+/// The slot's topic words: its name (underscores split) plus the canon
+/// `section` heading, lowercased, deduped, >=3 bytes. `note`/`notes`
+/// matching goes through `topicHit`, which also tries the singular and
+/// plural form.
+fn topicWords(arena: std.mem.Allocator, s: Slot) ![]const []const u8 {
+    var out: std.ArrayList([]const u8) = .empty;
+    const text = try std.fmt.allocPrint(arena, "{s} {s}", .{ s.field.name, s.section });
+    var it = std.mem.tokenizeAny(u8, text, " _-/\t");
+    while (it.next()) |w| {
+        if (w.len < 3) continue;
+        const low = try std.ascii.allocLowerString(arena, w);
+        for (out.items) |x| {
+            if (std.mem.eql(u8, x, low)) break;
+        } else try out.append(arena, low);
+    }
+    return out.items;
+}
+
+/// A topic word occurs in the span as a whole word, in singular or plural.
+fn topicHit(arena: std.mem.Allocator, span_low: []const u8, w: []const u8) !bool {
+    if (containsWord(span_low, w)) return true;
+    if (w.len > 3 and w[w.len - 1] == 's' and containsWord(span_low, w[0 .. w.len - 1])) return true;
+    return containsWord(span_low, try std.fmt.allocPrint(arena, "{s}s", .{w}));
+}
+
+/// The grounding skip check: a slot earns a backend call only when some
+/// record span shares a topic word with its name or canon section. Null
+/// means grounded; otherwise the reason is the step's `ungrounded`
+/// detail. Over-matching only costs a call — the model can still
+/// decline — while under-matching skips a slot the record deliberately
+/// leaves empty.
+fn groundedWhy(arena: std.mem.Allocator, s: Slot, spans: []const []const u8) !?[]const u8 {
+    const topics = try topicWords(arena, s);
+    for (spans) |sp| {
+        const low = try std.ascii.allocLowerString(arena, sp);
+        for (topics) |t| {
+            if (try topicHit(arena, low, t)) return null;
+        }
+    }
+    return try std.fmt.allocPrint(arena, "no record span shares terms with '{s}'", .{s.field.name});
+}
+
+/// A string field whose text the grounding contract covers: not an enum
+/// choice (server vocabulary), a `ref` key (server-paired write), a code
+/// line (codeVerbatim is stricter), or a url/page value (exact-substring
+/// rule below instead).
+fn proseField(f: Field) bool {
+    if (f.enum_values.len > 0 or f.ref != null or f.code) return false;
+    if (f.url or f.page) return false;
+    return f.kind == .string or f.kind == .strings;
+}
+
+/// The value's strings, split into prose claims (sentence-checked against
+/// the pool) and verbatim values (a url/page name is grounded only as an
+/// exact substring of a span).
+fn groundedStrings(
+    arena: std.mem.Allocator,
+    s: Slot,
+    v: Value,
+    prose: *std.ArrayList([]const u8),
+    verbatim: *std.ArrayList([]const u8),
+) !void {
+    const put = struct {
+        /// Route one field's string (or array items) into the right list.
+        fn go(a: std.mem.Allocator, f: Field, x: Value, p: *std.ArrayList([]const u8), vb: *std.ArrayList([]const u8)) !void {
+            const one = struct {
+                fn add(a2: std.mem.Allocator, f2: Field, y: Value, p2: *std.ArrayList([]const u8), vb2: *std.ArrayList([]const u8)) !void {
+                    if (y != .string) return;
+                    if (f2.url or f2.page) try vb2.append(a2, y.string) else if (proseField(f2)) try p2.append(a2, y.string);
+                }
+            }.add;
+            switch (x) {
+                .string => try one(a, f, x, p, vb),
+                .array => |arr| for (arr.items) |it| try one(a, f, it, p, vb),
+                else => {},
+            }
+        }
+    }.go;
+    switch (s.field.kind) {
+        .string, .strings, .keyed => try put(arena, s.field, v, prose, verbatim),
+        .rows => {
+            if (v == .array) for (v.array.items) |row| {
+                if (row != .array) continue;
+                for (row.array.items) |cell| {
+                    if (cell == .string) try prose.append(arena, cell.string);
+                }
+            };
+        },
+        .objects => {
+            if (v != .object) return;
+            for (s.field.sub) |f| {
+                if (v.object.get(f.name)) |x| try put(arena, f, x, prose, verbatim);
+            }
+        },
+        else => {},
+    }
+}
+
+/// A sentence worth gating: at least one alphanumeric run of two bytes,
+/// so abbreviation fragments like `e.g` don't force a claim the
+/// tokenizer would drop to zero content words.
+fn hasContent(s: []const u8) bool {
+    var n: usize = 0;
+    for (s) |c| {
+        if (std.ascii.isAlphanumeric(c)) {
+            n += 1;
+            if (n >= 2) return true;
+        } else n = 0;
+    }
+    return false;
+}
+
+/// The grounding gate on a returned value: every prose string must be
+/// composed of sentences that are verbatim (`entails`) or near-quoted
+/// (`neutral`, high overlap) spans of the record — the same labels the
+/// evidence gate uses — and every url/page string an exact span
+/// substring. Runs only in grounded mode, on top of the ordinary gates;
+/// returns the rejection detail, or null.
+fn groundedViolation(arena: std.mem.Allocator, s: Slot, v: Value, spans: []const []const u8) !?[]const u8 {
+    var prose: std.ArrayList([]const u8) = .empty;
+    var verbatim: std.ArrayList([]const u8) = .empty;
+    try groundedStrings(arena, s, v, &prose, &verbatim);
+    for (verbatim.items) |x| {
+        const t = std.mem.trim(u8, x, " \t\r\n");
+        const hit = for (spans) |e| {
+            if (std.mem.indexOf(u8, e, t) != null) break true;
+        } else false;
+        if (!hit) return try std.fmt.allocPrint(arena, "grounding: '{s}' is not a span of the record", .{x});
+    }
+    for (prose.items) |claim| {
+        var it = std.mem.tokenizeAny(u8, claim, ".!?\n;");
+        while (it.next()) |raw| {
+            const sent = std.mem.trim(u8, raw, " \t\"'()[]—–-");
+            if (!hasContent(sent)) continue;
+            const c = try verifier.heuristic(arena, sent, spans);
+            switch (c.label) {
+                .entails, .neutral => continue,
+                else => return try std.fmt.allocPrint(arena, "grounding: '{s}' is not a span of the record ({s})", .{ sent, c.reason }),
+            }
+        }
+    }
+    return null;
+}
+
 /// The evidence-flagged strings in a value: the value itself for an
 /// evidence scalar or item, else the item fields marked `evidence`.
 fn evidenceClaims(arena: std.mem.Allocator, s: Slot, value: Value) ![]const []const u8 {
@@ -1096,6 +1301,10 @@ pub const Reason = enum {
     no_gain,
     new_warnings,
     declined,
+    /// Grounded mode: the slot had no source span to compose from, so it
+    /// was skipped without spending a backend call — distinct from a
+    /// `declined` (asked, model returned null).
+    ungrounded,
 
     pub fn label(r: Reason) []const u8 {
         return switch (r) {
@@ -1122,8 +1331,10 @@ pub const Step = struct {
 };
 
 /// Where evidence-gated slots' quotes come from: `data` reads
-/// `data.sources`, `boris` is `boris_ask` snippets for `subject ?? title`.
-pub const Evidence = enum { data, boris };
+/// `data.sources`, `boris` is `boris_ask` snippets for `subject ?? title`,
+/// and `record` forces the grounding contract on — the pool is every
+/// string in the data, the extracted record's own prose.
+pub const Evidence = enum { data, boris, record };
 
 pub const Options = struct {
     max_iterations: usize = default_max_iterations,
@@ -1167,6 +1378,9 @@ pub const Result = struct {
     fill_final: usize,
     steps: []const Step,
     rejections: std.EnumArray(Reason, usize),
+    /// The run enforced the grounding contract (extracted record or
+    /// `evidence: "record"`).
+    grounded: bool = false,
 
     pub fn converged(r: Result) bool {
         return r.stop == .ceiling or r.stop == .plateau;
@@ -1198,6 +1412,10 @@ const Run = struct {
     shape: Shape,
     opts: Options,
     evidence: []const []const u8,
+    /// Grounding contract mode: the evidence pool is the record's own
+    /// prose, the slice carries the GROUND ask, and replies are checked
+    /// against it.
+    grounded: bool = false,
     renders: usize = 0,
     mock_used: std.StringHashMapUnmanaged(usize) = .empty,
 
@@ -1223,7 +1441,7 @@ const Run = struct {
         const a = r.ctx.arena;
         // Built even on mock so the call counts what a live backend would
         // receive.
-        const slice = try buildSlice(a, s, r.shape, best, r.evidence, r.opts.tone);
+        const slice = try buildSlice(a, s, r.shape, best, r.evidence, r.opts.tone, r.grounded);
         if (r.kind == .mock) {
             r.ctx.countCall(enrich_prefix, slice);
             const list = r.opts.mock.get(s.path) orelse return .declined;
@@ -1297,14 +1515,21 @@ fn probeAll(r: *Run, base: Best, step: usize) Error![]const Probe {
     return out.items;
 }
 
-/// Rank the probes best-first and keep the ones worth a backend call: at
-/// most `top_k`, and none with gain below `eps` — a sub-ε candidate can
-/// never be accepted, so asking it only burns a call.
-fn askSlice(cands: []Cand, eps: f64) []Cand {
+/// Rank the probes best-first and drop the ones worth nothing: a sub-ε
+/// candidate can never be accepted, so asking (or reporting) it only
+/// burns a call. The loop scans this list — grounded skips and asks
+/// interleaved — until `top_k` asks are spent.
+fn rankSlice(cands: []Cand, eps: f64) []Cand {
     std.mem.sort(Cand, cands, {}, candLess);
-    var n = @min(top_k, cands.len);
+    var n = cands.len;
     while (n > 0 and cands[n - 1].gain < eps) n -= 1;
     return cands[0..n];
+}
+
+/// `rankSlice` capped at `top_k`: the asks a non-grounded iteration makes.
+fn askSlice(cands: []Cand, eps: f64) []Cand {
+    const ranked = rankSlice(cands, eps);
+    return ranked[0..@min(top_k, ranked.len)];
 }
 
 /// The template's own ceiling: the same greedy probe policy with stub
@@ -1338,8 +1563,12 @@ pub fn run(
         return ctx.fail("backend '{s}' needs MODEL_API_KEY", .{@tagName(kind)});
     const a = ctx.arena;
     const t0 = std.Io.Timestamp.now(ctx.io, .awake);
-    var r: Run = .{ .ctx = ctx, .kind = kind, .tpl = tpl_path, .shape = shape, .opts = opts, .evidence = switch (opts.evidence) {
-        .data => try dataEvidence(a, data0),
+    // `record` forces the contract on; `data` auto-detects an extraction
+    // (extra_sections/card); `boris` keeps the external pool ungrounded.
+    const grounded = opts.evidence == .record or (opts.evidence == .data and isExtracted(data0));
+    var r: Run = .{ .ctx = ctx, .kind = kind, .tpl = tpl_path, .shape = shape, .opts = opts, .grounded = grounded, .evidence = switch (opts.evidence) {
+        .data => if (grounded) try recordSpans(a, data0) else try dataEvidence(a, data0),
+        .record => try recordSpans(a, data0),
         .boris => blk: {
             const art = try borisrag.load(ctx);
             break :blk try borisEvidence(a, &art, data0) orelse
@@ -1392,23 +1621,37 @@ pub fn run(
             stop = .render_budget;
             break;
         }
-        const ask = askSlice(cands.items, eps);
-        if (ask.len == 0) {
+        const ranked = rankSlice(cands.items, eps);
+        if (ranked.len == 0) {
             stop = .plateau;
             break;
         }
 
         iterations = iter + 1;
         var accepted = false;
-        for (ask) |c| {
+        var asks: usize = 0;
+        for (ranked) |c| {
+            if (asks >= top_k) break;
+            const s = c.of(slots);
+            var step: Step = .{ .iteration = iter + 1, .slot = s.path, .probe_gain = c.gain };
+            // A grounded slot with no source span is skipped, not asked:
+            // the record may be deliberately lacking it.
+            if (r.grounded) {
+                if (try groundedWhy(a, s, r.evidence)) |why| {
+                    step.reason = .ungrounded;
+                    step.detail = why;
+                    rejections.getPtr(.ungrounded).* += 1;
+                    try steps.append(a, step);
+                    continue;
+                }
+            }
             if (calls >= opts.max_calls) {
                 stop = .budget;
                 break :outer;
             }
-            const s = c.of(slots);
-            var step: Step = .{ .iteration = iter + 1, .slot = s.path, .probe_gain = c.gain };
             const reply = try r.ask(s, best.data);
             calls += 1;
+            asks += 1;
             judge: switch (reply) {
                 .declined => step.reason = .declined,
                 .bad => |why| {
@@ -1445,6 +1688,15 @@ pub fn run(
                         step.detail = try std.fmt.allocPrint(a, "code: {s} not verbatim in evidence", .{name});
                         break :judge;
                     } else if (s.gated() and opts.verifier != .none) if (try checkEvidence(ctx, opts.verifier, s, v, r.evidence)) |why| {
+                        step.reason = .verifier;
+                        step.detail = why;
+                        break :judge;
+                    };
+                    // The grounding contract's teeth: like the code gate
+                    // it runs regardless of the verifier kind — a record
+                    // value that is not composed of the record's spans is
+                    // fabrication, not a near miss.
+                    if (r.grounded) if (try groundedViolation(a, s, v, r.evidence)) |why| {
                         step.reason = .verifier;
                         step.detail = why;
                         break :judge;
@@ -1511,6 +1763,7 @@ pub fn run(
         .fill_final = filled(best.data, slots),
         .steps = steps.items,
         .rejections = rejections,
+        .grounded = r.grounded,
     } };
 }
 
@@ -1524,6 +1777,7 @@ pub fn buildSlice(
     data: ObjectMap,
     evidence: []const []const u8,
     tone: ?[]const u8,
+    grounded: bool,
 ) ![]const u8 {
     var aw: std.Io.Writer.Allocating = .init(arena);
     const w = &aw.writer;
@@ -1534,6 +1788,9 @@ pub fn buildSlice(
     else
         "fill this empty field";
     try w.print("FIELD: {s}   ({s})\nSCHEMA: {s}\n", .{ s.path, mode, s.schema });
+    // The grounding contract for an extracted record: compose, never
+    // invent. EVIDENCE below is the record's own prose, in data order.
+    if (grounded) try w.writeAll("GROUND: this data was extracted verbatim from a filed record, and EVIDENCE is that record's own prose. Compose the value ONLY from quoted or near-quoted spans of EVIDENCE — restructure what is filed; never invent facts or wording. If no span supports this field, return null.\n");
     // The cached prefix bans pipes; a code slot gets a per-slot override.
     if (s.field.code) try w.writeAll("This value is rendered verbatim inside a code block: copy the command exactly from EVIDENCE, one line, no backtick fences. Pipes and symbols are fine here.\n");
     // A palette item: the server picked the kind; SCHEMA lists only its
@@ -1580,8 +1837,8 @@ pub fn buildSlice(
 // --- Output (plan section 2.8) -----------------------------------------------
 
 pub fn writeResult(r: Result, data_id: []const u8, doc_id: []const u8, w: *std.Io.Writer) !void {
-    try w.print("{{\"ok\":true,\"converged\":{s},\"stop\":\"{s}\",\"iterations\":{d},\"calls\":{d},\"renders\":{d},\"ceiling_renders\":{d},\"ms\":{d:.1}", .{
-        if (r.converged()) "true" else "false", @tagName(r.stop), r.iterations, r.calls, r.renders, r.ceiling_renders, r.ms,
+    try w.print("{{\"ok\":true,\"converged\":{s},\"grounded\":{s},\"stop\":\"{s}\",\"iterations\":{d},\"calls\":{d},\"renders\":{d},\"ceiling_renders\":{d},\"ms\":{d:.1}", .{
+        if (r.converged()) "true" else "false", if (r.grounded) "true" else "false", @tagName(r.stop), r.iterations, r.calls, r.renders, r.ceiling_renders, r.ms,
     });
     try w.print(",\"score\":{{\"scorer\":\"{s}\",\"start\":{d:.1},\"final\":{d:.1},\"ceiling\":{d:.1}", .{ density.version, r.start, r.final, r.ceiling });
     try w.print("}},\"slot_fill\":{{\"start\":\"{d}/{d}\",\"final\":\"{d}/{d}\"}}", .{ r.fill_start, r.slots, r.fill_final, r.slots });
@@ -1738,14 +1995,14 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
     try w.print("backend: {s}   corpus: {s}   scorer: {s}   eps: {d:.1}   top_k: {d}   max_calls: {d}\n\n", .{
         @tagName(kind), corpus_path, density.version, epsilon, top_k, max_backend_calls,
     });
-    try w.writeAll("| case | start | final | gain | ceiling | iters | cap | calls | accepted | parse | schema | inert | render | verifier | no-gain | warn | declined | renders | ms | stop | check |\n");
-    try w.writeAll("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|---|\n");
+    try w.writeAll("| case | start | final | gain | ceiling | iters | cap | calls | accepted | parse | schema | inert | render | verifier | no-gain | warn | declined | ungrounded | renders | ms | stop | check |\n");
+    try w.writeAll("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|---|---|\n");
     var runs: usize = 0;
     var renders: usize = 0;
     var ms: f64 = 0;
     for (rows.items) |row| {
         const r = row.result orelse {
-            try w.print("| {s} | - | - | - | - | - | {d} | - | - | - | - | - | - | - | - | - | - | - | - | {s}: {s} |\n", .{ row.id, row.max_iterations, row.check, row.err });
+            try w.print("| {s} | - | - | - | - | - | {d} | - | - | - | - | - | - | - | - | - | - | - | - | - | {s}: {s} |\n", .{ row.id, row.max_iterations, row.check, row.err });
             continue;
         };
         runs += 1;
@@ -1753,10 +2010,10 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
         ms += r.ms;
         const rj = r.rejections;
         try w.print("| {s} | {d:.1} | {d:.1} | {d:.1} | {d:.1}", .{ row.id, r.start, r.final, r.final - r.start, r.ceiling });
-        try w.print(" | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d:.0} | {s} | {s} |\n", .{
+        try w.print(" | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d:.0} | {s} | {s} |\n", .{
             r.iterations,          row.max_iterations, r.calls,         r.accepted(),      rj.get(.parse),
             rj.get(.schema),       rj.get(.inert),     rj.get(.render), rj.get(.verifier), rj.get(.no_gain),
-            rj.get(.new_warnings), rj.get(.declined),  r.renders,       r.ms,              @tagName(r.stop),
+            rj.get(.new_warnings), rj.get(.declined),  rj.get(.ungrounded), r.renders,     r.ms,              @tagName(r.stop),
             row.check,
         });
     }
@@ -2181,13 +2438,13 @@ test "palette: the slice names the server's kind and asks only for its fields" {
     const sh = try parseShape(a, palette_shape);
     const s = slotNamed(sh, "sections[+]");
     const d = try testData(a, "{\"title\":\"T\"}");
-    const slice = try buildSlice(a, s.pick(1), sh, d, &.{}, null);
+    const slice = try buildSlice(a, s.pick(1), sh, d, &.{}, null, false);
     try testing.expect(std.mem.indexOf(u8, slice, "FIELD: sections[+]:code   (append one item)") != null);
     try testing.expect(std.mem.indexOf(u8, slice, "KIND: code   (chosen by the server: set \"kind\" to \"code\"") != null);
     try testing.expect(std.mem.indexOf(u8, slice, "Field 'command' is rendered verbatim inside a code block") != null);
     try testing.expect(std.mem.indexOf(u8, slice, "\"items\"") == null);
     // A plain slot's slice carries no KIND line.
-    try testing.expect(std.mem.indexOf(u8, try buildSlice(a, slotNamed(sh, "pull"), sh, d, &.{}, null), "KIND:") == null);
+    try testing.expect(std.mem.indexOf(u8, try buildSlice(a, slotNamed(sh, "pull"), sh, d, &.{}, null, false), "KIND:") == null);
 }
 
 test "canGrow and withValue never touch a non-empty value" {
@@ -2390,7 +2647,7 @@ test "slice for a keyed slot names the anchor, not the key" {
     const a = arena.allocator();
     const sh = try parseShape(a, test_shape);
     const d = try testData(a, "{\"title\":\"T\",\"quotes\":[{\"text\":\"Beware!\",\"kind\":\"tip\"}]}");
-    const slice = try buildSlice(a, slotNamed(sh, "notes{+}"), sh, d, &.{}, null);
+    const slice = try buildSlice(a, slotNamed(sh, "notes{+}"), sh, d, &.{}, null, false);
     try testing.expect(std.mem.indexOf(u8, slice, "FIELD: notes{+}   (write one note;") != null);
     try testing.expect(std.mem.indexOf(u8, slice, "ANCHOR: quotes[0] {\"text\":\"Beware!\",\"kind\":\"tip\"}") != null);
     try testing.expect(std.mem.indexOf(u8, slice, "beware") == null);
@@ -2456,7 +2713,7 @@ test "slice stays under the byte cap with large evidence" {
     const d = try testData(a, "{\"title\":\"T\"}");
     const big: [200]u8 = @splat('x');
     const ev: [64][]const u8 = @splat(&big);
-    const slice = try buildSlice(a, slotNamed(sh, "pull"), sh, d, &ev, "spicy");
+    const slice = try buildSlice(a, slotNamed(sh, "pull"), sh, d, &ev, "spicy", false);
     try testing.expect(slice.len <= max_slice_bytes);
     try testing.expect(std.mem.indexOf(u8, slice, "FIELD: pull") != null);
     try testing.expect(std.mem.indexOf(u8, slice, "HEADLINE: {\"title\":\"T\"}") != null);
@@ -2692,6 +2949,100 @@ test "render budget: an exhausted run stops with render_budget and renders <= ma
     try testing.expect(r.renders <= max_renders);
     try testing.expectEqual(max_renders, r.renders);
     try testing.expectEqual(@as(usize, 0), r.calls);
+}
+
+const grounded_shape =
+    \\{"template_id":"t","fields":{
+    \\ "title":{"type":"string"},
+    \\ "origin_myth":{"type":"string","optional":true,"apparatus":"quote","section":"Origin Myth"},
+    \\ "field_notes":{"type":"array<object>","optional":true,"apparatus":"list","max_items":2,"section":"Field Notes","fields":{"text":{"type":"string"}}}}}
+;
+
+test "grounded: extraction detection and the record span pool" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const extracted = try testData(a,
+        \\{"title":"Map 72","card":"**Role:** keeper","extra_sections":[{"after":"preamble","heading":"Residue","level":2,"body":"Stacks coins in archways."}],"notes":{"k":"yes"}}
+    );
+    try testing.expect(isExtracted(extracted));
+    try testing.expect(isExtracted(try testData(a, "{\"card\":\"**Role:** keeper\"}")));
+    try testing.expect(!isExtracted(try testData(a, "{\"title\":\"T\",\"intro\":\"x\"}")));
+    const spans = try recordSpans(a, extracted);
+    // "yes" (3 bytes) is under min_span_bytes and never becomes a span;
+    // the `after` anchor strings in extra_sections do.
+    const want = [_][]const u8{ "Map 72", "**Role:** keeper", "preamble", "Residue", "Stacks coins in archways." };
+    try testing.expectEqual(want.len, spans.len);
+    for (want, spans) |w, sp| try testing.expectEqualStrings(w, sp);
+    // `sources` quotes are data strings too: the record pool subsumes
+    // dataEvidence.
+    const with_src = try testData(a, "{\"card\":\"abcd\",\"sources\":[{\"quote\":\"a source quote\"}]}");
+    const sp2 = try recordSpans(a, with_src);
+    try testing.expectEqual(@as(usize, 2), sp2.len);
+    try testing.expectEqualStrings("a source quote", sp2[1]);
+}
+
+test "grounded: a slot with no topical span is ungrounded" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, grounded_shape);
+    const spans = [_][]const u8{"Caretaker Mimsy signs every field note."};
+    const why = (try groundedWhy(a, slotNamed(sh, "origin_myth"), &spans)).?;
+    try testing.expect(std.mem.indexOf(u8, why, "origin_myth") != null);
+    // "field" and "note" both hit: the slot earns its ask.
+    try testing.expectEqual(@as(?[]const u8, null), try groundedWhy(a, slotNamed(sh, "field_notes[+]"), &spans));
+    // Plural/singular matching goes both ways.
+    const plural = [_][]const u8{"Every note is signed twice."};
+    try testing.expectEqual(@as(?[]const u8, null), try groundedWhy(a, slotNamed(sh, "field_notes[+]"), &plural));
+}
+
+test "grounded gate: spans compose, fabrication rejects" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, test_shape);
+    const spans = [_][]const u8{
+        "Stacks coins in archways and hums while stamping paperwork.",
+        "Caretaker Mimsy files beside Bricky.",
+        "See https://example.com/x for the map.",
+    };
+    const pull = slotNamed(sh, "pull");
+    // A verbatim quote composes.
+    try testing.expectEqual(@as(?[]const u8, null), try groundedViolation(a, pull, .{ .string = "Stacks coins in archways and hums while stamping paperwork." }, &spans));
+    // A near-quote (one word dropped) still composes.
+    try testing.expectEqual(@as(?[]const u8, null), try groundedViolation(a, pull, .{ .string = "Stacks coins in archways and hums while stamping" }, &spans));
+    // A value composed across two spans passes: each sentence is gated.
+    try testing.expectEqual(@as(?[]const u8, null), try groundedViolation(a, pull, .{ .string = "Stacks coins in archways and hums while stamping paperwork. Caretaker Mimsy files beside Bricky." }, &spans));
+    // Fabrication rejects with the grounding detail.
+    const fab = (try groundedViolation(a, pull, .{ .string = "Bricky was born in a lighthouse." }, &spans)).?;
+    try testing.expect(std.mem.indexOf(u8, fab, "grounding:") != null);
+    // Enum and ref strings are exempt; the prose field is still gated.
+    const quotes = slotNamed(sh, "quotes[+]");
+    const item = try testData(a, "{\"text\":\"Stacks coins in archways and hums while stamping paperwork.\",\"kind\":\"warning\",\"note\":\"n9\"}");
+    try testing.expectEqual(@as(?[]const u8, null), try groundedViolation(a, quotes, .{ .object = item }, &spans));
+    const bad_item = try testData(a, "{\"text\":\"Bricky was born in a lighthouse.\",\"kind\":\"warning\"}");
+    try testing.expect((try groundedViolation(a, quotes, .{ .object = bad_item }, &spans)) != null);
+    // A url value is grounded only as an exact substring of a span.
+    const cover = slotNamed(sh, "cover");
+    try testing.expectEqual(@as(?[]const u8, null), try groundedViolation(a, cover, .{ .string = "https://example.com/x" }, &spans));
+    try testing.expect((try groundedViolation(a, cover, .{ .string = "https://nope.example/x" }, &spans)) != null);
+}
+
+test "grounded slice carries the contract and the record pool" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, test_shape);
+    const d = try testData(a, "{\"title\":\"T\"}");
+    const spans = [_][]const u8{"Stacks coins in archways."};
+    const slice = try buildSlice(a, slotNamed(sh, "pull"), sh, d, &spans, null, true);
+    try testing.expect(std.mem.indexOf(u8, slice, "GROUND:") != null);
+    try testing.expect(std.mem.indexOf(u8, slice, "near-quoted spans of EVIDENCE") != null);
+    try testing.expect(std.mem.indexOf(u8, slice, "\"Stacks coins in archways.\"") != null);
+    // Ungrounded slices carry no contract.
+    const plain = try buildSlice(a, slotNamed(sh, "pull"), sh, d, &spans, null, false);
+    try testing.expect(std.mem.indexOf(u8, plain, "GROUND:") == null);
 }
 
 test "render budget: a normal run is unchanged below the cap" {

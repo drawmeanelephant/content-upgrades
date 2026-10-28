@@ -1,0 +1,15 @@
+{
+  "title": "Map 72 — Absentia",
+  "id": "mascots/M-0672",
+  "parent": "mascots",
+  "status": "published",
+  "tags": ["mascot", "cartography"],
+  "title_heading": "yes",
+  "card": "**Role:** keeper of the seventy-second floor map; Bricky files every field note twice and stamps the ledger before breakfast.",
+  "verse": "Bricky folds the map at night,\nkeeps the legend out of sight,\nstamps the ledger, marks the row,\nfiles the rivers where they go,\nand locks the atlas out of fright.",
+  "extra_sections": [
+    {"after": "card", "heading": "Provenance Ledger", "level": 2, "body": "The provenance ledger records Bricky under map seventy-two, an entry the archive kept from the flood recovery."},
+    {"after": "card", "heading": "Caretaker Notes", "level": 2, "body": "MSG: the hallway moved again overnight. Caretaker Mimsy files beside Bricky and signs every field note she finds."},
+    {"after": "verse", "heading": "Behavioral Residue", "level": 2, "body": "Stacks coins in archways and hums while stamping paperwork."}
+  ]
+}

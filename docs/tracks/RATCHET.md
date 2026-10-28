@@ -113,3 +113,32 @@ New ratchet-eval rows on `eval/ratchet/footnotes.*`: `fixture-footnotes`
   nothing `ref`s them. Once a template adds `[^{{ x.note | kebab }}]` sites
   and a `ref` annotation, they become `footnotes{+}` slots with no code
   change.
+
+## #377 — grounding contract for extracted records
+
+Extracted filed records (`extra_sections`/`card` in the data, or
+`--evidence record`) now run the ratchet under a grounding contract:
+
+- Pool = `recordSpans`: every string in the data (card, extra_sections,
+  canon values, fm scalars, `sources` quotes — it subsumes
+  `dataEvidence`).
+- Slice gets a `GROUND:` line: compose only from quoted/near-quoted
+  spans, return null if nothing supports the field. `enrich_prefix` is
+  unchanged.
+- Pre-ask skip: `groundedWhy` requires a span sharing a topic word
+  (slot name + canon `section`, singular/plural) — no match means the
+  record is deliberately lacking, so the step is `ungrounded` with a
+  reason, costing no call. `declined` still means asked-and-null.
+- Post-reply gate `groundedViolation` (reason `verifier`): every prose
+  sentence must be `entails`|`neutral` vs the pool; url/page strings an
+  exact substring; enum/ref/code fields follow their own gates.
+- The ask loop scans the whole above-eps ranked list until `top_k` asks
+  are spent (`rankSlice`), so skips and asks interleave in `steps`.
+  Report gains `"grounded": true|false` and an `ungrounded` column in
+  ratchet-eval.
+
+Verified live (`devin acp --model swe-2-medium`) on an extracted
+mascot record: 6 calls, 6 accepted fills, 0 declines, `system_messages[+]`
+skipped `ungrounded` (no topical span). Eval: `fixture-record-grounded`,
+`fixture-record-ungrounded`, `adv-record-fabrication` + mock table
+`filed-mascot`.
