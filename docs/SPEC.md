@@ -83,8 +83,10 @@ ms, so layer 3 joins the sub-100ms claim.
 - **Wonder (thinking)** — judgment calls in one clean context: the verdict
   reasoning, claim selection, research extraction. Gets the full research
   pack once. Its context is never polluted with diagnostic churn.
-- **Spark (fast/cheap)** — iteration and cleanup: repair patches, field-by-
-  field voice rewrites. Many small slice calls; cheap enough to loop.
+- **Fast/cheap (Spark-class)** — iteration and cleanup: repair patches,
+  field-by-field voice rewrites. Many small slice calls; cheap enough to
+  loop. Any pluggable backend can fill the tier — `mock`, `acp`, `compat`,
+  `spark`/`wonder`/`baseten` (see `knap-mcp backends`).
 - **Verifier (decision model, ms)** — per-field quality gates (did this
   rewrite improve?), citation entailment checks, escalation decisions.
   Turns blind iteration into scored iteration — and produces the convergence
@@ -98,7 +100,7 @@ ms, so layer 3 joins the sub-100ms claim.
 The pipeline works in cache by nature, so the server is a **context broker**,
 not a message pump. Rules:
 
-1. **Disseminate, don't stuff.** Each Spark call receives the smallest slice
+1. **Disseminate, don't stuff.** Each backend call receives the smallest slice
    that can do the job:
    - voice pass → one data field + the style guide + field's role in the doc.
      Not the template, not sibling fields, not the boris graph.
@@ -115,40 +117,68 @@ not a message pump. Rules:
    handles; the client fetches content via MCP resources on demand. Large
    artifacts never enter client context unless asked for.
 5. **The model can't see the layout.** Templates are server-side state.
-   Spark literally lacks the context to break formatting — the guardrail is
+   The backend literally lacks the context to break formatting — the guardrail is
    also the cost optimization. This is the slide.
 
 ## Tool surface (MCP)
 
-- `knap_templates` — list templates + per-template JSON shape descriptor.
-  Slim catalog by default; shape fetched per-template on request.
+Fourteen tools, in `tools/list` order:
+
+- `knap_templates` — list templates + per-template JSON shape descriptor,
+  inlined in the catalog.
 - `knap_validate(template_id, data)` — dry render. Returns ordered
-  diagnostics (kind, line, col, detail) or `ok`. Cheap: no Spark call.
+  diagnostics (kind, line, col, detail) or `ok`. Cheap: no model call.
 - `knap_render(template_id, data, target)` — `markdown` (k4o) | `oliver`
   (k4o) | `html` (dogbed). Buffered bytes or nothing; returns `doc_id`.
 - `knap_repair(template_id, data)` — server-side bounded loop over *shipped*
   templates only (template_id, never caller-supplied text): render → extract
-  error region → Spark patch → re-render. Max 4 iterations; on non-convergence
-  returns best-effort + remaining diagnostics. Client sees one call; server
-  sees N small ones. Convergence stats included in response.
-- `knap_publish_check(doc_id, site)` — stage a copy of a rendered doc into
+  error region → patch from the configured backend → re-render. Max 4
+  iterations; on non-convergence returns best-effort + remaining
+  diagnostics. Client sees one call; server sees N small ones. Convergence
+  stats included in response.
+- `knap_lint(template_id | template_text)` — k4o education-grade lint on a
+  shipped template or raw text, passthrough.
+- `knap_format_check(doc_id)` — advisory structure linter, 9 pinned rules,
+  warnings only, never blocks: skipped heading levels, wall-of-text where
+  table-shaped data exists, unresolved footnotes, unused footnotes, empty
+  callouts, raw-URL count, heading/length ratio, unclosed fences,
+  list-per-paragraph ratio. Markdown/oliver docs only; html is refused.
+- `knap_voice(template_id, data, tone)` — field-by-field voice rewrite via
+  the configured backend. `tone`: `mild | spicy | feral`. Returns patched
+  data JSON + a per-field before/after report. Replies may insert
+  constrained inline formatting — `**`, `*`, `~~` on words they added,
+  code spans quoting the input, allowlisted emoji — within the tone's
+  budget; an insert-only guard keeps values layout-safe. Same template
+  renders all tones — layout untouched.
+- `knap_structure_hash(doc_id, strict?, ignore_formatting?)` — layout
+  skeleton hash of a rendered doc: block and inline kinds with all text
+  dropped; equal hashes mean the same layout. `strict` also keeps link
+  targets and footnote labels; `ignore_formatting` drops the inline
+  emphasis/strikethrough/code-span kinds, so tones that differ only in
+  formatting hash equal.
+- `knap_verify_citation(claim, evidence, verifier?, backend?)` — advisory
+  claim-against-evidence check: entails | neutral | contradicts | unknown.
+  `heuristic` (default) is verbatim match plus word overlap, not NLI;
+  `decision` asks a model and falls back to heuristic. A loop gate —
+  never on the render path.
+- `boris_ask(query)` → ranked snippets from the frozen artifact.
+- `boris_check(claim)` → grounded yes/no + citation from the artifact.
+- `knap_publish_check(doc_id)` — stage a copy of a rendered doc into
   the frozen boris site (boris frontmatter is a closed key set, so the staged
   copy keeps `title` only) and validate it with `boris validate --report`
   JSON. Unresolved wiki-links are hard `EREFERENCEMISSING` errors (exit 1);
   no flag is needed. Embeds are checked as links — boris 0.8.2 can't embed a
   page. Returns graph diagnostics: unresolvable references caught
   *pre-publish*. This is the layer-3 surface and a demo beat.
-- `knap_lint(template_text)` — k4o education-grade lint, passthrough.
-- `knap_voice(template_id, data, tone)` — field-by-field voice rewrite via
-  Spark. `tone`: `mild | spicy | feral`. Returns patched data JSON + per-field
-  diff count. Same template renders all tones — layout untouched.
-- `knap_format_check(doc_id)` — advisory structure linter, 9 pinned rules,
-  warnings only, never blocks: skipped heading levels, wall-of-text where
-  table-shaped data exists, unresolved footnotes, unused footnotes, empty
-  callouts, raw-URL count, heading/length ratio, unclosed fences,
-  list-per-paragraph ratio.
-- `boris_ask(query)` → ranked snippets from the frozen artifact.
-- `boris_check(claim)` → grounded yes/no + citation from the artifact.
+- `knap_density(doc_id)` — deterministic formatting-density score
+  (density/2, 0–100) of a rendered markdown doc: per-signal breakdown plus
+  format_check penalties. No model call; markdown renders only.
+- `knap_ratchet(template_id, data, …)` — values-only density ratchet: the
+  server probes which empty data slot raises the density score most, asks
+  the configured backend for ONE value for that slot, and keeps it only if
+  schema, markup and evidence checks pass and the markdown score rises.
+  Never changes a non-empty value or the template. Returns `data_id` and
+  `doc_id` handles.
 
 ## Engine contract
 
@@ -189,23 +219,29 @@ not a message pump. Rules:
 
 ```
 draft → render → [ok] → done
-               → [diag] → extract region(diag.line±N) → spark patch
+               → [diag] → extract region(diag.line±N) → backend patch
                         → render → iter<4 ? loop : best-effort+diags
 ```
 
-Each iteration's Spark call carries: stable prefix + diag + region + patch
+Each iteration's backend call carries: stable prefix + diag + region + patch
 grammar. Response is a *replacement region*, applied surgically — the model
 never rewrites the whole template.
 
 ## Eval plan
 
-- **Conformance**: 2nap's 41 output triples + 16 error cases; upstream
-  `compat/fixtures/render.json` (188 cases) as the stretch corpus.
-- **Repair eval**: seeded-breakage corpus — mutate the conformance fixtures
-  through each pinned error class. Metric: convergence rate × mean iters.
-  This produces the numbers-card figures.
-- **Voice eval**: same data × 3 tones → byte-identical layout assertions
-  (structure hashes equal, strings differ). Proves the invariant.
+- **Conformance**: the vendored 188-case portable corpus
+  (`corpus/render.json`, upstream Obsidian knap). Measured: k4o main
+  passes 187/188 (`knap-mcp/eval/conformance/`).
+- **Repair eval**: seeded-breakage corpora — `eval/seeds.json` (22 breaks
+  over the shipped demo templates) and `eval/seeds.2nap.json` (167 breaks
+  derived from 2nap's 41 output triples + 16 error cases), each seed
+  mutating a template through a pinned error class. Metric: convergence
+  rate × mean iters. This produces the numbers-card figures.
+- **Voice eval**: same data × 3 tones → layout-invariance assertions:
+  `structhash --ignore-formatting` hashes equal (tones may differ by
+  inserted inline formatting) while every voiced doc differs as a string;
+  exact-hash equality holds only where it should — the negative controls
+  must drift. Proves the invariant.
 
 ## Demo script (~2 min, all-OSS pipeline)
 
@@ -222,8 +258,9 @@ slates are stills rendered by `demo/card/` or hand-made.
 4. (30s) The doc: callouts, real table, footnotes, embedded art — sass intact.
 5. (15s) The boris catch: a hallucinated wikilink fails `knap_publish_check`
    — references caught pre-publish, made visible.
-6. (20s) Same template × mild vs feral — byte-identical layout (structure-
-   hash equality on screen), different voice. The falsifiable proof.
+6. (20s) Same template × mild vs feral — identical normalized structure
+   hash on screen (`--ignore-formatting`: feral inserts emphasis), different
+   voice. The falsifiable proof.
 7. (15s) One source → verdict.md + apparatus.html + verdict.oliver. Zero JavaScript.
 8. (10s) Numbers card — *measured only*: fixtures passed (and k4o X/188 →
    Y/188 delta), repair convergence, server LOC, calls × mean slice size.
@@ -234,12 +271,13 @@ slates are stills rendered by `demo/card/` or hand-made.
 In: tools above, context broker, the referential-filter worklist (scheduled
 in GAMEPLAN), seeded evals, 3-5 templates, canned boris artifact, demo video.
 Out: text/number-tier filters, UI, Obsidian anything, TypeScript anything,
-live boris indexing, whole-doc Spark regeneration, model-drafted templates.
+live boris indexing, whole-doc model regeneration, model-drafted templates.
 
 ## Risks (ranked)
 
 1. Meta Model API shape/metering → `llama-baseten` backend behind the same
    interface; decided Oct 26.
-2. Spark voice quality → few-shot presets; architecture survives a weak model.
+2. Voice quality on the configured backend → few-shot presets; architecture
+   survives a weak model.
 3. MCP client flakiness → dual-mode binary + vhs.
 4. Boris integration → canned artifact is the floor, frozen Oct 24.

@@ -1,6 +1,6 @@
 {
   "template_id": "release-notes",
-  "description": "A software release, judged: should you give a shit about this upgrade? YAML frontmatter built key by key, a TL;DR callout, breaking changes behind a danger callout, highlights with vendor claims quoted and deep-linked into the changelog, an upgrade-math table, known issues, an embedded migration guide, wikilinked receipts and footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. Plain strings, no markdown: the template does all formatting.",
+  "description": "A software release, judged: should you give a shit about this upgrade? YAML frontmatter built key by key, a TL;DR callout, breaking changes behind a danger callout, highlights with vendor claims quoted and deep-linked into the changelog, an upgrade-math table, known issues, an embedded migration guide, wikilinked receipts and footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. The template does all layout; strings hold text, not markup — except that `voice: true` fields may carry constrained inline formatting (**, *, ~~ on words the reply added, code spans quoting the input, allowlisted emoji within the tone's budget).",
   "fields": {
     "product":          {"type": "string", "role": "product name; frontmatter `product`, and the page heading when `title` is absent"},
     "version":          {"type": "string", "role": "version string, rendered as inline code, e.g. 2.0.0"},

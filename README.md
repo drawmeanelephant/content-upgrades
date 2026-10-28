@@ -1,6 +1,6 @@
 # Content Upgrades
 
-AI writes markdown in one flat barf: wall-paragraph, header, wall-paragraph, voice ironed out. `knap-mcp` fixes it with a loop, not a prompt. A model drafts and fills JSON *values*; the formatting — callouts, footnotes, tables, styled runs, a citations apparatus — lives in shipped, human-authored templates. A deterministic scorer (`density/2`, never a model call) scores the result, and a ratchet loop fills the highest-value empty slot until the score climbs. Maximum formatting, zero formatting risk: the model never writes markup, so it can't break it.
+AI writes markdown in one flat barf: wall-paragraph, header, wall-paragraph, voice ironed out. `knap-mcp` fixes it with a loop, not a prompt. A model drafts and fills JSON *values*; the formatting — callouts, footnotes, tables, styled runs, a citations apparatus — lives in shipped, human-authored templates. A deterministic scorer (`density/2`, never a model call) scores the result, and a ratchet loop fills the highest-value empty slot until the score climbs. Maximum formatting, minimal formatting risk: the model never writes layout — a voice reply may insert only constrained inline emphasis (`**`, `*`, `~~`, code spans quoting the input, allowlisted emoji within the tone's budget), and an insert-only guard keeps everything else out, so it can't break the page.
 
 ## Install
 
@@ -14,7 +14,7 @@ make install   # -> ~/.local/bin/knap-mcp (PREFIX=/usr/local to relocate)
 make test
 ```
 
-Put `~/.local/bin` on `PATH` for the bare `knap-mcp` commands below, or call `knap-mcp/zig-out/bin/knap-mcp` directly. An installed binary still resolves templates and its artifact store from the cwd — point `KNAP_TEMPLATES_DIR` at `<repo>/knap-mcp/templates` and `KNAP_MCP_HOME` where you want artifacts when running it elsewhere (install-aware defaults are tracked in #176).
+Put `~/.local/bin` on `PATH` for the bare `knap-mcp` commands below, or call `knap-mcp/zig-out/bin/knap-mcp` directly. An installed binary looks for templates at `<exe>/../../templates` first, then `./templates`, and keeps its artifact store in the cwd — point `KNAP_TEMPLATES_DIR` at `<repo>/knap-mcp/templates` and `KNAP_MCP_HOME` where you want artifacts when running it elsewhere.
 
 
 Engine pins live in `scripts/engines.sh` (k4o `aeba163`, dogbed `d96b125`). The Makefile exports `KNAP_K4O_PATH` / `KNAP_DOGBED_PATH` for every `make` target; for direct CLI runs outside make, `eval "$(scripts/engines.sh env)"`.
