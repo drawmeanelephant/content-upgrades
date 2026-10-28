@@ -1809,7 +1809,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 51), lines.len);
+    try testing.expectEqual(@as(usize, 54), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, false, l.input, l.output);
         const all = try joined(a, c.hard.items);
@@ -2196,6 +2196,34 @@ test "guard W6: code spans quote the input verbatim" {
     // Wrapping the whole input verbatim is markup, not a rewrite.
     c = try guard(a, .feral, "r", false, "run vacuum after every deploy", "`run vacuum after every deploy`");
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "code span wraps the whole input") != null);
+}
+
+// Entities smuggle `*` and emoji past the markup checks; the zig guard
+// only knows decimal (`&#42;`) and named (`&nbsp;`) forms — hex entities
+// like `&#x2A;` are still rejected, but as "adds number"/"adds markup
+// character", not via this rule (voice.awk's regex does match them).
+test "guard: added HTML entities are rejected" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const in_ = "the boring database that actually ships";
+    for ([_][]const u8{
+        "the &#42;boring&#42; database that actually ships",
+        "the boring database that actually ships &#128169;",
+        "the boring&nbsp;database that actually ships",
+        "the boring &amp; beautiful database that actually ships",
+    }) |out| {
+        const c = try guard(a, .spicy, "one-line hot take", false, in_, out);
+        try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "adds HTML entity") != null);
+    }
+    // An entity the input already used is the input's own business, and a
+    // bare `&`/truncated entity is no entity at all.
+    const c = try guard(a, .spicy, "one-line hot take", false, "fish &amp; chips", "fish &amp; chips, reheated");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "adds HTML entity") == null);
+    try testing.expect(!addsEntity("salt & vinegar", "salt & vinegar please"));
+    try testing.expect(!addsEntity(in_, "the boring &amp database that actually ships"));
+    try testing.expect(addsEntity(in_, "the &#42;boring&#42; database that actually ships"));
+    try testing.expect(addsEntity(in_, "the boring&nbsp;database that actually ships"));
 }
 
 test "guard: length bounds count text, not formatting" {
