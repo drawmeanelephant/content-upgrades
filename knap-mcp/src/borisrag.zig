@@ -269,7 +269,10 @@ fn ragPacks(ctx: *Ctx, rag_dir: []const u8, manifest: []const u8) error{ ToolFai
     };
     if (m.upload_files.len > 0) {
         const names = try a.alloc([]const u8, m.upload_files.len);
-        for (m.upload_files, names) |f, *n| n.* = f.path;
+        for (m.upload_files, names) |f, *n| {
+            try checkPackPath(ctx, rag_dir, f.path);
+            n.* = f.path;
+        }
         return names;
     }
     var names: std.ArrayList([]const u8) = .empty;
@@ -286,6 +289,25 @@ fn ragPacks(ctx: *Ctx, rag_dir: []const u8, manifest: []const u8) error{ ToolFai
     if (names.items.len == 0)
         return ctx.fail("{s}/manifest.json lists no packs and no working-*.md files exist", .{rag_dir});
     return names.items;
+}
+
+/// A manifest pack path joins under `rag/` as `{rag}/{path}`, so it must
+/// be a relative path that stays there: `..` segments climb out,
+/// absolute roots re-root it (`/x`, `//x`, `c:\x`), and a `:` in the
+/// first component is a scheme shape (`file:///x`, `mailto:x`). The
+/// fallback dir listing needs no check — readdir names hold none of
+/// these.
+fn checkPackPath(ctx: *Ctx, rag_dir: []const u8, path: []const u8) error{ ToolFailed, OutOfMemory }!void {
+    var it = std.mem.splitAny(u8, path, "/\\");
+    while (it.next()) |c| {
+        if (std.mem.eql(u8, c, ".."))
+            return ctx.fail("{s}/manifest.json: pack path '{s}' cannot contain '..'", .{ rag_dir, path });
+    }
+    if (std.fs.path.isAbsolutePosix(path) or std.fs.path.isAbsoluteWindows(path))
+        return ctx.fail("{s}/manifest.json: pack path '{s}' is absolute", .{ rag_dir, path });
+    const head = path[0 .. std.mem.indexOfAny(u8, path, "/\\") orelse path.len];
+    if (std.mem.indexOfScalar(u8, head, ':') != null)
+        return ctx.fail("{s}/manifest.json: pack path '{s}' names a scheme, not a file", .{ rag_dir, path });
 }
 
 /// `working-9.md` before `working-10.md`: order by the number after the
@@ -1332,4 +1354,44 @@ test "load: publish/rag filed shape, artifact override, probed-paths failure" {
     try std.testing.expect(std.mem.indexOf(u8, ctx3.err_msg, "no readable boris artifact; probed:") != null);
     try std.testing.expect(std.mem.indexOf(u8, ctx3.err_msg, "artifact/search-index.json") != null);
     try std.testing.expect(std.mem.indexOf(u8, ctx3.err_msg, "publish/rag/manifest.json") != null);
+}
+
+test "manifest upload_files reject traversal, absolute and scheme paths" {
+    var a = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer a.deinit();
+    var env: std.process.Environ.Map = .init(a.allocator());
+    var ctx = testCtx(a.allocator(), &env);
+    const bad = [_]struct { path: []const u8, manifest: []const u8 }{
+        .{ .path = "../../etc/passwd", .manifest =
+        \\{"format":"boris-rag","upload_files":[{"path":"../../etc/passwd"}]}
+        },
+        .{ .path = "sub/../working-1.md", .manifest =
+        \\{"format":"boris-rag","upload_files":[{"path":"sub/../working-1.md"}]}
+        },
+        .{ .path = "/etc/passwd", .manifest =
+        \\{"format":"boris-rag","upload_files":[{"path":"/etc/passwd"}]}
+        },
+        .{ .path = "//host/share/x.md", .manifest =
+        \\{"format":"boris-rag","upload_files":[{"path":"//host/share/x.md"}]}
+        },
+        .{ .path = "C:\\win.ini", .manifest =
+        \\{"format":"boris-rag","upload_files":[{"path":"C:\\win.ini"}]}
+        },
+        .{ .path = "file:///etc/passwd", .manifest =
+        \\{"format":"boris-rag","upload_files":[{"path":"file:///etc/passwd"}]}
+        },
+        .{ .path = "mailto:a@b", .manifest =
+        \\{"format":"boris-rag","upload_files":[{"path":"mailto:a@b"}]}
+        },
+    };
+    for (bad) |c| {
+        try std.testing.expectError(error.ToolFailed, ragPacks(&ctx, "rag", c.manifest));
+        try std.testing.expect(std.mem.indexOf(u8, ctx.err_msg, c.path) != null);
+    }
+    // Relative paths under rag/ are fine, subdirs and colons in names too.
+    const ok = try ragPacks(&ctx, "rag",
+        \\{"format":"boris-rag","upload_files":[{"path":"working-1.md"},{"path":"sub/working-2.md"},{"path":"sub/name:tag.md"}]}
+    );
+    try std.testing.expectEqual(@as(usize, 3), ok.len);
+    try std.testing.expectEqualStrings("sub/name:tag.md", ok[2]);
 }
