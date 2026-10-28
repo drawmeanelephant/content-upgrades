@@ -9,6 +9,7 @@
 const std = @import("std");
 const Ctx = @import("../ctx.zig").Ctx;
 const density = @import("../density.zig");
+const policy = @import("../policy.zig");
 
 const max_doc_bytes = 64 * 1024 * 1024;
 pub const default_glob = "**/*.md";
@@ -27,26 +28,43 @@ pub const Opts = struct {
     /// Named glob groups; first match wins, unmatched files keep the
     /// default first-segment grouping.
     per_glob: []const Group = &.{},
-    /// After the table, list docs whose total is under this score.
+    /// After the table, list docs whose total is under this score. With
+    /// a policy, a collection's `score.min` replaces it for its docs.
     below: ?f64 = null,
+    /// `--below band`: list only docs under their collection's band.
+    below_band: bool = false,
     /// JSONL destination; null streams rows to stdout before the table.
     jsonl: ?[]const u8 = null,
+    /// Per-collection policy: groups by collection, judges every row.
+    policy: ?*const policy.Policy = null,
 };
 
 /// One scored doc: path relative to the audit root ('/'-separated), its
-/// resolved rollup group, and the density score.
+/// resolved rollup group, and the density score. Under a policy, `coll`
+/// is the matching collection (null = unpoliced) and `verdict` its
+/// judgement.
 pub const Row = struct {
     rel: []const u8,
     group: []const u8,
     sc: density.Score,
+    coll: ?*const policy.Collection = null,
+    verdict: ?policy.Verdict = null,
+
+    /// The number bands and `--below` compare: the policy score for a
+    /// policed doc, else the raw total.
+    fn score(r: Row) f64 {
+        return if (r.verdict) |v| v.score else r.sc.total;
+    }
 };
 
 /// `knap-mcp audit <dir> [--glob <p>] [--per-dir|--per-glob <map>]
-/// [--below <score>] [--jsonl <file>]`
+/// [--below <score|band>] [--jsonl <file>] [--policy <file>|--no-policy]`
 pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     var o: Opts = .{ .dir = "" };
     var dir: ?[]const u8 = null;
     var groups: std.ArrayList(Group) = .empty;
+    var policy_path: ?[]const u8 = null;
+    var no_policy = false;
     var i: usize = 0;
     while (i < args.len) : (i += 1) {
         const a = args[i];
@@ -57,10 +75,16 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
         } else if (optVal(args, &i, "--per-glob") catch return usage("missing value for --per-glob")) |v| {
             parseGroupMap(ctx, v, &groups) catch return fail(ctx);
         } else if (optVal(args, &i, "--below") catch return usage("missing value for --below")) |v| {
-            o.below = std.fmt.parseFloat(f64, v) catch
-                return usage("--below needs a number");
+            if (std.mem.eql(u8, v, "band")) {
+                o.below_band = true;
+            } else o.below = std.fmt.parseFloat(f64, v) catch
+                return usage("--below needs a number or 'band'");
         } else if (optVal(args, &i, "--jsonl") catch return usage("missing value for --jsonl")) |v| {
             o.jsonl = v;
+        } else if (optVal(args, &i, "--policy") catch return usage("missing value for --policy")) |v| {
+            policy_path = v;
+        } else if (std.mem.eql(u8, a, "--no-policy")) {
+            no_policy = true;
         } else if (a.len > 1 and a[0] == '-') {
             return usage(try std.fmt.allocPrint(ctx.arena, "unknown option '{s}'", .{a}));
         } else {
@@ -73,6 +97,17 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     o.per_glob = groups.items;
     if (o.per_dir and o.per_glob.len > 0)
         return usage("--per-dir and --per-glob are mutually exclusive");
+    if (no_policy and policy_path != null)
+        return usage("--policy and --no-policy are mutually exclusive");
+    if (!no_policy and policy_path == null)
+        policy_path = policy.discover(ctx, o.dir) catch return fail(ctx);
+    var pol: policy.Policy = undefined;
+    if (policy_path) |pp| {
+        pol = policy.load(ctx, pp) catch return fail(ctx);
+        o.policy = &pol;
+    }
+    if (o.below_band and o.policy == null)
+        return usage("--below band needs a policy (--policy <file>)");
 
     const rows = auditTree(ctx, o) catch return fail(ctx);
     if (rows.len == 0)
@@ -81,6 +116,10 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     var out_buf: [8192]u8 = undefined;
     var out = std.Io.File.stdout().writer(ctx.io, &out_buf);
     defer out.interface.flush() catch {};
+    // Name the policy up front: a discovered file changes the report, so
+    // the report must say which one it was.
+    if (o.policy) |p|
+        std.debug.print("knap-mcp: audit: policy {s} ({s}, {d} collection{s})\n", .{ p.path, policy.schema, p.collections.len, if (p.collections.len == 1) "" else "s" });
 
     // Per-doc JSONL rows: --jsonl file, else stdout ahead of the table.
     if (o.jsonl) |path| {
@@ -89,16 +128,18 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
             return failf(ctx, "cannot create --jsonl file '{s}'", .{path});
         defer jf.close(ctx.io);
         var jw = jf.writer(ctx.io, &jbuf);
-        for (rows) |row| writeRow(&jw.interface, row) catch
+        for (rows) |row| writeRow(&jw.interface, row, o.policy != null) catch
             return failf(ctx, "cannot write --jsonl file '{s}'", .{path});
         jw.interface.flush() catch
             return failf(ctx, "cannot write --jsonl file '{s}'", .{path});
     } else {
-        for (rows) |row| writeRow(&out.interface, row) catch return 1;
+        for (rows) |row| writeRow(&out.interface, row, o.policy != null) catch return 1;
     }
 
-    writeRollup(ctx, &out.interface, rows) catch return fail(ctx);
-    if (o.below) |b| writeBelow(ctx, &out.interface, rows, b) catch return fail(ctx);
+    writeRollup(ctx, &out.interface, rows, o.policy != null) catch return fail(ctx);
+    if (o.policy != null) writeOutOfPolicy(ctx, &out.interface, rows) catch return fail(ctx);
+    if (o.below != null or o.below_band)
+        writeBelow(ctx, &out.interface, rows, if (o.below_band) null else o.below, o.policy != null) catch return fail(ctx);
     return 0;
 }
 
@@ -124,11 +165,20 @@ pub fn auditTree(ctx: *Ctx, o: Opts) ![]Row {
             skipped += 1;
             continue;
         };
-        try rows.append(ctx.arena, .{
-            .rel = rel,
-            .group = groupName(rel, o),
-            .sc = try density.score(ctx.arena, doc),
-        });
+        const sc = try density.score(ctx.arena, doc);
+        var row: Row = .{ .rel = rel, .group = groupName(rel, o), .sc = sc };
+        if (o.policy) |p| {
+            row.coll = p.match(rel);
+            if (row.coll) |c| {
+                row.group = c.name;
+                row.verdict = try policy.judge(ctx.arena, c, sc);
+            } else {
+                // Unpoliced docs never share a bucket with a policed
+                // collection of the same name.
+                row.group = try std.fmt.allocPrint(ctx.arena, "unpoliced:{s}", .{row.group});
+            }
+        }
+        try rows.append(ctx.arena, row);
     }
     if (skipped > 0)
         std.debug.print("knap-mcp: audit: {d} file(s) unreadable, skipped\n", .{skipped});
@@ -274,8 +324,11 @@ fn segMatch(pat: []const u8, seg: []const u8) bool {
 
 /// `{"file":..,"total":..,"words":..,"signals":{"top":[..],"penalties":
 /// [..]},"warnings":[..]}` — one line. Top is the three signals earning
-/// the most; penalties are negative contributors, worst first.
-fn writeRow(w: *std.Io.Writer, row: Row) !void {
+/// the most; penalties are negative contributors, worst first. Under a
+/// policy the row gains `"policy":{"collection","score","band",
+/// "violations":[{rule,signal,value,limit}]}` (`{"collection":null}` when
+/// no collection matches); without one the row is unchanged.
+fn writeRow(w: *std.Io.Writer, row: Row, with_policy: bool) !void {
     try w.writeAll("{\"file\":");
     try std.json.Stringify.value(row.rel, .{}, w);
     try w.print(",\"total\":{d:.2},\"words\":{d},\"signals\":{{\"top\":[", .{ row.sc.total, row.sc.words });
@@ -302,7 +355,27 @@ fn writeRow(w: *std.Io.Writer, row: Row) !void {
         try std.json.Stringify.value(warn.detail, .{}, w);
         try w.writeAll("}");
     }
-    try w.writeAll("]}\n");
+    try w.writeAll("]");
+    if (with_policy) try writePolicyField(w, row);
+    try w.writeAll("}\n");
+}
+
+fn writePolicyField(w: *std.Io.Writer, row: Row) !void {
+    const c = row.coll orelse return w.writeAll(",\"policy\":{\"collection\":null}");
+    const v = row.verdict.?;
+    try w.writeAll(",\"policy\":{\"collection\":");
+    try std.json.Stringify.value(c.name, .{}, w);
+    try w.print(",\"score\":{d:.2},\"band\":\"{s}\",\"violations\":[", .{ v.score, @tagName(v.band) });
+    for (v.violations, 0..) |vi, i| {
+        if (i > 0) try w.writeAll(",");
+        try w.print("{{\"rule\":\"{s}\"", .{@tagName(vi.rule)});
+        if (vi.signal) |s| {
+            try w.writeAll(",\"signal\":");
+            try std.json.Stringify.value(s, .{}, w);
+        }
+        try w.print(",\"value\":{d:.2},\"limit\":{d:.2}}}", .{ vi.value, vi.limit });
+    }
+    try w.writeAll("]}");
 }
 
 /// Up to three signal names with the highest positive contribution;
@@ -356,6 +429,14 @@ pub const Stats = struct {
     max: f64,
     p25: f64,
     p75: f64,
+    // Policy columns; zero/null without a policy.
+    raw_mean: f64 = 0,
+    coll: ?*const policy.Collection = null,
+    in_band: usize = 0,
+    below: usize = 0,
+    above: usize = 0,
+    /// Docs with at least one violation.
+    oop: usize = 0,
 };
 
 /// Stats over a sorted-by-path row set for the rows of one group (or
@@ -393,39 +474,83 @@ pub fn percentile(sorted: []const f64, p: f64) f64 {
     return sorted[li] + (sorted[hi] - sorted[li]) * (pos - lo);
 }
 
-/// Group totals per collection, sort groups by mean desc (name asc on
-/// ties), then append `overall`.
+const Bucket = struct {
+    scores: std.ArrayList(f64) = .empty,
+    raw_sum: f64 = 0,
+    coll: ?*const policy.Collection = null,
+    in_band: usize = 0,
+    below: usize = 0,
+    above: usize = 0,
+    oop: usize = 0,
+
+    fn add(b: *Bucket, a: std.mem.Allocator, row: Row) !void {
+        try b.scores.append(a, row.score());
+        b.raw_sum += row.sc.total;
+        if (row.coll) |c| b.coll = c;
+        if (row.verdict) |v| {
+            switch (v.band) {
+                .in => b.in_band += 1,
+                .below => b.below += 1,
+                .above => b.above += 1,
+                .unbanded => {},
+            }
+            if (v.violations.len > 0) b.oop += 1;
+        }
+    }
+
+    fn stats(b: *Bucket, name: []const u8) Stats {
+        var s = statsOf(name, b.scores.items);
+        if (s.n > 0) s.raw_mean = b.raw_sum / @as(f64, @floatFromInt(s.n));
+        s.coll = b.coll;
+        s.in_band = b.in_band;
+        s.below = b.below;
+        s.above = b.above;
+        s.oop = b.oop;
+        return s;
+    }
+};
+
+/// Group scores per collection, sort groups by mean desc (name asc on
+/// ties), then append `overall`. Scores are raw totals without a
+/// policy and policy scores for policed docs with one.
 fn collectStats(ctx: *Ctx, rows: []const Row) ![]Stats {
-    var by_group: std.StringHashMap(std.ArrayList(f64)) = .init(ctx.arena);
-    var all: std.ArrayList(f64) = .empty;
+    var by_group: std.StringHashMap(Bucket) = .init(ctx.arena);
+    var all: Bucket = .{};
     for (rows) |row| {
         const g = try by_group.getOrPut(row.group);
-        if (!g.found_existing) g.value_ptr.* = .empty;
-        try g.value_ptr.append(ctx.arena, row.sc.total);
-        try all.append(ctx.arena, row.sc.total);
+        if (!g.found_existing) g.value_ptr.* = .{};
+        try g.value_ptr.add(ctx.arena, row);
+        try all.add(ctx.arena, row);
     }
     var out: std.ArrayList(Stats) = .empty;
     var it = by_group.iterator();
     while (it.next()) |e|
-        try out.append(ctx.arena, statsOf(e.key_ptr.*, e.value_ptr.items));
+        try out.append(ctx.arena, e.value_ptr.stats(e.key_ptr.*));
     std.mem.sort(Stats, out.items, {}, struct {
         fn less(_: void, a: Stats, b: Stats) bool {
             if (a.mean != b.mean) return a.mean > b.mean;
             return std.mem.lessThan(u8, a.name, b.name);
         }
     }.less);
-    try out.append(ctx.arena, statsOf("overall", all.items));
+    var overall = all.stats("overall");
+    overall.coll = null;
+    try out.append(ctx.arena, overall);
     return out.items;
 }
 
 /// The sorted table: header, one row per group (mean desc), `overall`.
-fn writeRollup(ctx: *Ctx, w: *std.Io.Writer, rows: []const Row) !void {
+/// Under a policy the stats columns are policy scores, and each row adds
+/// the raw mean, the per-doc band, in/below/above-band counts, docs out
+/// of policy, and `state`: `drift` when the mean is under the
+/// collection's `mean_min` floor, `ok` otherwise, `-` when unpoliced.
+fn writeRollup(ctx: *Ctx, w: *std.Io.Writer, rows: []const Row, with_policy: bool) !void {
     const stats = try collectStats(ctx, rows);
     var width: usize = "collection".len;
     for (stats) |s| width = @max(width, s.name.len);
 
     try padRight(w, "collection", width);
-    try w.writeAll("       n    mean     min     max     p25     p75\n");
+    try w.writeAll("       n    mean     min     max     p25     p75");
+    try w.writeAll(if (with_policy) "     raw       band     in  below  above    oop  state\n" else "\n");
     var buf: [32]u8 = undefined;
     for (stats) |s| {
         try padRight(w, s.name, width);
@@ -436,6 +561,62 @@ fn writeRollup(ctx: *Ctx, w: *std.Io.Writer, rows: []const Row) !void {
         try cell(w, &buf, "{d:.1}", .{s.max});
         try cell(w, &buf, "{d:.1}", .{s.p25});
         try cell(w, &buf, "{d:.1}", .{s.p75});
+        if (with_policy) {
+            try cell(w, &buf, "{d:.1}", .{s.raw_mean});
+            const band = try bandText(&buf, if (s.coll) |c| c.score else .{});
+            try w.splatByteAll(' ', 11 -| band.len);
+            try w.writeAll(band);
+            try cell(w, &buf, "{d}", .{s.in_band});
+            try cell(w, &buf, "{d}", .{s.below});
+            try cell(w, &buf, "{d}", .{s.above});
+            try cell(w, &buf, "{d}", .{s.oop});
+            const state = if (s.coll) |c|
+                (if (c.score.mean_min) |m| (if (s.mean < m) "drift" else "ok") else "ok")
+            else
+                "-";
+            try w.print("  {s}", .{state});
+        }
+        try w.writeAll("\n");
+    }
+}
+
+/// `min-max`, `min-`, `-max`, or `-` when unbanded.
+fn bandText(buf: []u8, r: policy.ScoreRule) ![]const u8 {
+    if (r.min == null and r.max == null) return "-";
+    var w: std.Io.Writer = .fixed(buf);
+    if (r.min) |m| try w.print("{d:.1}", .{m});
+    try w.writeAll("-");
+    if (r.max) |m| try w.print("{d:.1}", .{m});
+    return w.buffered();
+}
+
+/// Every policed doc with a violation, collection then path order, one
+/// line each: `collection  path  rule[:signal value>limit] ...`. Always
+/// printed under a policy — a zero count is the all-clear.
+fn writeOutOfPolicy(ctx: *Ctx, w: *std.Io.Writer, rows: []const Row) !void {
+    var hits: std.ArrayList(Row) = .empty;
+    for (rows) |row| {
+        if (row.verdict) |v| if (v.violations.len > 0) try hits.append(ctx.arena, row);
+    }
+    std.mem.sort(Row, hits.items, {}, struct {
+        fn less(_: void, a: Row, b: Row) bool {
+            const o = std.mem.order(u8, a.group, b.group);
+            if (o != .eq) return o == .lt;
+            return std.mem.lessThan(u8, a.rel, b.rel);
+        }
+    }.less);
+    try w.print("\nout of policy ({d} doc{s}):\n", .{ hits.items.len, if (hits.items.len == 1) "" else "s" });
+    for (hits.items) |row| {
+        try w.print("  {s}  {s} ", .{ row.group, row.rel });
+        for (row.verdict.?.violations) |vi| {
+            try w.print(" {s}", .{@tagName(vi.rule)});
+            if (vi.signal) |s| try w.print(":{s}", .{s});
+            switch (vi.rule) {
+                .forbid => try w.print("={d:.0}", .{vi.value}),
+                .cap => try w.print("={d:.0}>{d:.0}", .{ vi.value, vi.limit }),
+                .@"above-band" => try w.print("={d:.2}>{d:.1}", .{ vi.value, vi.limit }),
+            }
+        }
         try w.writeAll("\n");
     }
 }
@@ -452,32 +633,52 @@ fn padRight(w: *std.Io.Writer, s: []const u8, width: usize) !void {
     if (s.len < width) try w.splatByteAll(' ', width - s.len);
 }
 
-/// The `--below` hit list: every doc whose raw total is under `limit`,
-/// worst first (path order on ties — the comparator is a total order).
-fn writeBelow(ctx: *Ctx, w: *std.Io.Writer, rows: []const Row, limit: f64) !void {
+/// The doc's `--below` limit: its collection's `score.min` when the
+/// policy sets one (genre beats the global number), else `global`;
+/// null = not listed.
+fn belowLimit(row: Row, global: ?f64) ?f64 {
+    if (row.coll) |c| if (c.score.min) |m| return m;
+    return global;
+}
+
+/// The `--below` hit list: every doc whose score is under its limit
+/// (raw total under `limit` without a policy; see `belowLimit` with
+/// one), worst first (path order on ties — the comparator is a total
+/// order). Under a policy each line also shows the limit it missed.
+fn writeBelow(ctx: *Ctx, w: *std.Io.Writer, rows: []const Row, limit: ?f64, with_policy: bool) !void {
     var hits: std.ArrayList(Row) = .empty;
     for (rows) |row| {
-        if (row.sc.total < limit) try hits.append(ctx.arena, row);
+        const l = belowLimit(row, limit) orelse continue;
+        if (row.score() < l) try hits.append(ctx.arena, row);
     }
     std.mem.sort(Row, hits.items, {}, struct {
         fn less(_: void, a: Row, b: Row) bool {
-            if (a.sc.total != b.sc.total) return a.sc.total < b.sc.total;
+            if (a.score() != b.score()) return a.score() < b.score();
             return std.mem.lessThan(u8, a.rel, b.rel);
         }
     }.less);
-    try w.print("\nbelow {d:.1} ({d} doc{s}):\n", .{ limit, hits.items.len, if (hits.items.len == 1) "" else "s" });
+    const plural = if (hits.items.len == 1) "" else "s";
+    if (!with_policy) {
+        try w.print("\nbelow {d:.1} ({d} doc{s}):\n", .{ limit.?, hits.items.len, plural });
+    } else if (limit) |l| {
+        try w.print("\nbelow band, else {d:.1} ({d} doc{s}):\n", .{ l, hits.items.len, plural });
+    } else {
+        try w.print("\nbelow band ({d} doc{s}):\n", .{ hits.items.len, plural });
+    }
     var buf: [32]u8 = undefined;
     for (hits.items) |row| {
-        const s = try std.fmt.bufPrint(&buf, "{d:.2}", .{row.sc.total});
+        const s = try std.fmt.bufPrint(&buf, "{d:.2}", .{row.score()});
         try w.writeAll("  ");
         if (s.len < 7) try w.splatByteAll(' ', 7 - s.len);
-        try w.print("{s}  {s}\n", .{ s, row.rel });
+        try w.writeAll(s);
+        if (with_policy) try w.print(" < {d:.1}", .{belowLimit(row, limit).?});
+        try w.print("  {s}\n", .{row.rel});
     }
 }
 
 fn usage(msg: ?[]const u8) u8 {
     if (msg) |m| std.debug.print("knap-mcp: {s}\n", .{m});
-    std.debug.print("usage: knap-mcp audit <dir> [--glob <p>] [--per-dir | --per-glob <name=glob,...>] [--below <score>] [--jsonl <file>]\n", .{});
+    std.debug.print("usage: knap-mcp audit <dir> [--glob <p>] [--per-dir | --per-glob <name=glob,...>] [--below <score|band>] [--jsonl <file>] [--policy <file> | --no-policy]\n", .{});
     return 1;
 }
 
@@ -623,7 +824,7 @@ test "writeRollup and writeBelow: group order, below hit list" {
         mk(a, "a/1.md", "a", long.items),
     };
     var out: std.Io.Writer.Allocating = .init(a);
-    try writeRollup(&ctx, &out.writer, &rows);
+    try writeRollup(&ctx, &out.writer, &rows, false);
     const text = out.written();
     // b (low mean) sorts after a (high mean); overall is last.
     const ia = std.mem.indexOf(u8, text, "a ").?;
@@ -633,7 +834,89 @@ test "writeRollup and writeBelow: group order, below hit list" {
     // The long doc beats the stub, so --below <stub+1> hits exactly one.
     const stub_total = rows[0].sc.total;
     out = .init(a);
-    try writeBelow(&ctx, &out.writer, &rows, stub_total + 1);
+    try writeBelow(&ctx, &out.writer, &rows, stub_total + 1, false);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "b/1.md") != null);
     try std.testing.expect(std.mem.indexOf(u8, out.written(), "a/1.md") == null);
+}
+
+test "policy: haiku with a table is out of policy, bands drive --below, rows carry verdicts" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/content", .{tmp.sub_path});
+    for ([_][]const u8{ "haikus", "mascots", "posts" }) |d|
+        try std.Io.Dir.createDirPath(.cwd(), std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}", .{ root, d }));
+    const haiku = "---\ntitle: H\nid: haikus/HAI-1\n---\n\n# H\n\nFault rerouted now  \nto a desk that cannot speak  \nritual is safe\n";
+    const files = [_][2][]const u8{
+        .{ "haikus/hai-1.md", haiku },
+        .{ "haikus/hai-2.md", haiku ++ "\n| a | b |\n|---|---|\n| 1 | 2 |\n" },
+        .{ "mascots/001.md", "# M\n\nshort mascot stub\n" },
+        .{ "posts/p.md", "# P\n\nunpoliced\n" },
+    };
+    for (files) |f| try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{
+        .sub_path = try std.fmt.allocPrint(a, "{s}/{s}", .{ root, f[0] }),
+        .data = f[1],
+    });
+    // Discovered next to the audit root (a site keeps it beside content/).
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{
+        .sub_path = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/knap-policy.json", .{tmp.sub_path}),
+        .data =
+        \\{"schema":"knap-policy/1","collections":[
+        \\ {"name":"haikus","glob":"haikus/**","signals":{"tables":"forbid"},"score":{"min":0,"max":20}},
+        \\ {"name":"mascots","glob":"mascots/**","score":{"min":25}}]}
+        ,
+    });
+    var ctx = testCtx(a, &env, root);
+    const found = (try policy.discover(&ctx, root)).?;
+    try std.testing.expect(std.mem.endsWith(u8, found, "/../knap-policy.json"));
+    const pol = try policy.load(&ctx, found);
+    const rows = try auditTree(&ctx, .{ .dir = root, .policy = &pol });
+    try std.testing.expectEqual(@as(usize, 4), rows.len);
+    try std.testing.expectEqualStrings("haikus", rows[0].group);
+    try std.testing.expectEqual(policy.Band.in, rows[0].verdict.?.band);
+    try std.testing.expectEqual(@as(usize, 0), rows[0].verdict.?.violations.len);
+    try std.testing.expectEqual(@as(usize, 1), rows[1].verdict.?.violations.len);
+    try std.testing.expectEqual(policy.Band.below, rows[2].verdict.?.band);
+    try std.testing.expectEqualStrings("unpoliced:posts", rows[3].group);
+    try std.testing.expect(rows[3].verdict == null);
+
+    var out: std.Io.Writer.Allocating = .init(a);
+    try writeRow(&out.writer, rows[1], true);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(),
+        \\"policy":{"collection":"haikus",
+    ) != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(),
+        \\"violations":[{"rule":"forbid","signal":"tables","value":1.00,"limit":0.00}]}}
+    ) != null);
+    out = .init(a);
+    try writeRow(&out.writer, rows[3], true);
+    try std.testing.expect(std.mem.endsWith(u8, out.written(), ",\"policy\":{\"collection\":null}}\n"));
+    out = .init(a);
+    try writeRow(&out.writer, rows[3], false);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "policy") == null);
+
+    out = .init(a);
+    try writeOutOfPolicy(&ctx, &out.writer, rows);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "out of policy (1 doc)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "haikus/hai-2.md  forbid:tables=1") != null);
+
+    // --below band: only the mascot (under its 25 floor); haikus sit in
+    // their band and posts have none.
+    out = .init(a);
+    try writeBelow(&ctx, &out.writer, rows, null, true);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "below band (1 doc)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "< 25.0  mascots/001.md") != null);
+    // A global number still covers unpoliced docs; the band wins for the rest.
+    out = .init(a);
+    try writeBelow(&ctx, &out.writer, rows, 50, true);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "posts/p.md") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "haikus/") == null);
+
+    out = .init(a);
+    try writeRollup(&ctx, &out.writer, rows, true);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "0.0-20.0") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.written(), "unpoliced:posts") != null);
 }
