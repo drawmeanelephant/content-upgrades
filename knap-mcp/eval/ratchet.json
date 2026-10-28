@@ -105,6 +105,13 @@
       "expect": {"min_accepted": 2, "min_gain": 1}
     },
     {
+      "id": "fixture-code",
+      "template_path": "ratchet/code.knap",
+      "shape_path": "ratchet/code.shape.json",
+      "data": "@ratchet/code.data.json",
+      "expect": {"min_accepted": 1, "min_gain": 0.1}
+    },
+    {
       "id": "adv-dangling-ref",
       "template_path": "ratchet/footnotes.knap",
       "shape_path": "ratchet/footnotes.shape.json",
@@ -143,6 +150,30 @@
         "Snapshots are online and restorable to any point in the last week."
       ], "extras[+]": []},
       "expect": {"reject": {"verifier": 1, "declined": 1}, "stop": "stalled"}
+    },
+    {
+      "id": "adv-code-paraphrase",
+      "template_path": "ratchet/code.knap",
+      "shape_path": "ratchet/code.shape.json",
+      "data": "@ratchet/code.data.json",
+      "mock": {"command": ["acmedb snapshots list | head"]},
+      "expect": {"reject": {"verifier": 1}}
+    },
+    {
+      "id": "adv-code-fence",
+      "template_path": "ratchet/code.knap",
+      "shape_path": "ratchet/code.shape.json",
+      "data": "@ratchet/code.data.json",
+      "mock": {"command": ["```sh acmedb snapshot list```"]},
+      "expect": {"reject": {"inert": 1}}
+    },
+    {
+      "id": "adv-code-multiline",
+      "template_path": "ratchet/code.knap",
+      "shape_path": "ratchet/code.shape.json",
+      "data": "@ratchet/code.data.json",
+      "mock": {"command": ["acmedb snapshot list\nrm -rf /"]},
+      "expect": {"reject": {"inert": 1}}
     },
     {
       "id": "adv-no-gain-wall",

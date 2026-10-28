@@ -85,6 +85,9 @@
         "Drivers older than 1.8 can no longer connect at all."
       ]
     },
+    "code": {
+      "command": ["acmedb snapshot list | head -5"]
+    },
     "verdict": {
       "apparatus_page": ["Apparatus: AcmeDB verdict"],
       "sources[+]": [
