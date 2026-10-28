@@ -418,12 +418,15 @@ pub fn cleanReply(reply: []const u8, input: []const u8) []const u8 {
 const Kind = enum {
     url,
     wikilink,
+    embed,
     footnote_ref,
     quote,
     number,
     name,
     acronym,
     proper_noun,
+    include,
+    component,
 
     fn label(k: Kind) []const u8 {
         return switch (k) {
@@ -436,7 +439,7 @@ const Kind = enum {
     /// Matched as substrings; the others as whole words.
     fn substring(k: Kind) bool {
         return switch (k) {
-            .url, .wikilink, .footnote_ref, .quote => true,
+            .url, .wikilink, .embed, .footnote_ref, .quote, .include, .component => true,
             else => false,
         };
     }
@@ -597,11 +600,48 @@ fn names(a: Allocator, s: []const u8, f: *Facts) !void {
     }
 }
 
+/// `<Aside …>`/`<Details …>` open tags and `</Aside>`/`</Details>`
+/// closes: one atom per tag, so a reply can neither rewrap a component
+/// nor slip markup inside the tag text. An unterminated tag protects the
+/// rest of the string, like an unclosed span.
+fn components(a: Allocator, s: []const u8, f: *Facts) !void {
+    var i: usize = 0;
+    while (std.mem.indexOfScalarPos(u8, s, i, '<')) |p| {
+        i = p + 1;
+        var rest = s[p + 1 ..];
+        if (rest.len > 0 and rest[0] == '/') rest = rest[1..];
+        const name_len: usize = if (std.mem.startsWith(u8, rest, "Aside"))
+            "Aside".len
+        else if (std.mem.startsWith(u8, rest, "Details"))
+            "Details".len
+        else
+            continue;
+        const bound: u8 = if (name_len < rest.len) rest[name_len] else 0;
+        if (bound != 0 and std.mem.indexOfScalar(u8, " \t>/", bound) == null) continue;
+        var q: u8 = 0;
+        var j = p;
+        while (j < s.len) : (j += 1) {
+            const c = s[j];
+            if (q != 0) {
+                if (c == q) q = 0;
+            } else if (c == '"' or c == '\'') {
+                q = c;
+            } else if (c == '>') break;
+        }
+        const end = @min(j + 1, s.len);
+        try f.put(a, s[p..end], .component);
+        i = end;
+    }
+}
+
 fn facts(a: Allocator, s: []const u8) !Facts {
     var f: Facts = .{};
     try urls(a, s, &f);
+    try spans(a, s, &f, "![[", "]]", .embed);
     try spans(a, s, &f, "[[", "]]", .wikilink);
     try spans(a, s, &f, "[^", "]", .footnote_ref);
+    try spans(a, s, &f, "{{", "}}", .include);
+    try components(a, s, &f);
     try quotes(a, s, &f);
     try numbers(a, s, &f);
     try names(a, s, &f);
@@ -1413,6 +1453,40 @@ test "guard W1: insert-only skeleton accepts formatting, rejects swallowed or mo
     // An unmatched added `**` is a delim token, not formatting.
     c = try guard(a, .feral, "r", false, "x y z", "x **y z");
     try testing.expect(std.mem.indexOf(u8, try hard(a, c), "changes inline structure") != null);
+}
+
+test "guard: boris atoms are single protected tokens" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // A doc carrying the boris surface round-trips byte-identical (feral:
+    // its bang budget has room for the embed's literal `!`).
+    const doc = "see [[limericks/LIM-0155|L]] ![[mascots/M-0090]] {{include frag/a.md}} <Aside kind=\"tip\"> <Details summary=\"s\">";
+    var c = try guard(a, .feral, "r", false, doc, doc);
+    try testing.expect(c.strict());
+
+    // Corrupting any atom's interior is a hard drop of that atom.
+    c = try guard(a, .spicy, "r", false, "a {{include frag/a.md}} b", "a {{include frag/*a*.md}} b");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "drops include {{include frag/a.md}}") != null);
+    c = try guard(a, .spicy, "r", false, "a <Aside kind=\"tip\"> b", "a <Aside kind=\"*tip*\"> b");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "drops component <Aside kind=\"tip\">") != null);
+    c = try guard(a, .spicy, "r", false, "a </Details> b", "a </ Details> b");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "drops component </Details>") != null);
+    // Inventing an atom is an add.
+    c = try guard(a, .spicy, "r", false, "plain text here", "plain text {{include x.md}} here");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "adds include {{include x.md}}") != null);
+    // The canonical-id link target is opaque: renaming inside it drops the
+    // whole wikilink, and the embed form counts ![[…]] as one atom.
+    c = try guard(a, .spicy, "r", false, "see [[limericks/LIM-0155|L]]", "see [[limericks/lim-0155|L]]");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "drops wikilink [[limericks/LIM-0155|L]]") != null);
+    c = try guard(a, .spicy, "r", false, "see ![[mascots/M-0090]]", "see ![[mascots/m-0090]]");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "drops embed ![[mascots/M-0090]]") != null);
+    // Wrapping atoms in formatting stays legal; splitting them does not.
+    c = try guard(a, .feral, "r", false, "see [[limericks/LIM-0155|L]] now", "see **[[limericks/LIM-0155|L]]** now");
+    try testing.expect(c.passes());
+    c = try guard(a, .feral, "r", false, "see [[limericks/LIM-0155|L]] now", "see [[limericks/**LIM-0155**|L]] now");
+    try testing.expect(!c.passes());
 }
 
 test "guard W3: strikethrough may only cover words the reply added" {

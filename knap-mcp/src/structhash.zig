@@ -8,7 +8,9 @@
 //! with level, paragraphs, lists (ordered or not, nesting, items), quotes
 //! and callouts (with their `[!type]`), pipe tables (columns, alignment,
 //! cells per row), code fences, `$$` display-math blocks, thematic breaks,
-//! footnote definitions, and the inline kinds: strong, emphasis,
+//! footnote definitions, boris surface atoms (`{{include …}}`
+//! transclusions inline, `<Aside …>`/`<Details …>` line-start components
+//! as bounded blocks), and the inline kinds: strong, emphasis,
 //! strikethrough, highlight, code, `$` math, links, images, wikilinks,
 //! embeds, footnote refs, raw URLs, inline html, hard breaks.
 //! Whitespace-insensitive. Default mode drops link and image targets,
@@ -237,6 +239,8 @@ fn blocks(o: *Out, lines: Lines) Allocator.Error!void {
             i = try table(o, lines, i);
         } else if (footnoteDef(s)) |fd| {
             i = try fnDef(o, lines, i, fd);
+        } else if (componentOpen(s) != null) {
+            i = try component(o, lines, i);
         } else {
             const start = i;
             i += 1;
@@ -252,7 +256,7 @@ const headingKinds = [_][]const u8{ "h1", "h2", "h3", "h4", "h5", "h6" };
 fn interrupts(lines: Lines, i: usize) bool {
     const s = trimWs(lines[i]);
     if (s.len == 0 or s[0] == '>' or isHr(s) or fenceOpen(s) != null or heading(s) != null or isMathBlock(s)) return true;
-    if (footnoteDef(s) != null or isTableStart(lines, i)) return true;
+    if (footnoteDef(s) != null or isTableStart(lines, i) or componentOpen(s) != null) return true;
     // A list interrupts a paragraph when the item has content and, if
     // ordered, starts at 1 (CommonMark).
     const m = listMarker(lines[i]) orelse return false;
@@ -288,6 +292,112 @@ fn quote(o: *Out, sub: Lines) !void {
     try o.open("quote");
     try blocks(o, sub);
     try o.close("/quote");
+}
+
+// --- Boris components ----------------------------------------------------------
+//
+// `<Aside …>`/`<Details …>` are line-start bounded blocks: the open tag
+// closes on its own line (boris's scan is line-bounded, `>` inside quoted
+// attribute values doesn't count, a `<` kills it) and only the same-name
+// `</Name>` at line start closes the block — a wrong-name close stays
+// body text. Components are recognized outside fenced code only; fences
+// reach `blocks` first, so this never sees them.
+
+/// The index of `>` ending a tag open at s[0] == '<', skipping quoted
+/// attribute values; a `<` or end of line first means no tag.
+fn tagEnd(s: []const u8, from: usize) ?usize {
+    var q: u8 = 0;
+    var j = from;
+    while (j < s.len) : (j += 1) {
+        const c = s[j];
+        if (q != 0) {
+            if (c == q) q = 0;
+        } else if (c == '"' or c == '\'') {
+            q = c;
+        } else if (c == '>') {
+            return j;
+        } else if (c == '<') return null;
+    }
+    return null;
+}
+
+/// A trimmed line that opens a `<Aside …>` or `<Details …>` component:
+/// the name followed by a lexical boundary and a `>` on the same line.
+/// Returns the component name ("Aside"/"Details").
+fn componentOpen(s: []const u8) ?[]const u8 {
+    if (!startsWith(u8, s, "<") or (s.len > 1 and s[1] == '/')) return null;
+    const name: []const u8 = if (startsWith(u8, s[1..], "Aside"))
+        "Aside"
+    else if (startsWith(u8, s[1..], "Details"))
+        "Details"
+    else
+        return null;
+    const after = s[1 + name.len ..];
+    if (after.len == 0) return null;
+    if (after[0] != ' ' and after[0] != '\t' and after[0] != '>' and after[0] != '/') return null;
+    if (tagEnd(s, 1 + name.len) == null) return null;
+    return name;
+}
+
+/// A trimmed line that is exactly `</Aside>` or `</Details>` — boris
+/// matches the literal close tag with nothing but whitespace around it.
+fn componentClose(s: []const u8) ?[]const u8 {
+    inline for (.{ "Aside", "Details" }) |name| {
+        if (std.mem.eql(u8, s, "</" ++ name ++ ">")) return name;
+    }
+    return null;
+}
+
+/// `component:aside[:kind]` / `component:details[:open]` — the `kind` (or
+/// its `type` alias) and `open` values are layout, like a callout's
+/// `[!type]`; `summary`, `id` and friends are text and stay dropped.
+fn componentToken(o: *Out, name: []const u8, tag_line: []const u8) ![]const u8 {
+    const gt = tagEnd(tag_line, 1 + name.len) orelse tag_line.len;
+    const attrs = try mdAttrs(o, tag_line[1 + name.len .. gt]);
+    if (eql(u8, name, "Aside")) {
+        for (attrs.items) |a| {
+            if ((eql(u8, a.name, "kind") or eql(u8, a.name, "type")) and a.value != null)
+                return std.fmt.allocPrint(o.alloc, "component:aside:{s}", .{a.value.?});
+        }
+        return "component:aside";
+    }
+    for (attrs.items) |a| {
+        if (eql(u8, a.name, "open") and a.value != null and eql(u8, a.value.?, "true"))
+            return "component:details:open";
+    }
+    return "component:details";
+}
+
+/// The component starting at line `start`: open token, body blocks (the
+/// rest of the open line counts as body), `/component` only when the
+/// same-name close tag arrives — an unclosed component hashes differently
+/// from a closed one.
+fn component(o: *Out, lines: Lines, start: usize) !usize {
+    const s = trimWs(lines[start]);
+    const name = componentOpen(s).?;
+    try o.open(try componentToken(o, name, s));
+    var inner: std.ArrayList([]const u8) = .empty;
+    const gt = tagEnd(s, 1 + name.len).?;
+    if (gt + 1 < s.len) try inner.append(o.alloc, s[gt + 1 ..]);
+    var i = start + 1;
+    var closed = false;
+    while (i < lines.len) : (i += 1) {
+        const t = trimWs(lines[i]);
+        if (componentClose(t)) |n| {
+            if (eql(u8, n, name)) {
+                closed = true;
+                i += 1;
+                break;
+            }
+        }
+        try inner.append(o.alloc, lines[i]);
+    }
+    try blocks(o, inner.items);
+    if (closed)
+        try o.close("/component")
+    else
+        o.depth -|= 1;
+    return i;
 }
 
 const Marker = struct {
@@ -833,6 +943,14 @@ fn scanInline(p: *Inl, text: []const u8, off: usize, depth: u16) Allocator.Error
                     i = a.end;
                 } else i += 1;
             },
+            '{' => {
+                if (includeAt(text, i)) |inc| {
+                    try p.add(off + i, try p.target("include", text[inc.path_start..inc.path_end]));
+                    i = inc.end;
+                    continue;
+                }
+                i += 1;
+            },
             'h' => {
                 if ((i == 0 or !std.ascii.isAlphanumeric(text[i - 1])) and
                     (startsWith(u8, text[i..], "https://") or startsWith(u8, text[i..], "http://")))
@@ -894,6 +1012,25 @@ fn mathInlineEnd(text: []const u8, i: usize) ?usize {
         return j;
     }
     return null;
+}
+
+const Include = struct { end: usize, path_start: usize, path_end: usize };
+
+/// `{{include <path>}}` at text[i] == '{': boris's transclusion directive
+/// — keyword, whitespace, path to `}}` or end of line. One opaque atom,
+/// whatever the path's bytes are.
+fn includeAt(text: []const u8, i: usize) ?Include {
+    const kw = "{{include";
+    if (!startsWith(u8, text[i..], kw)) return null;
+    var j = i + kw.len;
+    if (j >= text.len or (text[j] != ' ' and text[j] != '\t')) return null;
+    while (j < text.len and (text[j] == ' ' or text[j] == '\t')) j += 1;
+    const ps = j;
+    while (j < text.len and text[j] != '}' and text[j] != '\n' and text[j] != '\r') j += 1;
+    var pe = j;
+    while (pe > ps and (text[pe - 1] == ' ' or text[pe - 1] == '\t')) pe -= 1;
+    if (j + 1 >= text.len or text[j] != '}' or text[j + 1] != '}') return null;
+    return .{ .end = j + 2, .path_start = ps, .path_end = pe };
 }
 
 fn runLen(text: []const u8, i: usize) usize {
@@ -1478,6 +1615,90 @@ test "markdown: ==highlight== and $math$ inline" {
         try hashOpts(a, "$x$", .markdown, ign) != try hashOpts(a, "x", .markdown, ign),
     );
     try testing.expectEqualStrings("p math", try kinds(a, "$x$", .markdown, ign));
+}
+
+test "markdown: {{include}} is one opaque atom" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("p include", try kinds(a, "x {{include frag/a.md}} y", .markdown, .{}));
+    try testing.expectEqualStrings("p include(frag/a.md)", try kinds(a, "{{include frag/a.md}}", .markdown, .{ .strict = true }));
+    // Emphasis markers inside the directive cannot split it.
+    try testing.expectEqualStrings("p include", try kinds(a, "{{include *x*}}", .markdown, .{}));
+    try testing.expectEqualStrings("p include(frag/a.md)", try kinds(a, "{{include   frag/a.md  }}", .markdown, .{ .strict = true }));
+    // `{{includeX` is not a directive; neither is an unterminated one.
+    try testing.expectEqualStrings("p", try kinds(a, "{{includeX}}", .markdown, .{}));
+    try testing.expectEqualStrings("p", try kinds(a, "{{include a.md", .markdown, .{}));
+    try testing.expectEqualStrings("p", try kinds(a, "{{other x}}", .markdown, .{}));
+    try expectDiffer("see x\n", "see {{include x.md}}\n", .markdown);
+    try expectSame("{{include a.md}}\n", "{{include b.md}}\n", .markdown);
+}
+
+test "markdown: <Aside>/<Details> components are bounded blocks" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings(
+        "component:aside:tip p /component",
+        try kinds(a, "<Aside kind=\"tip\">\nnote body\n</Aside>\n", .markdown, .{}),
+    );
+    try testing.expectEqualStrings(
+        "component:aside p /component",
+        try kinds(a, "<Aside>\nx\n</Aside>\n", .markdown, .{}),
+    );
+    try testing.expectEqualStrings(
+        "component:details:open p /component",
+        try kinds(a, "<Details summary=\"Why\" open=\"true\">\nx\n</Details>\n", .markdown, .{}),
+    );
+    try testing.expectEqualStrings(
+        "component:details p /component",
+        try kinds(a, "<Details summary=\"Why\">\nx\n</Details>\n", .markdown, .{}),
+    );
+    // The open tag can't be split by emphasis inside it; kind is layout.
+    try expectDiffer("<Aside kind=\"tip\">\nx\n</Aside>\n", "<Aside kind=\"warning\">\nx\n</Aside>\n", .markdown);
+    try expectDiffer("<Aside>\nx\n</Aside>\n", "x\n", .markdown);
+    // A wrong-name close stays body (as an html token in the paragraph);
+    // only the same name closes.
+    try testing.expectEqualStrings(
+        "component:aside p html:</details> /component p",
+        try kinds(a, "<Aside>\n</Details>\nx\n</Aside>\ny\n", .markdown, .{}),
+    );
+    // An unclosed component runs to EOF and hashes without a close.
+    try testing.expectEqualStrings("p component:aside p", try kinds(a, "intro\n<Aside>\nnever closed\n", .markdown, .{}));
+    try expectDiffer("<Aside>\nx\n</Aside>\n", "<Aside>\nx\n", .markdown);
+    // Line-start only: mid-line tags and fenced text stay literal.
+    try testing.expectEqualStrings("p html:<aside> html:</aside>", try kinds(a, "x <Aside>y</Aside>\n", .markdown, .{}));
+    try testing.expectEqualStrings("code:zig p", try kinds(a, "```zig\n<Aside>\n```\nx\n", .markdown, .{}));
+}
+
+test "markdown: boris atoms survive an emphasis edit elsewhere" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ign = Options{ .ignore_formatting = true };
+    const doc =
+        \\See [[limericks/LIM-0155|L]] and ![[mascots/M-0090]] here.
+        \\
+        \\{{include fragments/notes.md}}
+        \\
+        \\<Aside kind="note">
+        \\body
+        \\</Aside>
+        \\<Details summary="s">
+        \\d
+        \\</Details>
+        \\
+    ;
+    const edited = try std.mem.replaceOwned(u8, a, doc, "See ", "See **big** ");
+    // The voice-proof hash is identical; the atoms are untouched.
+    try testing.expectEqual(
+        try hashOpts(a, doc, .markdown, ign),
+        try hashOpts(a, edited, .markdown, ign),
+    );
+    try testing.expectEqualStrings(
+        "p wikilink| embed p include component:aside:note p /component component:details p /component",
+        try kinds(a, doc, .markdown, .{}),
+    );
 }
 
 test "markdown: $$ display-math blocks" {
