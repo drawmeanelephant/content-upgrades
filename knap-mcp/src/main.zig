@@ -62,6 +62,7 @@ const ToolCommand = struct {
 };
 
 const commands = [_]Command{
+    .{ .name = "serve", .usage = "serve", .summary = "same thing, spelled out", .run = .{ .custom = cmdServe } },
     .{ .name = "templates", .usage = "templates", .summary = "list shipped templates + shapes", .run = .{ .tool = .{ .tool = "knap_templates" } } },
     .{ .name = "validate", .usage = "validate <id> [-d <file|->]", .summary = "dry render, diagnostics or ok", .run = .{ .tool = .{ .tool = "knap_validate", .key = "template_id" } } },
     .{ .name = "render", .usage = "render <id> [options]", .summary = "render via k4o/dogbed, print doc", .run = .{ .tool = .{ .tool = "knap_render", .key = "template_id" } } },
@@ -143,8 +144,7 @@ const usage_tail =
 
 const usage_text = blk: {
     var s: []const u8 = usage_head ++
-        usageLine("", "MCP stdio JSON-RPC server") ++
-        usageLine("serve", "same thing, spelled out");
+        usageLine("", "MCP stdio JSON-RPC server");
     for (commands) |c| {
         if (c.usage) |u| s = s ++ usageLine(u, c.summary);
     }
@@ -171,10 +171,13 @@ pub fn main(init: std.process.Init) !u8 {
         report("init failed: {s}", .{@errorName(e)});
         return 1;
     };
+    // A lazily spawned acp agent must not outlive this process: shutdown
+    // closes its stdin, gives a short grace, then kills and reaps it.
+    // Idempotent — serve() defers its own call too.
+    defer acp.shutdown(init.io);
 
     const argv = args.items;
-    if (argv.len == 0 or std.mem.eql(u8, argv[0], "serve"))
-        return mcp.serve(init, &ctx);
+    if (argv.len == 0) return mcp.serve(&ctx);
 
     for (&commands) |*c| {
         if (!std.mem.eql(u8, c.name, argv[0])) continue;
@@ -333,6 +336,10 @@ fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
     } else if (t.key) |key| {
         if (pos.len == 0)
             return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "missing {s}", .{key}));
+        if (pos.len > 1)
+            return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "{s}: unexpected argument '{s}'", .{ cmd, pos[1] }));
+    } else if (pos.len != 0) {
+        return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "{s}: unexpected argument '{s}'", .{ cmd, pos[0] }));
     }
 
     var a: std.json.ObjectMap = .empty;
@@ -387,6 +394,8 @@ fn runTool(ctx: *Ctx, cmd: []const u8, t: ToolCommand, args: [][]const u8) !u8 {
 
 fn cmdEval(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     const o = parseOpts(ctx, args) catch return usageErr(ctx);
+    if (o.positional.items.len != 0)
+        return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "eval: unexpected argument '{s}'", .{o.positional.items[0]}));
     for (tool_flags, o.flags) |name, v| {
         if (v != null and !std.mem.eql(u8, name, "backend"))
             return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "eval: unused option '--{s}'", .{name}));
@@ -444,6 +453,14 @@ fn cmdBackends(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     try w.interface.print("default    {s} (KNAP_BACKEND)\n", .{@tagName(ctx.backend_kind)});
     try w.flush();
     return 0;
+}
+
+/// `serve` reads MCP requests on stdin and takes no arguments at all —
+/// a stray flag or positional used to sail through unnoticed.
+fn cmdServe(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
+    if (args.len != 0)
+        return usageWith(ctx, try std.fmt.allocPrint(ctx.arena, "serve: unexpected argument '{s}'", .{args[0]}));
+    return mcp.serve(ctx);
 }
 
 fn cmdHelp(ctx: *Ctx, args: [][]const u8) anyerror!u8 {

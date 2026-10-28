@@ -8,18 +8,24 @@ const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
 const tools = @import("tools.zig");
 const store = @import("store.zig");
+const acp = @import("acp.zig");
 
 const protocol_version = "2025-06-18";
 
 const Allocating = std.Io.Writer.Allocating;
 
-pub fn serve(init: std.process.Init, ctx: *Ctx) !u8 {
-    var in_buf: [4 * 1024 * 1024]u8 = undefined;
-    var r = std.Io.File.stdin().readerStreaming(init.io, &in_buf);
-    var out_buf: [64 * 1024]u8 = undefined;
-    var w = std.Io.File.stdout().writerStreaming(init.io, &out_buf);
+pub fn serve(ctx: *Ctx) !u8 {
+    // A lazily spawned acp agent must not outlive the server: stdin EOF
+    // used to be the only cue, and an agent that ignores it — or
+    // double-forks — was orphaned holding its session cwd.
+    defer acp.shutdown(ctx.io);
 
-    var arena_state = std.heap.ArenaAllocator.init(init.gpa);
+    var in_buf: [4 * 1024 * 1024]u8 = undefined;
+    var r = std.Io.File.stdin().readerStreaming(ctx.io, &in_buf);
+    var out_buf: [64 * 1024]u8 = undefined;
+    var w = std.Io.File.stdout().writerStreaming(ctx.io, &out_buf);
+
+    var arena_state = std.heap.ArenaAllocator.init(ctx.gpa);
     defer arena_state.deinit();
 
     while (true) {

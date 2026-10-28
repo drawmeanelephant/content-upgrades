@@ -10,6 +10,10 @@
 #   maxtok  a cut-off reply (stopReason max_tokens)
 #   hang    no reply until session/cancel arrives
 #   mute    no reply at all, even to session/cancel
+#   deaf    replies like ok, but ignores stdin EOF: once knap-mcp closes
+#           the pipe the script sleeps on instead of exiting
+#   stuffed answers session/new, then stops reading stdin entirely so a
+#           large session/prompt write backs up in the pipe
 #   crash   exit mid-turn
 #   auth    session/new fails with an auth error
 #   v2      initialize answers protocolVersion 2
@@ -41,11 +45,14 @@ while IFS= read -r line; do
       continue
     fi
     printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"s%s","configOptions":[{"id":"mode","category":"mode","type":"select","currentValue":"ask","options":[]},{"id":"model","name":"Model","category":"model","type":"select","currentValue":"fake-model-1","options":[]},{"id":"effort","category":"thought_level","type":"select","currentValue":"low","options":[]}]}}\n' "$id" "$sessions"
+    # stuffed: the session exists, but stdin is never read again — the
+    # next write past the pipe buffer blocks until the client's deadline.
+    [ "$mode" = stuffed ] && exec sleep 3600
     ;;
   *'"method":"session/prompt"'*)
     s="s$sessions"
     case $mode in
-    ok)
+    ok | deaf)
       printf '{"jsonrpc":"2.0","method":"_vendor/noise","params":{}}\n'
       printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"%s","update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"thinking"}}}}\n' "$s"
       printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"other","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"WRONG"}}}}\n'
@@ -89,3 +96,6 @@ while IFS= read -r line; do
     ;;
   esac
 done
+# deaf: stdin hit EOF and the loop ended, but an agent that ignores EOF
+# keeps running — knap-mcp must kill it, not trust it to exit.
+[ "$mode" = deaf ] && exec sleep 3600
