@@ -14,9 +14,9 @@ const ObjectMap = std.json.ObjectMap;
 
 pub const tool: tools.Tool = .{
     .name = "knap_ingest",
-    .description = "Copy existing markdown files into the artifact store under fresh doc_id handles, so doc tools (format_check, publish_check, density, structure_hash) and knap://docs resources work on docs that never went through knap_render. Byte-preserving: no normalization, no frontmatter rewriting. Non-markdown extensions are rejected unless force is true.",
+    .description = "Copy existing markdown files into the artifact store under fresh doc_id handles, so doc tools (format_check, publish_check, density, structure_hash) and knap://docs resources work on docs that never went through knap_render. Byte-preserving: no normalization, no frontmatter rewriting. Non-markdown extensions are rejected unless force is true. Paths must be relative and name a file under a content/ dir; pass anywhere to ingest outside the content tree.",
     .input_schema =
-    \\{"type":"object","properties":{"path":{"type":"string"},"paths":{"type":"array","items":{"type":"string"}},"force":{"type":"boolean"}}}
+    \\{"type":"object","properties":{"path":{"type":"string"},"paths":{"type":"array","items":{"type":"string"}},"force":{"type":"boolean"},"anywhere":{"type":"boolean"}}}
     ,
     .run = run,
 };
@@ -27,6 +27,14 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
         break :blk switch (v) {
             .bool => |b| b,
             else => return ctx.fail("force must be a boolean", .{}),
+        };
+    } else false;
+
+    const anywhere = if (args) |a| blk: {
+        const v = a.get("anywhere") orelse break :blk false;
+        break :blk switch (v) {
+            .bool => |b| b,
+            else => return ctx.fail("anywhere must be a boolean", .{}),
         };
     } else false;
 
@@ -43,6 +51,8 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     }
     if (paths.items.len == 0)
         return ctx.fail("missing required argument 'path' or 'paths'", .{});
+    if (!anywhere)
+        for (paths.items) |p| try confinedPath(ctx, p);
 
     try out.writer.writeAll("{\"ok\":true,\"ingested\":[");
     for (paths.items, 0..) |p, i| {
@@ -57,9 +67,46 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     try out.writer.writeAll("]}");
 }
 
+/// Absolute in any supported syntax — POSIX root, drive letter, or UNC —
+/// so the confinement check means the same thing on Windows.
+fn isAbsolutePath(p: []const u8) bool {
+    if (p.len == 0) return false;
+    if (p[0] == '/' or p[0] == '\\') return true;
+    return p.len > 2 and std.ascii.isAlphabetic(p[0]) and p[1] == ':' and (p[2] == '/' or p[2] == '\\');
+}
+
+/// Ingest reads inside a `content/` tree — the same source root the
+/// doc_voice `as` and `--out` guards assume. Absolute paths, `..`
+/// components, and paths with no `content` dir are refused unless the
+/// caller opts out with `anywhere` / `--anywhere` (#330): an MCP caller
+/// (including a prompt-injected model) is otherwise one `path` away
+/// from reading any file the server can reach.
+fn confinedPath(ctx: *Ctx, path: []const u8) tools.Error!void {
+    if (isAbsolutePath(path))
+        return ctx.fail("refusing '{s}': absolute paths are outside the content/ tree (pass anywhere/--anywhere to read anyway)", .{path});
+    var in_content = false;
+    var names_file = false;
+    var it = std.mem.splitAny(u8, path, "/\\");
+    while (it.next()) |c| {
+        if (c.len == 0 or std.mem.eql(u8, c, ".")) continue;
+        if (std.mem.eql(u8, c, ".."))
+            return ctx.fail("refusing '{s}': '..' escapes the content/ tree (pass anywhere/--anywhere to read anyway)", .{path});
+        if (!in_content) {
+            if (std.mem.eql(u8, c, "content")) in_content = true;
+            continue;
+        }
+        names_file = true;
+    }
+    if (!in_content)
+        return ctx.fail("refusing '{s}': path is outside a content/ tree (pass anywhere/--anywhere to read anyway)", .{path});
+    if (!names_file)
+        return ctx.fail("refusing '{s}': path must name a file under a content/ dir", .{path});
+}
+
 /// Read `path` and store its bytes verbatim under a fresh doc_id.
 /// Non-markdown extensions need `force`; the stored extension stays
 /// honest so md-only tools still refuse a forced .html.
+/// Confinement lives at the run/cli boundary; callers get raw bytes here.
 pub fn ingestFile(ctx: *Ctx, path: []const u8, force: bool) tools.Error![]const u8 {
     const ext = common.docExtForPath(path);
     if (!force and !std.mem.eql(u8, ext, "md"))
@@ -73,15 +120,23 @@ pub fn ingestFile(ctx: *Ctx, path: []const u8, force: bool) tools.Error![]const 
 /// line per file; exit 1 on the first failure.
 pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     var force = false;
+    var anywhere = false;
     var paths: std.ArrayList([]const u8) = .empty;
     for (args) |a| {
         if (std.mem.eql(u8, a, "--force")) {
             force = true;
+        } else if (std.mem.eql(u8, a, "--anywhere")) {
+            anywhere = true;
         } else if (a.len > 1 and a[0] == '-') {
             return usage(try std.fmt.allocPrint(ctx.arena, "ingest: unknown option '{s}'", .{a}));
         } else try paths.append(ctx.arena, a);
     }
     if (paths.items.len == 0) return usage("ingest needs at least one file");
+    if (!anywhere)
+        for (paths.items) |p| confinedPath(ctx, p) catch {
+            std.debug.print("knap-mcp: {s}\n", .{ctx.err_msg});
+            return 1;
+        };
 
     var buf: [8192]u8 = undefined;
     var w = std.Io.File.stdout().writer(ctx.io, &buf);
@@ -101,7 +156,7 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
 
 fn usage(msg: ?[]const u8) u8 {
     if (msg) |m| std.debug.print("knap-mcp: {s}\n", .{m});
-    std.debug.print("usage: knap-mcp ingest <file>... [--force]\n", .{});
+    std.debug.print("usage: knap-mcp ingest <file>... [--force] [--anywhere]\n", .{});
     return 1;
 }
 
@@ -169,14 +224,14 @@ test "run takes path, paths, and force; rejects a non-markdown path" {
     try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = f3, .data = "c" });
 
     const args = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a,
-        \\{{"path":"{s}","paths":["{s}","{s}"]}}
+        \\{{"path":"{s}","paths":["{s}","{s}"],"anywhere":true}}
     , .{ f1, f2, f3 }), .{});
     var out: Allocating = .init(a);
     // c.txt without force fails the whole call.
     try std.testing.expectError(error.ToolFailed, run(&ctx, args.object, &out));
 
     const forced = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a,
-        \\{{"paths":["{s}","{s}","{s}"],"force":true}}
+        \\{{"paths":["{s}","{s}","{s}"],"force":true,"anywhere":true}}
     , .{ f1, f2, f3 }), .{});
     out = .init(a);
     try run(&ctx, forced.object, &out);
@@ -188,4 +243,58 @@ test "run takes path, paths, and force; rejects a non-markdown path" {
         \\{"force":true}
     , .{});
     try std.testing.expectError(error.ToolFailed, run(&ctx, none.object, &out));
+}
+
+test "run confines paths to a content/ tree unless anywhere is set" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+
+    const inside = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/site/content/mascots/x.md", .{tmp.sub_path[0..]});
+    const outside = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/outside.md", .{tmp.sub_path[0..]});
+    try std.Io.Dir.createDirPath(.cwd(), std.testing.io, try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/site/content/mascots", .{tmp.sub_path[0..]}));
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = inside, .data = "# x\n" });
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = outside, .data = "# outside\n" });
+
+    var out: Allocating = .init(a);
+    // Absolute, escaping, and content-less paths are refused.
+    for ([_][]const u8{ "/tmp/x.md", "C:/site/content/x.md", "../x.md", "content/../x.md", "plain.md", outside, "content/", "x/content" }) |bad| {
+        const args = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a,
+            \\{{"path":"{s}"}}
+        , .{bad}), .{});
+        try std.testing.expectError(error.ToolFailed, run(&ctx, args.object, &out));
+        out = .init(a);
+    }
+    // A relative path under a content/ dir is admitted; the flag admits the rest.
+    const good = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a,
+        \\{{"path":"{s}"}}
+    , .{inside}), .{});
+    try run(&ctx, good.object, &out);
+    out = .init(a);
+    const free = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a,
+        \\{{"path":"{s}","anywhere":true}}
+    , .{outside}), .{});
+    try run(&ctx, free.object, &out);
+    const v = try std.json.parseFromSliceLeaky(std.json.Value, a, out.written(), .{});
+    try std.testing.expect(v.object.get("ok").?.bool);
+
+    // The CLI refuses the same way; --anywhere opts back out.
+    try std.testing.expectEqual(@as(u8, 1), try cli(&ctx, try a.dupe([]const u8, &.{outside})));
+    try std.testing.expectEqual(@as(u8, 0), try cli(&ctx, try a.dupe([]const u8, &.{ outside, "--anywhere" })));
+    try std.testing.expectEqual(@as(u8, 0), try cli(&ctx, try a.dupe([]const u8, &.{inside})));
+}
+
+test "isAbsolutePath covers posix, drive, and UNC forms" {
+    try std.testing.expect(isAbsolutePath("/tmp/x.md"));
+    try std.testing.expect(isAbsolutePath("\\srv\\x.md"));
+    try std.testing.expect(isAbsolutePath("\\x.md"));
+    try std.testing.expect(isAbsolutePath("C:\\x.md"));
+    try std.testing.expect(isAbsolutePath("c:/x.md"));
+    try std.testing.expect(!isAbsolutePath("content/x.md"));
+    try std.testing.expect(!isAbsolutePath("c.md"));
+    try std.testing.expect(!isAbsolutePath(""));
 }

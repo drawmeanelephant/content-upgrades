@@ -62,7 +62,7 @@ knap-mcp render verdict -d data/verdict.sample.json --target markdown
 knap-mcp render apparatus -d data/apparatus.sample.json --target html
 knap-mcp repair verdict -d data/verdict.sample.json --backend mock
 knap-mcp lint templates/verdict.knap
-knap-mcp ingest <file>... [--force]             # copy existing markdown docs into the store
+knap-mcp ingest <file>... [--force] [--anywhere] # copy existing markdown docs into the store
 knap-mcp format-check doc-<id>                  # advisory structure lint on a stored doc
 knap-mcp voice release-notes -d data/release-notes.sample.json --tone feral
 knap-mcp doc-voice <doc> --tone <t>             # guarded voice pass over a record (dry-run)
@@ -134,6 +134,28 @@ keep it only if schema, markup and evidence checks pass and the markdown
 score rises. A non-empty value and the template never change. Stops on
 ceiling, plateau, stalled, `--max-iters` (default 6) or the call budget.
 `ratchet-eval` runs the 31-case corpus in `eval/ratchet.json`.
+
+## Threat model
+
+The MCP surface is not a filesystem API. What it can reach:
+
+- **Reads.** `knap_ingest` is confined to a `content/` tree — relative
+  paths only, no `..`; `anywhere` (MCP arg) / `--anywhere` (CLI) opts
+  out for operators. `knap_doc_voice`'s `policy`/`replies` args still
+  read server-local files by name. `doc_id`s read only the artifact
+  store (`KNAP_MCP_HOME`); `template_id`s resolve inside `templates/`;
+  `as` paths are logical coordinates, never read from disk.
+- **Writes.** Artifacts and scratch files under `KNAP_MCP_HOME` only;
+  no tool writes into a source tree (`doc-voice --apply --out` refuses
+  `content/` paths; the MCP tool only ever stores a new doc_id).
+- **Reports.** `knap_doc_voice`'s report is a diff summary, not a
+  content echo: `before` redacts to `{bytes, sha256}`, and `after`
+  redacts the same way when it repeats the input — only the model's
+  rewrites cross the wire.
+- **Calls.** Paragraph text still goes to the configured backend one
+  call per run; the collection policy is the gate on which records a
+  caller may voice, so untrusted content trees need a policy that
+  denies them.
 
 ## Voice
 

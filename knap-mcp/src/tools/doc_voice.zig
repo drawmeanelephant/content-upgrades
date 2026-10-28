@@ -164,6 +164,16 @@ fn failed(ctx: *Ctx, e: boris.Error) error{OutOfMemory}!PublishCheck {
     return .{ .failed = msg };
 }
 
+/// The report is a diff summary, not a content echo (#330): original
+/// run text redacts to length + sha256 so `before`/`after` equality
+/// stays checkable without the store's bytes leaving the tool result.
+fn writeRedacted(s: []const u8, w: *std.Io.Writer) std.Io.Writer.Error!void {
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(s, &digest, .{});
+    const hex = std.fmt.bytesToHex(digest, .lower);
+    try w.print("{{\"bytes\":{d},\"sha256\":\"{s}\"}}", .{ s.len, hex });
+}
+
 pub fn writeReport(o: Outcome, written: ?[]const u8, w: *std.Io.Writer) std.Io.Writer.Error!void {
     const r = o.result;
     const p = r.proof;
@@ -225,9 +235,16 @@ pub fn writeReport(o: Outcome, written: ?[]const u8, w: *std.Io.Writer) std.Io.W
     for (r.fields, 0..) |f, i| {
         if (i > 0) try w.writeAll(",");
         try w.print("{{\"para\":{d},\"line\":{d},\"region\":\"{s}\",\"status\":\"{s}\",\"before\":", .{ f.para, f.line, f.kind.region(), @tagName(f.status) });
-        try S.value(f.before, .{}, w);
+        try writeRedacted(f.before, w);
         try w.writeAll(",\"after\":");
-        try S.value(f.after, .{}, w);
+        // `after` is the model's rewrite and stays readable; when it
+        // repeats the input verbatim (unchanged/rejected/skipped) it
+        // redacts the same way, so equality is still observable.
+        if (std.mem.eql(u8, f.after, f.before)) {
+            try writeRedacted(f.after, w);
+        } else {
+            try S.value(f.after, .{}, w);
+        }
         try w.writeAll(",\"reasons\":");
         try S.value(f.reasons, .{}, w);
         try w.writeAll("}");
@@ -465,6 +482,34 @@ test "eval fixture: canned replies, guard rejections, verse and atoms untouched"
     try testing.expectEqual(o.result.rewritten, rep.paragraphs_rewritten);
     try testing.expectEqual(@as(usize, 3), rep.guard_rejections.len);
     try testing.expect(rep.structhash_equal);
+
+    // #330: `before` is a redaction, never source text; `after` stays
+    // readable only for rewrites, so before==after is still checkable.
+    const rep2 = try std.json.parseFromSliceLeaky(struct {
+        fields: []const struct {
+            status: []const u8,
+            before: std.json.Value,
+            after: std.json.Value,
+        },
+    }, a, out.written(), .{ .ignore_unknown_fields = true });
+    try testing.expectEqual(o.result.fields.len, rep2.fields.len);
+    for (rep2.fields, o.result.fields) |rf, f| {
+        try testing.expect(rf.before == .object);
+        try testing.expectEqual(@as(i64, @intCast(f.before.len)), rf.before.object.get("bytes").?.integer);
+        try testing.expect(rf.before.object.get("sha256") != null);
+        if (std.mem.eql(u8, rf.status, "rewritten")) {
+            try testing.expect(rf.after == .string);
+            try testing.expectEqualStrings(f.after, rf.after.string);
+        } else {
+            const b = try std.json.Stringify.valueAlloc(a, rf.before, .{});
+            const af = try std.json.Stringify.valueAlloc(a, rf.after, .{});
+            try testing.expectEqualStrings(b, af);
+        }
+    }
+    for (o.result.fields) |f| {
+        if (f.before.len > 0)
+            try testing.expect(std.mem.indexOf(u8, out.written(), f.before) == null);
+    }
 }
 
 test "policy denial: a verse collection keeps every byte and calls nothing" {
