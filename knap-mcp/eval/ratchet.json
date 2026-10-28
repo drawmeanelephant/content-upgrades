@@ -57,6 +57,28 @@
       "expect": {"reject": {"inert": 1}, "min_gain": 15}
     },
     {
+      "id": "adv-inert-single-emphasis",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.min.json",
+      "mock": {"upgrade_matrix[+]": [
+        {"on": "1.9.x", "effort": "_rename_ _one_ _config_ _key_", "downtime": "one restart", "bother": "yes, today"},
+        {"on": "1.9.x", "effort": "rename one config key", "downtime": "one restart", "bother": "yes, today"},
+        {"on": "1.8.x", "effort": "config key plus driver bump", "downtime": "one restart", "bother": "yes, this week"}
+      ]},
+      "expect": {"reject": {"inert": 1}, "min_gain": 15}
+    },
+    {
+      "id": "adv-max-words",
+      "template_id": "release-notes",
+      "data": "@../data/release-notes.min.json",
+      "mock": {"upgrade_matrix[+]": [
+        {"on": "1.9.x", "effort": "rename the one config key and then restart the server once and after that verify the snapshot catalog is warm before you call the upgrade done and document the whole sequence carefully in the team runbook and the upgrade checklist for whoever is on call", "downtime": "one restart", "bother": "yes, today"},
+        {"on": "1.9.x", "effort": "rename one config key", "downtime": "one restart", "bother": "yes, today"},
+        {"on": "1.8.x", "effort": "config key plus driver bump", "downtime": "one restart", "bother": "yes, this week"}
+      ]},
+      "expect": {"reject": {"schema": 1}, "min_gain": 15}
+    },
+    {
       "id": "adv-verifier-paraphrase",
       "template_path": "ratchet/callouts.knap",
       "shape_path": "ratchet/callouts.shape.json",
