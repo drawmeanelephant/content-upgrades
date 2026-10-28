@@ -1,0 +1,42 @@
+{
+  "template_id": "filed-lorelog",
+  "description": "A filed.fyi lorelog record: the shared filed prelude (closed boris frontmatter, `relations` carried), the `# title` heading, a verbatim narrative lede, then the generated residue — Related Aphorisms, Related Haikus, Related Limericks — and the upgrade apparatus (Field Testimony quotes with footnotes, a Field Notes palette, the Provenance Ledger, Annotations). Record-specific mid-sections ride in `extra_sections`. Canon bodies are verbatim extracted strings; section headings belong to the template.",
+  "fields": {
+    "title":        {"type": "string", "role": "record title; frontmatter `title` and the `#` heading when title_heading is set"},
+    "id":           {"type": "string", "role": "canonical id, e.g. lorelog/LLG-0001-NAV; frontmatter `id`"},
+    "parent":       {"type": "string", "role": "trunk id; frontmatter `parent`"},
+    "status":       {"type": "string", "role": "frontmatter `status`", "enum": ["published", "archived", "draft"]},
+    "tags":         {"type": "array<string>", "role": "frontmatter `tags`, lowercase kebab-case", "optional": true, "apparatus": "frontmatter", "max_items": 15, "words": 1},
+    "relations":    {"type": "array<string>", "role": "frontmatter `relations` entries as `kind=canonical-id` (e.g. relates_to=lorelog/LLG-0004-SMD)", "optional": true, "apparatus": "frontmatter", "max_items": 15, "words": 3},
+    "title_heading": {"type": "string", "role": "non-empty when the record carries its own `# <title>` heading; extraction sets it"},
+    "lede":         {"type": "string", "role": "the verbatim narrative between the title heading and the first section", "optional": true, "preamble": true},
+    "related_aphorisms": {"type": "string", "role": "## Related Aphorisms body, verbatim", "optional": true, "section": "Related Aphorisms"},
+    "related_haikus":    {"type": "string", "role": "## Related Haikus body, verbatim", "optional": true, "section": "Related Haikus"},
+    "related_limericks": {"type": "string", "role": "## Related Limericks body, verbatim", "optional": true, "section": "Related Limericks"},
+    "testimony":    {"type": "array<object>", "role": "## Field Testimony: one blockquote each; `note` may key a `notes` footnote", "optional": true, "section": "Field Testimony", "apparatus": "quote", "max_items": 4, "fields": {
+      "line":        {"type": "string", "role": "the quoted line, one sentence", "voice": true, "evidence": true},
+      "attribution": {"type": "string", "role": "who said it", "optional": true},
+      "note":        {"type": "string", "role": "key into `notes`; renders a [^key] ref after the quote", "optional": true, "ref": "notes"}
+    }},
+    "field_notes":  {"type": "array<object>", "role": "## Field Notes: one block each, of the kind the server chose (callout, quote, list)", "optional": true, "section": "Field Notes", "apparatus": "palette", "max_items": 3,
+      "variant": "kind",
+      "variants": {"callout": ["text"], "quote": ["line"], "list": ["items"]},
+      "fields": {
+        "kind":  {"type": "string", "role": "block kind; the server picks it, copy it as given", "enum": ["callout", "quote", "list"]},
+        "text":  {"type": "string", "role": "callout kind: the note body, one short paragraph", "optional": true, "voice": true, "words": 25},
+        "line":  {"type": "string", "role": "quote kind: one verbatim line from a source, rendered as a blockquote", "optional": true, "evidence": true, "max_words": 30},
+        "items": {"type": "array<string>", "role": "list kind: one bullet each", "optional": true, "max_items": 5, "words": 8}
+      }},
+    "ledger":       {"type": "array<object>", "role": "## Provenance Ledger rows; the header (entry | detail) is fixed in the template", "optional": true, "section": "Provenance Ledger", "apparatus": "table", "max_items": 5, "words": 6, "fields": {
+      "entry":  {"type": "string"},
+      "detail": {"type": "string"}
+    }},
+    "notes":        {"type": "object<string,string>", "role": "footnotes: key -> note text, rendered as [^key]: defs under 'Annotations'. Every key must be referenced by some testimony `note`; the server picks the key and anchor, write the note text only, copied verbatim from a source", "optional": true, "section": "Annotations", "apparatus": "footnote", "evidence": true},
+    "extra_sections": {"type": "array<object>", "role": "non-canon sections captured verbatim: {after: slot name or 'preamble', heading: text, level: 1|2, body: verbatim}. Extraction fills this; the ratchet never grows it", "optional": true, "fields": {
+      "after":   {"type": "string"},
+      "heading": {"type": "string"},
+      "level":   {"type": "number"},
+      "body":    {"type": "string"}
+    }}
+  }
+}

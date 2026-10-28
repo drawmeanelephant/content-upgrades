@@ -1,0 +1,136 @@
+---
+{{ title | yaml_property:"title" }}
+{{ id | yaml_property:"id" }}
+{{ parent | yaml_property:"parent" }}
+{{ status | yaml_property:"status" }}
+{% if tags %}tags: {{ tags | yaml:flow }}
+{% endif %}{% if relations %}relations: {{ relations | yaml:flow }}
+{% endif %}{% if published_at %}{{ published_at | yaml_property:"published_at" }}
+{% endif %}{% if summary %}{{ summary | yaml_property:"summary" }}
+{% endif %}---
+{# filed-reference.knap: a filed.fyi reference record — desk doctrine whose
+   section headings vary per filing; canon recognizes the Related *
+   residue and the upgrade apparatus, everything else rides in
+   `extra_sections`. Ratchet-growable apparatus: `relationships` list,
+   Field Testimony + footnotes, Field Notes palette, Provenance Ledger.
+   Shape: shapes/filed-reference.json. #}
+{% if title_heading %}
+
+
+{{ title | h1 }}
+{{ "" }}{% endif %}{% if lede %}
+
+
+{{ lede }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "preamble") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if relationships %}
+
+
+{{ "Relationships" | h2 }}
+
+{{ relationships | list }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "relationships") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if related_aphorisms %}
+
+
+{{ "Related Aphorisms" | h2 }}
+
+{{ related_aphorisms }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "related_aphorisms") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if related_haikus %}
+
+
+{{ "Related Haikus" | h2 }}
+
+{{ related_haikus }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "related_haikus") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if related_limericks %}
+
+
+{{ "Related Limericks" | h2 }}
+
+{{ related_limericks }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "related_limericks") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if testimony %}
+
+
+{{ "Field Testimony" | h2 }}
+
+{% for t in testimony %}
+{{ t.line | blockquote }}{% if t.attribution %} — {{ t.attribution }}{% endif %}{{ t.note | kebab | replace:"/(.+)/":"[^$1]" }}
+
+{% endfor %}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "testimony") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if field_notes %}
+
+
+{{ "Field Notes" | h2 }}
+
+{% for n in field_notes %}{% if n.kind == "callout" %}{{ n.text | callout:("note", "Field note") }}{% elseif n.kind == "quote" %}{{ n.line | blockquote }}{% elseif n.kind == "list" %}{{ n.items | list }}{% endif %}
+
+{% endfor %}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "field_notes") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if ledger %}
+
+
+{{ "Provenance Ledger" | h2 }}
+
+| entry | detail |
+| --- | --- |
+{% for r in ledger %}
+| {{ r.entry }} | {{ r.detail }} |
+{% endfor %}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "ledger") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}{% if notes %}
+
+
+{{ "Annotations" | h2 }}
+
+{{ notes | footnote }}
+{{ "" }}{% endif %}{% for e in extra_sections | where:("after", "notes") %}
+
+
+{% if e.level == 1 %}{{ e.heading | h1 }}{% else %}{{ e.heading | h2 }}{% endif %}
+
+{{ e.body }}
+{% endfor %}
