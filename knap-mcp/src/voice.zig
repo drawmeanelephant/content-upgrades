@@ -1035,10 +1035,12 @@ fn addsEntity(in_: []const u8, out: []const u8) bool {
     while (std.mem.indexOfScalarPos(u8, out, i, '&')) |p| {
         var j = p + 1;
         if (j < out.len and out[j] == '#') {
+            // voice.awk's `/&(#|[A-Za-z])[A-Za-z0-9]*;/`: any alnum tail
+            // after `#` (`&#42;`, `&#x2A;`, `&#bogus;` all flag), not
+            // just the decimal/hex forms real HTML knows.
             j += 1;
-            const d0 = j;
-            while (j < out.len and std.ascii.isDigit(out[j])) j += 1;
-            if (j > d0 and j < out.len and out[j] == ';') {
+            while (j < out.len and isAlnum(out[j])) j += 1;
+            if (j < out.len and out[j] == ';') {
                 if (std.mem.indexOf(u8, in_, out[p .. j + 1]) == null) return true;
             }
         } else {
@@ -1875,7 +1877,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 74), lines.len);
+    try testing.expectEqual(@as(usize, 75), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, l.footnote_abutting, l.input, l.output);
         const all = try joined(a, c.hard.items);
@@ -2305,10 +2307,9 @@ test "guard W6: code spans quote the input verbatim" {
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "code span wraps the whole input") != null);
 }
 
-// Entities smuggle `*` and emoji past the markup checks; the zig guard
-// only knows decimal (`&#42;`) and named (`&nbsp;`) forms — hex entities
-// like `&#x2A;` are still rejected, but as "adds number"/"adds markup
-// character", not via this rule (voice.awk's regex does match them).
+// Entities smuggle `*` and emoji past the markup checks; the guard knows
+// decimal (`&#42;`), hex (`&#x2A;`) and named (`&nbsp;`) forms — like
+// voice.awk, any alnum tail after `&#` counts, not just real HTML's.
 test "guard: added HTML entities are rejected" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
@@ -2316,6 +2317,7 @@ test "guard: added HTML entities are rejected" {
     const in_ = "the boring database that actually ships";
     for ([_][]const u8{
         "the &#42;boring&#42; database that actually ships",
+        "the &#x2A;boring&#x2A; database that actually ships",
         "the boring database that actually ships &#128169;",
         "the boring&nbsp;database that actually ships",
         "the boring &amp; beautiful database that actually ships",
@@ -2330,6 +2332,7 @@ test "guard: added HTML entities are rejected" {
     try testing.expect(!addsEntity("salt & vinegar", "salt & vinegar please"));
     try testing.expect(!addsEntity(in_, "the boring &amp database that actually ships"));
     try testing.expect(addsEntity(in_, "the &#42;boring&#42; database that actually ships"));
+    try testing.expect(addsEntity(in_, "the &#x2A;boring&#x2A; database that actually ships"));
     try testing.expect(addsEntity(in_, "the boring&nbsp;database that actually ships"));
 }
 
