@@ -624,6 +624,7 @@ test {
     _ = @import("engine.zig");
     _ = @import("eval.zig");
     _ = @import("formatcheck.zig");
+    _ = @import("frontmatter.zig");
     _ = @import("mcp.zig");
     _ = @import("ratchet.zig");
     _ = @import("repair.zig");
