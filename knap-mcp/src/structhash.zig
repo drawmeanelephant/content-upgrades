@@ -50,8 +50,9 @@ pub const Options = struct {
 /// its insert-only check, so both share one definition.
 pub fn isFormatting(kind: []const u8) bool {
     for ([_][]const u8{
-        "strong", "/strong", "em",   "/em",   "del",   "/del",   "code",
-        "<strong>", "</strong>", "<em>", "</em>", "<del>", "</del>", "<code>", "</code>",
+        "strong",   "/strong",   "em",   "/em",   "del",   "/del",   "code",
+        "<strong>", "</strong>", "<em>", "</em>", "<del>", "</del>", "<code>",
+        "</code>",
     }) |k| {
         if (eql(u8, kind, k)) return true;
     }
