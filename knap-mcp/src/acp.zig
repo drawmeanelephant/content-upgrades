@@ -18,8 +18,9 @@
 //!                          "…" group); e.g. `devin acp --agent-type
 //!                          summarizer`. Keep credentials out of it: argv
 //!                          shows up in `ps`.
-//!   KNAP_ACP_TIMEOUT       seconds for one session/new + session/prompt
-//!                          (default 180, 0 = none)
+//!   KNAP_ACP_TIMEOUT       seconds for one session/new + session/prompt,
+//!                          bounding the prompt's stdin write as well as
+//!                          the reply wait (default 180, 0 = none)
 //!   KNAP_ACP_INIT_TIMEOUT  seconds for spawn + initialize (default 60)
 //!   KNAP_ACP_CWD           absolute session cwd (default: process cwd)
 //!
@@ -42,6 +43,17 @@ const line_limit = 16 * 1024 * 1024;
 /// the agent is killed.
 const cancel_grace_secs = 5;
 
+/// Seconds `shutdown` lets a cooperative agent exit on stdin EOF before
+/// SIGKILL. An agent that ignores EOF pays this once, not forever.
+const shutdown_grace_secs = 1;
+
+/// Largest single write to the agent's stdin: the smallest PIPE_BUF on
+/// any supported platform (Darwin's is 512, Linux 4096). POSIX
+/// guarantees a poll-reported-writable pipe takes a write this size
+/// without blocking — which is what keeps `send`'s deadline honest; a
+/// bigger chunk could still park inside `writev` past the deadline.
+const send_chunk = 512;
+
 pub const Error = backend.Error;
 
 /// One finished prompt turn.
@@ -59,8 +71,9 @@ pub const Turn = struct {
 /// the subprocess can't live there. `multi` points into `buffer` and at
 /// itself, hence a fixed global rather than a value that moves. Its
 /// memory is process-lifetime too, so it comes from the page allocator,
-/// not the Ctx gpa whose leak check runs before the agent is reaped (the
-/// agent exits on its own when knap-mcp's end of stdin closes).
+/// not the Ctx gpa whose leak check runs before the agent is reaped
+/// (`shutdown` closes stdin, gives a short grace, then kills + reaps it —
+/// an agent that ignores EOF is still gone by the time it returns).
 const Agent = struct {
     child: std.process.Child,
     stdin: File,
@@ -160,12 +173,24 @@ fn selection(session: std.json.Value) Selection {
     return sel;
 }
 
-/// Stop the agent subprocess, if one is running.
+/// Stop the agent subprocess, if one is running. stdin EOF is the
+/// agent's cue to exit; `shutdown` closes it, then pumps stdout for a
+/// short grace so a cooperative agent can die on its own — a dead
+/// agent's pipe reports EOF/error promptly, a live-but-wedged one times
+/// out. Either way `kill` then SIGKILLs (a no-op if it already exited)
+/// and reaps: no orphan holds the session cwd, credentials or locks.
+/// Called on every exit path — `mcp.serve` EOF, `main` after a CLI
+/// command, respawn and error teardown.
 pub fn shutdown(io: std.Io) void {
     if (!live) return;
     live = false;
-    agent.multi.deinit();
     agent.stdin.close(io);
+    const grace: std.Io.Timeout = .{ .deadline = .fromNow(io, .{
+        .raw = .fromSeconds(shutdown_grace_secs),
+        .clock = .awake,
+    }) };
+    agent.multi.fill(1, grace) catch {};
+    agent.multi.deinit();
     agent.child.kill(io);
     gpa.free(agent.line);
     gpa.free(agent.name);
@@ -243,7 +268,7 @@ const Sink = struct { sid: []const u8, out: *std.Io.Writer };
 fn call(ctx: *Ctx, comptime method: []const u8, params: []const u8, deadline: std.Io.Timeout, sink: ?Sink) Error!std.json.Value {
     agent.next_id += 1;
     const id = agent.next_id;
-    try send(ctx, try std.fmt.allocPrint(ctx.arena, "{{\"jsonrpc\":\"2.0\",\"id\":{d},\"method\":\"" ++ method ++ "\",\"params\":{s}}}\n", .{ id, params }));
+    try send(ctx, deadline, try std.fmt.allocPrint(ctx.arena, "{{\"jsonrpc\":\"2.0\",\"id\":{d},\"method\":\"" ++ method ++ "\",\"params\":{s}}}\n", .{ id, params }));
     var timeout = deadline;
     var cancelled = false;
     while (true) {
@@ -253,7 +278,7 @@ fn call(ctx: *Ctx, comptime method: []const u8, params: []const u8, deadline: st
                 if (cancelled) return gone(ctx, "ignored session/cancel; agent stopped");
                 cancelled = true;
                 timeout = ctx.deadline(cancel_grace_secs);
-                try notifyCancel(ctx, sink.?.sid);
+                try notifyCancel(ctx, timeout, sink.?.sid);
                 continue;
             },
             else => |err| return err,
@@ -263,7 +288,7 @@ fn call(ctx: *Ctx, comptime method: []const u8, params: []const u8, deadline: st
         if (msg != .object) return gone(ctx, "wrote a JSON-RPC message that is not an object");
         const msg_id = get(msg, "id");
         if (str(get(msg, "method"))) |m| {
-            if (msg_id) |req| try answerRequest(ctx, req, m) else if (sink) |s| try collect(msg, s);
+            if (msg_id) |req| try answerRequest(ctx, timeout, req, m) else if (sink) |s| try collect(msg, s);
             continue;
         }
         const rid = msg_id orelse continue;
@@ -282,7 +307,7 @@ fn call(ctx: *Ctx, comptime method: []const u8, params: []const u8, deadline: st
 /// Permission requests are cancelled; every other agent→client method
 /// (fs, terminal, vendor extensions) is refused — knap-mcp advertised
 /// none of them.
-fn answerRequest(ctx: *Ctx, id: std.json.Value, method: []const u8) Error!void {
+fn answerRequest(ctx: *Ctx, deadline: std.Io.Timeout, id: std.json.Value, method: []const u8) Error!void {
     var out: std.Io.Writer.Allocating = .init(ctx.arena);
     try out.writer.writeAll("{\"jsonrpc\":\"2.0\",\"id\":");
     try std.json.Stringify.value(id, .{}, &out.writer);
@@ -290,7 +315,7 @@ fn answerRequest(ctx: *Ctx, id: std.json.Value, method: []const u8) Error!void {
         ",\"result\":{\"outcome\":{\"outcome\":\"cancelled\"}}}\n"
     else
         ",\"error\":{\"code\":-32601,\"message\":\"knap-mcp grants no client capabilities\"}}\n");
-    try send(ctx, out.written());
+    try send(ctx, deadline, out.written());
 }
 
 /// Keep `agent_message_chunk` text for the sink's session; thoughts,
@@ -306,16 +331,35 @@ fn collect(msg: std.json.Value, sink: Sink) Error!void {
     try sink.out.writeAll(str(get(content, "text")) orelse "");
 }
 
-fn notifyCancel(ctx: *Ctx, sid: []const u8) Error!void {
+fn notifyCancel(ctx: *Ctx, deadline: std.Io.Timeout, sid: []const u8) Error!void {
     var out: std.Io.Writer.Allocating = .init(ctx.arena);
     try out.writer.writeAll("{\"jsonrpc\":\"2.0\",\"method\":\"session/cancel\",\"params\":{\"sessionId\":");
     try std.json.Stringify.value(sid, .{}, &out.writer);
     try out.writer.writeAll("}}\n");
-    try send(ctx, out.written());
+    try send(ctx, deadline, out.written());
 }
 
-fn send(ctx: *Ctx, line: []const u8) Error!void {
-    agent.stdin.writeStreamingAll(ctx.io, line) catch return gone(ctx, "closed its input");
+/// One message to the agent's stdin, chunked under `deadline`. The write
+/// used to be unbounded: an agent that stopped reading plus a prompt
+/// larger than the pipe buffer parked the turn in `writev` forever,
+/// since `KNAP_ACP_TIMEOUT` only bounded reads. `operateTimeout` polls
+/// the pipe for writability and fails at `deadline`; each chunk stays at
+/// or under the smallest PIPE_BUF so a "writable" verdict always means
+/// "this write will not block".
+fn send(ctx: *Ctx, deadline: std.Io.Timeout, bytes: []const u8) Error!void {
+    var index: usize = 0;
+    while (index < bytes.len) {
+        const chunk = bytes[index..@min(index + send_chunk, bytes.len)];
+        const result = ctx.io.operateTimeout(.{ .file_write_streaming = .{
+            .file = agent.stdin,
+            .data = &.{chunk},
+        } }, deadline) catch |e| switch (e) {
+            error.Timeout => return gone(ctx, "stopped reading its input"),
+            error.Canceled => return error.Canceled,
+            error.ConcurrencyUnavailable => return gone(ctx, "cannot bound its stdin write"),
+        };
+        index += result.file_write_streaming catch return gone(ctx, "closed its input");
+    }
 }
 
 /// The next newline-terminated message from the agent, copied out of the
@@ -516,6 +560,41 @@ test "an agent that ignores session/cancel is stopped" {
     try testing.expectError(error.ToolFailed, prompt(&ctx, "x"));
     try testing.expectEqualStrings("acp agent '/bin/sh' ignored session/cancel; agent stopped", ctx.err_msg);
     try testing.expect(!live);
+}
+
+test "shutdown kills and reaps an agent that ignores stdin EOF" {
+    var f: FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    var ctx = try f.ctx("deaf");
+    const t = try prompt(&ctx, "x");
+    try testing.expectEqualStrings("reply from s1", t.text);
+    try testing.expect(live);
+    // What `mcp.serve` and `main` both call on their way out: the agent
+    // read EOF off its stdin and kept running anyway.
+    shutdown(testing.io);
+    try testing.expect(!live);
+    // `kill` blocks until termination and reaps — id null means no
+    // zombie and no orphan is left holding the session cwd.
+    try testing.expect(agent.child.id == null);
+}
+
+test "a prompt larger than the pipe to a non-reading agent fails at the deadline" {
+    var f: FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    try f.env.put("KNAP_ACP_TIMEOUT", "1");
+    var ctx = try f.ctx("stuffed");
+    const big = try f.arena.allocator().alloc(u8, 128 * 1024);
+    @memset(big, 'x');
+    const t0 = std.Io.Timestamp.now(testing.io, .awake);
+    try testing.expectError(error.ToolFailed, prompt(&ctx, big));
+    try testing.expectEqualStrings("acp agent '/bin/sh' stopped reading its input", ctx.err_msg);
+    try testing.expect(!live);
+    // The deadline is 1s; a hung write would never return at all. The
+    // slack here only absorbs a loaded CI box.
+    const elapsed_ms = t0.durationTo(std.Io.Timestamp.now(testing.io, .awake)).toMilliseconds();
+    try testing.expect(elapsed_ms < 30_000);
 }
 
 test "agent failures are ToolFailed with a bounded message" {
