@@ -2011,10 +2011,10 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
         const rj = r.rejections;
         try w.print("| {s} | {d:.1} | {d:.1} | {d:.1} | {d:.1}", .{ row.id, r.start, r.final, r.final - r.start, r.ceiling });
         try w.print(" | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d} | {d:.0} | {s} | {s} |\n", .{
-            r.iterations,          row.max_iterations, r.calls,         r.accepted(),      rj.get(.parse),
-            rj.get(.schema),       rj.get(.inert),     rj.get(.render), rj.get(.verifier), rj.get(.no_gain),
-            rj.get(.new_warnings), rj.get(.declined),  rj.get(.ungrounded), r.renders,     r.ms,              @tagName(r.stop),
-            row.check,
+            r.iterations,          row.max_iterations, r.calls,             r.accepted(),      rj.get(.parse),
+            rj.get(.schema),       rj.get(.inert),     rj.get(.render),     rj.get(.verifier), rj.get(.no_gain),
+            rj.get(.new_warnings), rj.get(.declined),  rj.get(.ungrounded), r.renders,         r.ms,
+            @tagName(r.stop),      row.check,
         });
     }
     if (runs > 0) {
