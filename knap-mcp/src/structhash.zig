@@ -7,9 +7,10 @@
 //! Markdown (k4o output): frontmatter key names and list shape, headings
 //! with level, paragraphs, lists (ordered or not, nesting, items), quotes
 //! and callouts (with their `[!type]`), pipe tables (columns, alignment,
-//! cells per row), code fences, thematic breaks, footnote definitions, and
-//! the inline kinds: strong, emphasis, strikethrough, code, links, images,
-//! wikilinks, embeds, footnote refs, raw URLs, inline html, hard breaks.
+//! cells per row), code fences, `$$` display-math blocks, thematic breaks,
+//! footnote definitions, and the inline kinds: strong, emphasis,
+//! strikethrough, highlight, code, `$` math, links, images, wikilinks,
+//! embeds, footnote refs, raw URLs, inline html, hard breaks.
 //! Whitespace-insensitive. Default mode drops link and image targets,
 //! wikilink targets, footnote labels and raw-URL/autolink targets;
 //! `strict` keeps them.
@@ -37,8 +38,9 @@ pub const Options = struct {
     /// Keep link, image, wikilink and embed targets, footnote labels,
     /// and raw-URL/autolink targets.
     strict: bool = false,
-    /// Drop inline formatting: markdown strong, em, del (open and close) and
-    /// code spans; html bare <strong> <em> <del> <code> tags and their closes.
+    /// Drop inline formatting: markdown strong, em, del, hl (open and close)
+    /// and code spans; html bare <strong> <em> <del> <code> <mark> tags and
+    /// their closes.
     /// Everything else is kept: blocks, links, images, wikilinks, embeds,
     /// footnote refs, raw URLs, autolinks, inline html, hard breaks and
     /// unmatched `delim:` runs (a stray `**` still moves the hash). Drops
@@ -50,9 +52,9 @@ pub const Options = struct {
 /// its insert-only check, so both share one definition.
 pub fn isFormatting(kind: []const u8) bool {
     for ([_][]const u8{
-        "strong",   "/strong",   "em",   "/em",   "del",   "/del",   "code",
-        "<strong>", "</strong>", "<em>", "</em>", "<del>", "</del>", "<code>",
-        "</code>",
+        "strong", "/strong", "em",     "/em",     "del",      "/del",      "code",
+        "hl",     "/hl",     "<mark>", "</mark>", "<strong>", "</strong>", "<em>",
+        "</em>",  "<del>",   "</del>", "<code>",  "</code>",
     }) |k| {
         if (eql(u8, kind, k)) return true;
     }
@@ -60,7 +62,7 @@ pub fn isFormatting(kind: []const u8) bool {
 }
 
 /// html tag names `ignore_formatting` drops when they carry no attributes.
-const fmt_html_tags = [_][]const u8{ "strong", "em", "del", "code" };
+const fmt_html_tags = [_][]const u8{ "strong", "em", "del", "code", "mark" };
 
 fn fmtTag(name: []const u8) ?usize {
     for (fmt_html_tags, 0..) |t, n| if (eql(u8, name, t)) return n;
@@ -205,6 +207,16 @@ fn blocks(o: *Out, lines: Lines) Allocator.Error!void {
                     break;
                 }
             }
+        } else if (isMathBlock(s)) {
+            // Opaque like a fence; an unclosed block runs to EOF.
+            try o.emit("mathblock");
+            i += 1;
+            while (i < lines.len) : (i += 1) {
+                if (isMathBlock(trimWs(lines[i]))) {
+                    i += 1;
+                    break;
+                }
+            }
         } else if (heading(s)) |h| {
             try o.leaf(headingKinds[h.level - 1], h.text);
             i += 1;
@@ -239,7 +251,7 @@ const headingKinds = [_][]const u8{ "h1", "h2", "h3", "h4", "h5", "h6" };
 /// Does line i end a paragraph (blank, or the start of another block)?
 fn interrupts(lines: Lines, i: usize) bool {
     const s = trimWs(lines[i]);
-    if (s.len == 0 or s[0] == '>' or isHr(s) or fenceOpen(s) != null or heading(s) != null) return true;
+    if (s.len == 0 or s[0] == '>' or isHr(s) or fenceOpen(s) != null or heading(s) != null or isMathBlock(s)) return true;
     if (footnoteDef(s) != null or isTableStart(lines, i)) return true;
     // A list interrupts a paragraph when the item has content and, if
     // ordered, starts at 1 (CommonMark).
@@ -480,7 +492,13 @@ fn table(o: *Out, lines: Lines, start: usize) !usize {
 fn startsBlockInTable(lines: Lines, i: usize) bool {
     const s = trimWs(lines[i]);
     return s[0] == '>' or isHr(s) or fenceOpen(s) != null or heading(s) != null or
+        isMathBlock(s) or
         (listMarker(lines[i]) != null and std.mem.findScalar(u8, s, '|') == null);
+}
+
+/// A line that is exactly `$$` opens or closes a display-math block.
+fn isMathBlock(s: []const u8) bool {
+    return eql(u8, s, "$$");
 }
 
 fn row(o: *Out, line: []const u8, cell_kind: []const u8) !void {
@@ -724,7 +742,7 @@ fn inlines(o: *Out, text: []const u8) !void {
 }
 
 fn isOpener(kind: []const u8) bool {
-    for ([_][]const u8{ "strong", "em", "del", "link" }) |k| {
+    for ([_][]const u8{ "strong", "em", "del", "hl", "link" }) |k| {
         if (eql(u8, kind, k) or (startsWith(u8, kind, k) and kind.len > k.len and kind[k.len] == '(')) return true;
     }
     return false;
@@ -825,7 +843,7 @@ fn scanInline(p: *Inl, text: []const u8, off: usize, depth: u16) Allocator.Error
                     i = j;
                 } else i += 1;
             },
-            '*', '_', '~' => {
+            '*', '_', '~', '=' => {
                 const n = runLen(text, i);
                 const prev: u8 = if (i == 0) ' ' else text[i - 1];
                 const next: u8 = if (i + n >= text.len) ' ' else text[i + n];
@@ -836,17 +854,46 @@ fn scanInline(p: *Inl, text: []const u8, off: usize, depth: u16) Allocator.Error
                     d.can_open = left and (!right or isPunct(prev));
                     d.can_close = right and (!left or isPunct(next));
                 }
-                if (c == '~' and n != 2) {
+                if ((c == '~' or c == '=') and n != 2) {
                     d.can_open = false;
                     d.can_close = false;
                 }
                 if (d.can_open or d.can_close) try delims.append(p.o.alloc, d);
                 i += n;
             },
+            '$' => {
+                if (mathInlineEnd(text, i)) |end| {
+                    try p.add(off + i, "math");
+                    i = end + 1;
+                } else i += 1;
+            },
             else => i += 1,
         }
     }
     try resolveEmphasis(p, delims.items, off);
+}
+
+/// Oliver's inline-math rule (pandoc's): the opener `$` is followed by a
+/// non-space, non-`$` char; the closer is the next `$` preceded by a
+/// non-space and not followed by a digit; no newline in between. Returns
+/// the closer's index. `\$` is escaped and never closes. Content is opaque.
+fn mathInlineEnd(text: []const u8, i: usize) ?usize {
+    if (i + 1 >= text.len) return null;
+    const c = text[i + 1];
+    if (c == '$' or isSpace(c)) return null;
+    var j = i + 1;
+    while (j < text.len) : (j += 1) {
+        const cj = text[j];
+        if (cj == '\n') return null;
+        if (cj == '\\' and j + 1 < text.len and isPunct(text[j + 1])) {
+            j += 1;
+            continue;
+        }
+        if (cj != '$' or isSpace(text[j - 1])) continue;
+        if (j + 1 < text.len and std.ascii.isDigit(text[j + 1])) continue;
+        return j;
+    }
+    return null;
 }
 
 fn runLen(text: []const u8, i: usize) usize {
@@ -1006,9 +1053,20 @@ fn resolveEmphasis(p: *Inl, ds: []Delim, off: usize) !void {
                 break j;
             } else null;
             const oi = opener orelse break;
-            const use: usize = if (ds[k].char == '~') 2 else if (ds[oi].left >= 2 and ds[k].left >= 2) 2 else 1;
-            const kind: []const u8 = if (ds[k].char == '~') "del" else if (use == 2) "strong" else "em";
-            const close_kind: []const u8 = if (ds[k].char == '~') "/del" else if (use == 2) "/strong" else "/em";
+            const use: usize = switch (ds[k].char) {
+                '~', '=' => 2,
+                else => if (ds[oi].left >= 2 and ds[k].left >= 2) 2 else 1,
+            };
+            const kind: []const u8 = switch (ds[k].char) {
+                '~' => "del",
+                '=' => "hl",
+                else => if (use == 2) "strong" else "em",
+            };
+            const close_kind: []const u8 = switch (ds[k].char) {
+                '~' => "/del",
+                '=' => "/hl",
+                else => if (use == 2) "/strong" else "/em",
+            };
             ds[oi].left -= use;
             try p.add(off + ds[oi].pos + ds[oi].left, kind);
             try p.add(off + ds[k].pos + (ds[k].len - ds[k].left), close_kind);
@@ -1027,6 +1085,7 @@ fn leftover(p: *Inl, d: Delim, off: usize) !void {
     const kind: []const u8 = switch (d.char) {
         '*' => "delim:*",
         '_' => "delim:_",
+        '=' => "delim:=",
         else => "delim:~",
     };
     var n: usize = 0;
@@ -1074,8 +1133,8 @@ fn htmlDoc(o: *Out, doc: []const u8) !void {
         const name = try std.ascii.allocLowerString(o.alloc, doc[name_start..j]);
         if (closing) {
             i = if (std.mem.findScalarPos(u8, doc, j, '>')) |e| e + 1 else doc.len;
-            // A skipped bare <strong>/<em>/<del>/<code> open swallows its
-            // matching close; attributed formatting tags keep theirs.
+            // A skipped bare <strong>/<em>/<del>/<code>/<mark> open swallows
+            // its matching close; attributed formatting tags keep theirs.
             if (o.ignore_formatting) {
                 if (fmtTag(name)) |n| {
                     if (o.fmt_open[n] > 0) {
@@ -1131,8 +1190,8 @@ fn htmlDoc(o: *Out, doc: []const u8) !void {
         }
         i = j;
 
-        // Bare <strong> <em> <del> <code> are inline formatting; attributed
-        // ones like <code class="language-zig"> stay structural.
+        // Bare <strong> <em> <del> <code> <mark> are inline formatting;
+        // attributed ones like <code class="language-zig"> stay structural.
         if (o.ignore_formatting) {
             if (fmtTag(name)) |n| {
                 if (attrs.items.len == 0) {
@@ -1384,6 +1443,77 @@ test "markdown: nested and ordered lists, quotes, fences, rules" {
     try expectDiffer("- a\n  - b\n", "- a\n- b\n", .markdown);
     try expectDiffer("1. a\n", "- a\n", .markdown);
     try expectDiffer("> [!warning]- Spoilers\n> x\n", "> [!warning] Spoilers\n> x\n", .markdown);
+}
+
+test "markdown: ==highlight== and $math$ inline" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("p hl /hl", try kinds(a, "the ==key== bit", .markdown, .{}));
+    try testing.expectEqualStrings("p hl em /em /hl", try kinds(a, "==a *b*==", .markdown, .{}));
+    // `==` spaced on both sides is text; an unmatched run is a delim token.
+    try testing.expectEqualStrings("p", try kinds(a, "a == b", .markdown, .{}));
+    try testing.expectEqualStrings("p delim:= delim:=", try kinds(a, "==x", .markdown, .{}));
+    // Math is opaque: `_` and `*` inside emit no emphasis tokens.
+    try testing.expectEqualStrings("p math", try kinds(a, "t = $a_b *c* d$.", .markdown, .{}));
+    try testing.expectEqualStrings("p math", try kinds(a, "a$b$c", .markdown, .{}));
+    // Dollars that fail the opener rule or are escaped stay invisible.
+    try testing.expectEqualStrings("p", try kinds(a, "$400 or $500", .markdown, .{}));
+    try testing.expectEqualStrings("p", try kinds(a, "\\$5", .markdown, .{}));
+    try testing.expectEqualStrings("p", try kinds(a, "$ 5 $", .markdown, .{}));
+    // A closer followed by a digit does not close: the span ends at `10$`.
+    try testing.expectEqualStrings("p math", try kinds(a, "Between $5 and $10, or 10$ to 20$ each.", .markdown, .{}));
+    // A `$` inside a code span never opens math.
+    try testing.expectEqualStrings("p code", try kinds(a, "`a $b` c$", .markdown, .{}));
+    try expectSame("$a_b$", "$x_y$", .markdown);
+    try expectDiffer("$x$", "x", .markdown);
+    try expectDiffer("the ==key== bit", "the key bit", .markdown);
+    // ignore_formatting drops hl like em; math is structural and stays.
+    const ign = Options{ .ignore_formatting = true };
+    try testing.expectEqual(
+        try hashOpts(a, "the ==key== bit", .markdown, ign),
+        try hashOpts(a, "the key bit", .markdown, ign),
+    );
+    try testing.expect(
+        try hashOpts(a, "$x$", .markdown, ign) != try hashOpts(a, "x", .markdown, ign),
+    );
+    try testing.expectEqualStrings("p math", try kinds(a, "$x$", .markdown, ign));
+}
+
+test "markdown: $$ display-math blocks" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try testing.expectEqualStrings("mathblock", try kinds(a, "$$\nt = n / r\n$$\n", .markdown, .{}));
+    // `$$` interrupts a paragraph wherever a fence does.
+    try testing.expectEqualStrings("p mathblock p", try kinds(a, "intro\n$$\nx\n$$ \nafter\n", .markdown, .{}));
+    // An unclosed block runs to EOF, like an unclosed fence.
+    try testing.expectEqualStrings("p mathblock", try kinds(a, "intro\n$$\nnever closed\n", .markdown, .{}));
+    // Content is opaque: no list or emphasis tokens inside.
+    try testing.expectEqualStrings("mathblock", try kinds(a, "$$\n- *not* a list\n$$\n", .markdown, .{}));
+    try expectDiffer("$$\nx\n$$\n", "x\n", .markdown);
+}
+
+test "html: <mark> drops under ignore_formatting; math classes stay" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ign = Options{ .ignore_formatting = true };
+    try testing.expectEqualStrings("<p> <mark> </mark> </p>", try kinds(a, "<p>the <mark>key</mark> bit</p>", .html, .{}));
+    try testing.expectEqualStrings("<p> </p>", try kinds(a, "<p>the <mark>key</mark> bit</p>", .html, ign));
+    try testing.expectEqual(
+        try hashOpts(a, "<p>the <mark>key</mark> bit</p>", .html, ign),
+        try hashOpts(a, "<p>the key bit</p>", .html, ign),
+    );
+    // dogbed's math elements keep their structural `class` values.
+    try testing.expectEqualStrings(
+        "<p> <span class=\"math inline\"> </span> </p>",
+        try kinds(a, "<p>x <span class=\"math inline\">a_b</span> y</p>", .html, .{}),
+    );
+    try testing.expectEqualStrings(
+        "<div class=\"math display\"> </div>",
+        try kinds(a, "<div class=\"math display\">t = n / r\n</div>", .html, .{}),
+    );
 }
 
 test "markdown: trailing-space hard breaks survive" {
