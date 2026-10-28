@@ -10,7 +10,7 @@ It needs `jq` and the pinned engines (it runs `scripts/engines.sh env` when `KNA
 
 ## What it does
 
-For each template (verdict, apparatus, release-notes, reading-note):
+For each template (verdict, apparatus, release-notes, reading-note, runbook) — 15 template×tone rows:
 
 1. **Voiced data.** For each tone, `apply-mock.jq` applies `prompts/voice/mock/<tone>.jsonl` to `data/<template>.sample.json`. A line applies when its `template` matches and the value at its `field` path equals its `input`. This is the reference. When `knap-mcp voice` exists (lane C1), the script also runs `knap-mcp voice <id> -d <data> --tone <t> --backend mock` and fails if its `.data` differs from the reference.
 2. **Render and hash.** For each target (markdown via k4o, html via dogbed), it renders the original and the three voiced files and hashes each with `knap-mcp structhash --ignore-formatting`.
@@ -40,4 +40,4 @@ Then three guard controls run `knap-mcp voice --backend mock` with a private `KN
 
 ## Coverage
 
-Mock replies cover the 38 `voice: true` sample values across all four templates (verdict 8, apparatus 4, release-notes 14, reading-note 12), so every row counts. A template whose mock lines go missing shows `no mock coverage` and does not fail — new voice fields need mock lines to exercise the proof. A flagged field with no matching mock line stays `unchanged` under `knap-mcp voice --backend mock`, and the script warns on it — that warning is the signal a new voice field needs mock lines. Hashes depend on the engine pins, so a pin bump can change every hash; the eval only compares hashes within one run.
+Mock replies cover the 80 `voice: true` sample values across all five templates (verdict 8, apparatus 4, release-notes 24, reading-note 21, runbook 23), so every row counts. A template whose mock lines go missing shows `no mock coverage` and does not fail — new voice fields need mock lines to exercise the proof. A flagged field with no matching mock line stays `unchanged` under `knap-mcp voice --backend mock`, and the script warns on it — that warning is the signal a new voice field needs mock lines. Hashes depend on the engine pins, so a pin bump can change every hash; the eval only compares hashes within one run.
