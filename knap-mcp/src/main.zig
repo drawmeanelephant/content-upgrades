@@ -78,6 +78,7 @@ const commands = [_]Command{
     .{ .name = "boris-check", .usage = "boris-check <claim>", .summary = "yes/no/unknown from boris claim pages", .run = .{ .tool = .{ .tool = "boris_check", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "publish-check", .usage = "publish-check <doc_id|file>", .summary = "stage md doc in boris site; exit 1 unless ok", .run = .{ .custom = @import("tools/publish_check.zig").cli } },
     .{ .name = "density", .usage = "density <doc_id|file>", .summary = "formatting-density score (markdown)", .run = .{ .custom = @import("tools/density.zig").cmd } },
+    .{ .name = "audit", .usage = "audit <dir> [options]", .summary = "corpus density audit over a tree (read-only)", .run = .{ .custom = @import("tools/audit.zig").cli } },
     .{ .name = "ratchet", .usage = "ratchet <id> [options]", .summary = "values-only density ratchet", .run = .{ .tool = .{ .tool = "knap_ratchet", .key = "template_id" } } },
     .{ .name = "ratchet-eval", .usage = "ratchet-eval [--corpus f]", .summary = "ratchet climb table (eval/ratchet.json)", .run = .{ .custom = @import("ratchet.zig").cmdEval } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
@@ -116,6 +117,10 @@ const usage_tail =
     \\  --limit <n>             boris-ask hits (default 5)
     \\  --max-iters <n>         ratchet iteration cap (default 6)
     \\  --force                 ingest: admit non-markdown extensions
+    \\  --glob <p>              audit file glob (default **/*.md)
+    \\  --per-dir | --per-glob <name=glob,...>   audit rollup grouping
+    \\  --below <s>             audit: list docs whose total is under s
+    \\  --jsonl <file>          audit: per-doc rows to file (default stdout)
     \\  --probe                 backends: GET /models per live backend, acp handshake
     \\  -h, --help              this text; <command> -h shows that command's usage
     \\
@@ -616,6 +621,7 @@ test {
     _ = @import("store.zig");
     _ = @import("structhash.zig");
     _ = @import("tools.zig");
+    _ = @import("tools/audit.zig");
     _ = @import("tools/boris_ask.zig");
     _ = @import("tools/boris_check.zig");
     _ = @import("tools/common.zig");
