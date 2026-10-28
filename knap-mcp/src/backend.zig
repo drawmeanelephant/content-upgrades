@@ -1000,7 +1000,12 @@ fn runCurl(
     defer child.kill(ctx.io);
 
     if (child.stdin) |stdin| {
-        stdin.writeStreamingAll(ctx.io, stdin_data) catch {};
+        if (stdin_data.len > 0)
+            stdin.writeStreamingAll(ctx.io, stdin_data) catch |e| {
+                stdin.close(ctx.io);
+                child.stdin = null;
+                return ctx.fail("could not deliver auth config to curl: {s}", .{@errorName(e)});
+            };
         stdin.close(ctx.io);
         child.stdin = null;
     }
@@ -1533,6 +1538,22 @@ test "rejectsTemperature and splitStatus" {
     const b2, const s2 = splitStatus("no status");
     try testing.expectEqualStrings("no status", b2);
     try testing.expectEqual(@as(u32, 0), s2);
+}
+
+test "runCurl: an undeliverable -K stream fails instead of running unauthenticated" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx = testCtx(a, &env);
+    ctx.io = testing.io;
+    // The child exits without reading stdin; a config bigger than the
+    // pipe buffer blocks until it does, so the write EPIPEs instead of
+    // racing a small one into the buffer.
+    const big = try a.alloc(u8, 1 << 20);
+    @memset(big, 'x');
+    try testing.expectError(error.ToolFailed, runCurl(&ctx, &.{ "/bin/sh", "-c", "exit 0" }, big, .none));
+    try testing.expect(std.mem.startsWith(u8, ctx.err_msg, "could not deliver auth config to curl:"));
 }
 
 test "live entry points stay compiled without a key" {
