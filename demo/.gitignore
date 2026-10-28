@@ -1,2 +1,4 @@
-# Rendered media and scratch: never committed (mp4/gif/png are regenerable).
+# Rendered media and scratch go to out/ and aren't committed (mp4/gif/png are
+# regenerable) — except demo/hero/verdict.png, the committed hero still
+# (rebuild: demo/hero/build.sh).
 out/
