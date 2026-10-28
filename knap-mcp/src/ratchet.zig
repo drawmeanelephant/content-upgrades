@@ -1207,7 +1207,7 @@ const Run = struct {
         const json = try std.json.Stringify.valueAlloc(a, Value{ .object = data }, .{});
         const path = try store.scratchFile(r.ctx, "json");
         defer std.Io.Dir.deleteFile(.cwd(), r.ctx.io, path) catch {};
-        std.Io.Dir.writeFile(.cwd(), r.ctx.io, .{ .sub_path = path, .data = json }) catch
+        store.writePrivate(r.ctx, path, json) catch
             return r.ctx.fail("cannot stage data file", .{});
         r.renders += 1;
         switch (try engine.render(r.ctx, .markdown, r.tpl, path)) {
@@ -1355,7 +1355,7 @@ pub fn run(
         .diag => {
             const path = try store.scratchFile(ctx, "json");
             defer std.Io.Dir.deleteFile(.cwd(), ctx.io, path) catch {};
-            std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = try std.json.Stringify.valueAlloc(a, Value{ .object = data0 }, .{}) }) catch
+            store.writePrivate(ctx, path, try std.json.Stringify.valueAlloc(a, Value{ .object = data0 }, .{})) catch
                 return ctx.fail("cannot stage data file", .{});
             return switch (try engine.render(ctx, .markdown, tpl_path, path)) {
                 .diags => |d| .{ .start_failed = d },

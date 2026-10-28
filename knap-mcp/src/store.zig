@@ -24,9 +24,36 @@ fn processId() u32 {
 
 pub const Error = error{ ToolFailed, OutOfMemory };
 
+const Permissions = std.Io.File.Permissions;
+
+/// Everything under the store is owner-only: scratch files carry staged
+/// data and full request bodies, artifacts carry rendered documents —
+/// none of it should be readable by other users on a shared box. Same
+/// flags backend.zig gives the curl request body.
+const private_file: std.Io.Dir.CreateFileOptions = .{
+    .permissions = if (@hasDecl(Permissions, "fromMode")) Permissions.fromMode(0o600) else .default_file,
+};
+const private_dir: Permissions = if (@hasDecl(Permissions, "fromMode")) Permissions.fromMode(0o700) else .default_dir;
+
+/// writeFile at owner-only 0600 — the one path every store write takes,
+/// so no call site can land a world-readable file by default.
+pub fn writePrivate(ctx: *Ctx, sub_path: []const u8, data: []const u8) std.Io.Dir.WriteFileError!void {
+    return std.Io.Dir.writeFile(.cwd(), ctx.io, .{
+        .sub_path = sub_path,
+        .data = data,
+        .flags = private_file,
+    });
+}
+
+/// createDirPath at owner-only 0700 — <store>, tmp/, artifacts/ all
+/// inherit it (pre-existing dirs keep their mode; mkdir never chmods).
+fn ensurePrivateDir(ctx: *Ctx, sub_path: []const u8) std.Io.Dir.CreateDirPathError!void {
+    _ = try std.Io.Dir.createDirPathStatus(.cwd(), ctx.io, sub_path, private_dir);
+}
+
 /// Store `bytes` under a fresh handle. Returns the doc_id.
 pub fn put(ctx: *Ctx, extension: []const u8, bytes: []const u8) Error![]const u8 {
-    std.Io.Dir.createDirPath(.cwd(), ctx.io, artifactsPath(ctx)) catch
+    ensurePrivateDir(ctx, artifactsPath(ctx)) catch
         return ctx.fail("cannot create artifacts dir", .{});
     counter += 1;
     const doc_id = try std.fmt.allocPrint(
@@ -35,7 +62,7 @@ pub fn put(ctx: *Ctx, extension: []const u8, bytes: []const u8) Error![]const u8
         .{ stamp(ctx), processId(), counter },
     );
     const rel = try std.fmt.allocPrint(ctx.arena, "{s}/{s}.{s}", .{ artifactsPath(ctx), doc_id, extension });
-    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = rel, .data = bytes }) catch
+    writePrivate(ctx, rel, bytes) catch
         return ctx.fail("artifact store write failed", .{});
     prune(ctx);
     return doc_id;
@@ -91,7 +118,7 @@ pub fn list(ctx: *Ctx) ![]Entry {
 
 pub fn scratchDir(ctx: *Ctx) Error![]const u8 {
     const rel = try std.fmt.allocPrint(ctx.arena, "{s}/tmp", .{ctx.store_dir});
-    std.Io.Dir.createDirPath(.cwd(), ctx.io, rel) catch
+    ensurePrivateDir(ctx, rel) catch
         return ctx.fail("cannot create scratch dir", .{});
     return rel;
 }
@@ -125,8 +152,9 @@ pub fn sweepScratch(ctx: *Ctx) void {
 
 /// Delete any process's `scratch-*` files older than an hour. main calls
 /// this once at startup so leftovers of a SIGKILLed or crashed run —
-/// 0600 request bodies holding full prompts, staged data files — don't
-/// linger forever; sweepScratch still handles the live pid's files per
+/// request bodies holding full prompts, staged data, working templates —
+/// don't linger forever; everything in tmp/ is written 0600 owner-only
+/// via writePrivate. sweepScratch still handles the live pid's files per
 /// request. Non-`scratch-` names are never touched.
 pub fn sweepStale(ctx: *Ctx) void {
     const dir_path = std.fmt.allocPrint(ctx.arena, "{s}/tmp", .{ctx.store_dir}) catch return;
@@ -266,6 +294,34 @@ test "put ids carry the pid" {
     const id = try put(&ctx, "md", "x");
     const pid_part = try std.fmt.allocPrint(a, "-{d}-", .{processId()});
     try std.testing.expect(std.mem.indexOf(u8, id, pid_part) != null);
+}
+
+/// The store's confinement contract on POSIX: 0600 files, 0700 dirs.
+/// No-ops where permissions carry no mode (Windows).
+fn expectMode(sub_path: []const u8, want: u32) !void {
+    if (@hasDecl(Permissions, "toMode")) {
+        const st = try std.Io.Dir.statFile(.cwd(), std.testing.io, sub_path, .{});
+        try std.testing.expectEqual(want, st.permissions.toMode() & 0o777);
+    }
+}
+
+test "scratch files and artifacts land 0600 in 0700 dirs" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+
+    const id = try put(&ctx, "md", "x");
+    try expectMode(try path(&ctx, id, "md"), 0o600);
+    try expectMode(artifactsPath(&ctx), 0o700);
+
+    const scratch = try scratchFile(&ctx, "json");
+    try writePrivate(&ctx, scratch, "{}");
+    try expectMode(scratch, 0o600);
+    try expectMode(try std.fmt.allocPrint(a, "{s}/tmp", .{ctx.store_dir}), 0o700);
 }
 
 test "sweepStale removes only aged scratch files" {

@@ -65,7 +65,7 @@ pub fn run(
     while (iter < max_iterations) : (iter += 1) {
         const tpl_path = try store.scratchFile(ctx, "knap");
         defer std.Io.Dir.deleteFile(.cwd(), ctx.io, tpl_path) catch {};
-        std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = tpl_path, .data = current }) catch
+        store.writePrivate(ctx, tpl_path, current) catch
             return ctx.fail("cannot stage working template", .{});
 
         switch (try engine.render(ctx, target, tpl_path, data_path)) {
