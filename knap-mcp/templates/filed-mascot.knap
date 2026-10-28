@@ -1,8 +1,9 @@
 ---
 {{ title | yaml_property:"title" }}
-{{ id | yaml_property:"id" }}
-{{ parent | yaml_property:"parent" }}
-{{ status | yaml_property:"status" }}
+{% if id %}{{ id | yaml_property:"id" }}
+{% endif %}{% if parent %}{{ parent | yaml_property:"parent" }}
+{% endif %}{% if status %}{{ status | yaml_property:"status" }}
+{% endif %}
 {% if tags %}tags: {{ tags | yaml:flow }}
 {% endif %}{% if relations %}relations: {{ relations | yaml:flow }}
 {% endif %}{% if published_at %}{{ published_at | yaml_property:"published_at" }}
