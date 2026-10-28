@@ -9,26 +9,35 @@ voice suite, this note.
 
 The voice contract used to be "one line of text, no markup ever added."
 Replies may now insert constrained inline formatting — `**strong**`, `*em*`,
-`~~del~~` around words the reply added (strike may only cover the reply's own
-words), single-backtick code spans that quote text already in the input — and
-allowlisted emoji within a per-tone budget. Facts, layout and the template
-still own everything else.
+`==highlight==` around the phrase a skimmer must not miss (it may cover the
+input's own words — it re-points, it doesn't retract), `~~del~~` around words
+the reply added (strike may only cover the reply's own words), single-backtick
+code spans that quote text already in the input — and allowlisted emoji
+within a per-tone budget. Facts, layout and the template still own everything
+else. `==highlight==` landed with MD-VH (#229); details live in
+`docs/tracks/MD-VH.md`.
 
 ### Guard (`src/voice.zig`)
 
 - W1 insert-only skeleton: the input's `structhash` inline token sequence must
-  survive in order, with only formatting kinds (`strong`/`em`/`del`/`code`,
+  survive in order, with only formatting kinds (`strong`/`em`/`del`/`code`/`hl`,
   named by `structhash.isFormatting`) inserted. A code span wrapping `[^1]`
   or the input's own `**` still fails — the fnref/del disappears from the
   output sequence. Kinds only, not depths: inserted openers shift depth.
 - W2 delimiter accounting: added `*` == `4·Δstrong + 2·Δem`, added backtick
-  == `2·Δcode`, added `~` == `4·Δdel`. Stray delimiters emit `delim:` tokens
-  which W1 also rejects; both run so a clear reason exists either way.
+  == `2·Δcode`, added `~` == `4·Δdel`, added `=` == `4·Δhl`. An added
+  space-flanked `a == b`, a stray `==` or `===x===` resolves to no `hl`
+  token, so it fails `unbalanced =`; an unmatched `==` also emits `delim:=`,
+  which W1 rejects. `=` may be added but never dropped, like the other
+  insertables. Stray delimiters emit `delim:` tokens which W1 also rejects;
+  both run so a clear reason exists either way.
 - W3 strike retraction: `~~x~~` may not contain a number token, any protected
   input token, a negation word, or an input content word (stemmed).
 - W4 plain slots: roles containing `rendered bold`, `rendered italic`,
-  `alt text`, `page heading` or `frontmatter` take no added formatting or
-  emoji — the slot is already styled or is copied into metadata/alt text.
+  `rendered highlight`, `alt text`, `page heading` or `frontmatter` take no
+  added formatting or emoji — the slot is already styled or is copied into
+  metadata/alt text. `rendered highlight` marks slots the template pipes
+  through `| highlight`.
 - W5 emoji classes: allowlist (U+1F300–1F5FF, 1F600–1F64F, 1F680–1F6FF,
   1F900–1F9FF, 1FA70–1FAFF, plus ✨⚡⚠✅❌☕, optional VS16) counts toward a
   tone budget; gestures/food/weapons/blood emoji, skin tones, ZWJ and other
@@ -41,14 +50,16 @@ still own everything else.
 - Locked characters: `_ | # < > [ ] { } ^ @ \ " $` may neither be added nor
   dropped (`$` locked because dogbed renders `$…$` math and structhash can't
   see it). New hard rejects: added `![` (raw adjacency — `!**[^1]**` is fine),
-  added `==`, added HTML entities (`&#…;`/`&name;` smuggle `*` and emoji),
+  added HTML entities (`&#…;`/`&name;` smuggle `*` and emoji),
   `!!`/`??` checked on the delimiter-free projection (`wow!**!**` caught),
   ` ``` `/`~~~` fences added to the block-marker list.
-- Length bounds now measure text only: `*`, `` ` ``, `~`, allowed emoji and
-  VS16 don't count either way.
+- Length bounds now measure text only: `*`, `` ` ``, `~`, `=`, allowed emoji
+  and VS16 don't count either way.
 - Tone budgets (advisory → `warning:` reasons, mild profanity stays hard):
-  mild ≤1 span, italic only, 0 emoji; spicy ≤2 spans, ≤1 emoji; feral ≤3
-  spans, ≤2 emoji. Code spans quote the input and don't count.
+  mild ≤1 span, italic only — a `**`, `~~` or `==` span is a hard
+  `mild: only *italic*`, not a warning — 0 emoji; spicy ≤2 spans, ≤1 emoji;
+  feral ≤3 spans, ≤2 emoji. A highlight counts as one formatting span.
+  Code spans quote the input and don't count.
 
 ### structhash (`src/structhash.zig`, `tools/structure_hash.zig`)
 
@@ -66,33 +77,45 @@ still own everything else.
 ### Prompts, data, awk
 
 - `system.md` rule 6 rewritten ("template owns the layout; you own the
-  emphasis"), rule 7 notes text-only length. Tone guides carry their
-  formatting budget in their own voice. `Input:` line acknowledges markup.
+  emphasis"): `==` sits in the kept-markup and allowed-add lists
+  (`==highlight==` "on the phrase a skimmer must not miss"), `rendered
+  highlight` is a plain-slot role marker, `==` is off the forbidden list.
+  Rule 7 notes text-only length incl. `==` delimiters. Tone guides carry
+  their formatting budget in their own voice. `Input:` line acknowledges
+  markup.
 - `voice.awk` mirrors the guard for the examples/mocks/selftest pipeline:
-  locked vs insertable chars, `*`-pairing (leftover comparison),
-  run-length checks for `` ` ``/`~`, emoji classes as UTF-8 byte ranges
-  (LC_ALL=C), `textlen`, plain-role rule, `![`/`==`/entities/projection
-  checks, span+emoji budgets. `check.sh` is green: 36 examples, 114 mock
-  replies, 37/37 selftest breaks.
-- Examples: mild 1 italic, spicy `**one**`/code/emoji/`*called*`,
-  feral `**DROPS MESSAGES**`/`~~peer review~~`/🪣/💀/🎁 plus a shared
-  `` `quux migrate --to 3` `` example exercising W6. Mocks: feral formatted
-  per template (≥8 values, all five kinds incl. a footnote-abutting slot),
-  spicy ≥4, mild 2 italics; plain slots (verdict, subtitle, title,
-  screenshot_alt) stay plain. Mock `field_role`s now equal the shape roles
-  verbatim (a Zig test pins that).
-- `testdata/bad.jsonl`: 37 lines — the `**hard pass**` verdict now expects
-  `formatting in a plain slot`, 🖕 expects `adds disallowed emoji`, plus 16
-  new cases (dropped-markup-with-adds, unbalanced `*`/`` ` ``/`~`, `#`/`|`
-  /`_`/`$` adds, `* `-list and ` ``` `-fence starts, plain-slot formatting
-  and emoji, `![`, fake-bold, `!**!**` projection, `==`).
+  locked vs insertable chars (`=` included), `*`-pairing (leftover
+  comparison), `eqscan` pairs `==` runs with the same flanking rule zig
+  uses, run-length checks for `` ` ``/`~`, emoji classes as UTF-8 byte
+  ranges (LC_ALL=C), `textlen`, plain-role rule,
+  `![`/entities/projection checks, span+emoji budgets (`==…==` counts as a
+  span). `check.sh` is green: 36 examples, 114 mock replies, 49/49 selftest
+  breaks.
+- Examples: mild 1 italic, spicy `**one**`/code/emoji/`*called*` plus a
+  `==mostly==`, feral `**DROPS MESSAGES**`/`~~peer review~~`/`==mostly==`
+  /🪣/💀/🎁 plus a shared `` `quux migrate --to 3` `` example exercising W6.
+  Mocks: feral formatted per template (≥8 values, all five kinds incl. a
+  footnote-abutting slot and one `==…==` per shipped template), spicy ≥4,
+  mild 2 italics; plain slots (verdict, subtitle, title, screenshot_alt)
+  stay plain. Mock `field_role`s now equal the shape roles verbatim (a Zig
+  test pins that).
+- `testdata/bad.jsonl`: 49 lines — the `**hard pass**` verdict now expects
+  `formatting in a plain slot`, 🖕 expects `adds disallowed emoji`, plus the
+  earlier cases (dropped-markup-with-adds, unbalanced `*`/`` ` ``/`~`,
+  `#`/`|`/`_`/`$` adds, `* `-list and ` ``` `-fence starts, plain-slot
+  formatting and emoji, `![`, fake-bold, `!**!**` projection) and the `==`
+  cases: `===x===` (the old now-legal `==shipped==` case), unbalanced `==x`,
+  spaced `a == b`, `==` in mild, `==` in a plain slot and `plan==[^1]==`
+  (zig reports `changes inline structure` + `unbalanced =`; awk has no W1
+  so it reports `unbalanced =`).
 
 ### Eval / live
 
 - `eval/voice/run.sh` main table compares `--ignore-formatting` hashes;
   negative controls keep the exact hash (drift must still move it); each
-  template's feral data must add formatting (`fmtscore` jq). `live.sh`
-  `voice_suite` uses normalized hashes.
+  template's feral data must add formatting (`fmtscore` jq counts
+  `*`/`` ` ``/`~`/`=` plus emoji). `live.sh` `voice_suite` uses normalized
+  hashes.
 
 ## Before/after
 
@@ -116,6 +139,10 @@ still own everything else.
 - `‼`/`⁉` report `adds !!` because that's the failure they'd cause.
 - A strike around the reply's own words is the only retraction-shaped
   formatting allowed; everything else about the input's meaning is frozen.
+- `==` was hard-rejected only because structhash couldn't see it; with `hl`
+  tokens (MD-VH, #229) the same W1/W2 machinery covers it. Unlike `~~`,
+  `==` may wrap the input's own words — it re-points, it doesn't retract —
+  so it has no W3-style rule.
 
 ## Known limits / follow-ups
 
@@ -128,3 +155,7 @@ still own everything else.
 - `~~` inside link text or footnote-def text is parsed as `del` by
   structhash like CommonMark; multi-backtick spans never resolve, so
   adding one fails `unbalanced ``.
+- `voice.awk`'s `~` mirror uses weaker run-length pairing (`addruns`)
+  than zig's flanking rule: `plan~~[^1]~~` passes awk but zig rejects it
+  (`unbalanced ~` + `delim:~`). The `==` mirror got the exact `eqscan`
+  pairing in MD-VH; `~` predates it — filed as #247.
