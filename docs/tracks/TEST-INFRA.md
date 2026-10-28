@@ -55,10 +55,35 @@ instead of producing an unattributed `failed command`.
 
 ## Still open (other lanes)
 
-- `density.zig` `test "scoring every fixture takes under 50ms"` is a
-  wall-clock assertion — the one remaining real timing flake in the
-  suite. density.zig is owned by an open milestone-6 lane; flagged in
-  the issue rather than edited here.
 - `backend.zig` compat test spawns real `curl` against `127.0.0.1:1`;
   every failure mode still lands as `error.ToolFailed`, so it is
   robust, but it is a real network/process dependency.
+
+## Density timing test (issue #246)
+
+`density.zig` `test "scoring every fixture takes under 50ms"` was the
+one remaining wall-clock assertion in the suite. Scoring all ten
+calibration fixtures takes ~6ms in a debug build, so 50ms already left
+~9x of headroom — but a preempted process under parallel or cold-cache
+load can stretch far past that, so the assert measured machine load,
+not the code.
+
+Options weighed:
+
+- **Generous ceiling** — keep the measurement, raise the bound far past
+  what load alone can reach. This is the convention the suite already
+  has: `acp.zig`'s deadline test asserts `elapsed_ms < 30_000` around a
+  1s deadline, with a comment that the slack only absorbs a loaded box.
+- **Benchmark harness** — real perf data, but the repo has no benchmark
+  infrastructure and building one just to carry this assertion is out
+  of proportion to a canary.
+- **Counting work** — `score()` exposes no work counters, and
+  instrumenting it would touch scoring logic the lane doesn't own.
+
+Chosen: the generous ceiling. The test is now
+`"scoring every fixture takes under 2s"` — ~300x of slack, so it cannot
+fail from load alone, while still catching a pathological regression
+(quadratic scoring that turns milliseconds into seconds). Finer-grained
+perf signal was never really available from a wall-clock assert in a
+shared unit-test run; anyone who wants that signal gets real timings
+from the ratchet's `ms` field, which is timed per run.

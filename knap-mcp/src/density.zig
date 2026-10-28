@@ -1237,7 +1237,7 @@ test "calibration fixtures rank as the rubric says" {
     }
 }
 
-test "scoring every fixture takes under 50ms" {
+test "scoring every fixture takes under 2s" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1256,5 +1256,11 @@ test "scoring every fixture takes under 50ms" {
     const t0 = std.Io.Timestamp.now(testing.io, .awake);
     for (docs) |d| _ = try score(a, d);
     const ns = t0.durationTo(std.Io.Timestamp.now(testing.io, .awake)).toNanoseconds();
-    try testing.expect(ns < 50 * std.time.ns_per_ms);
+    // Canary, not a benchmark — scoring all ten fixtures is ~6ms in a
+    // debug build, so this ceiling has ~300x of slack. Any tighter
+    // wall-clock bound (this was 50ms) only measures machine load, not
+    // the code (see docs/tracks/TEST-INFRA.md, #246). What the assert
+    // still catches is a pathological regression: accidental quadratic
+    // scoring that turns milliseconds into seconds.
+    try testing.expect(ns < 2 * std.time.ns_per_s);
 }
