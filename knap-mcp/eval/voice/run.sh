@@ -24,10 +24,15 @@ if [ -z "${KNAP_K4O_PATH:-}" ] || [ -z "${KNAP_DOGBED_PATH:-}" ]; then
     eval "$("$root/scripts/engines.sh" env)"
 fi
 export KNAP_K4O_PATH KNAP_DOGBED_PATH
+own_home=
 if [ -z "${KNAP_MCP_HOME:-}" ]; then
     KNAP_MCP_HOME=$(mktemp -d)
+    own_home=1
 fi
 export KNAP_MCP_HOME
+# Remove the store only when this script created it; a caller's
+# KNAP_MCP_HOME is never deleted. $work joins once it exists.
+trap 'rm -rf ${work:+"$work"} ${own_home:+"$KNAP_MCP_HOME"}' EXIT
 
 bin=${KNAP_MCP_BIN:-$knap/zig-out/bin/knap-mcp}
 if [ ! -x "$bin" ]; then
@@ -35,7 +40,6 @@ if [ ! -x "$bin" ]; then
 fi
 
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
 
 templates="verdict apparatus release-notes reading-note runbook"
 targets="markdown html"
