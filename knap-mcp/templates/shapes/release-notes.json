@@ -1,6 +1,6 @@
 {
   "template_id": "release-notes",
-  "description": "A software release, judged: should you give a shit about this upgrade? YAML frontmatter built key by key, a TL;DR callout, breaking changes behind a danger callout, highlights with vendor claims quoted and deep-linked into the changelog, an upgrade-math table, known issues, an embedded migration guide, wikilinked receipts and footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. The template does all layout; strings hold text, not markup — except that `voice: true` fields may carry constrained inline formatting (**, *, ~~ on words the reply added, code spans quoting the input, allowlisted emoji within the tone's budget).",
+  "description": "A software release, judged: should you give a shit about this upgrade? YAML frontmatter built key by key, a TL;DR callout, breaking changes behind a danger callout, highlights with vendor claims quoted and deep-linked into the changelog, an upgrade-math table, an upgrade-path section with a task-list preflight, numbered steps, a sh code block and a folded rollback callout, known issues, an embedded migration guide, wikilinked receipts and footnotes. Section headings, callout kinds and callout titles belong to the template; write values only. The template does all layout; strings hold text, not markup — except that `voice: true` fields may carry constrained inline formatting (**, *, ~~ on words the reply added, code spans quoting the input, allowlisted emoji within the tone's budget).",
   "fields": {
     "product":          {"type": "string", "role": "product name; frontmatter `product`, and the page heading when `title` is absent"},
     "version":          {"type": "string", "role": "version string, rendered as inline code, e.g. 2.0.0"},
@@ -33,6 +33,10 @@
       "downtime": {"type": "string"},
       "bother":   {"type": "string"}
     }},
+    "preflight":        {"type": "array<string>", "role": "pre-upgrade checks, one task-list item each, imperative, under 12 words. Rendered as a `- [ ]` checklist under 'Before you start'", "optional": true},
+    "upgrade_steps":    {"type": "array<string>", "role": "the upgrade procedure in order, one numbered step each, imperative, one line. Put the command in `upgrade_command`, not here", "optional": true},
+    "upgrade_command":  {"type": "string", "role": "the one shell command that performs the upgrade, copied verbatim from the release notes or upgrade docs. Rendered as a ```sh code block. One line, never contains a backtick fence", "optional": true},
+    "rollback":         {"type": "array<string>", "role": "rollback procedure in order, one numbered step each. Rendered inside a collapsed 'Rollback plan' warning callout", "optional": true},
     "known_issues":     {"type": "array<string>", "role": "what is still broken, one bullet each", "optional": true, "voice": true, "apparatus": "list", "max_items": 3, "words": 12},
     "migration_guide":  {"type": "string", "role": "name of an existing site page, embedded as ![[name]]", "optional": true, "apparatus": "embed", "words": 4},
     "bottom_line":      {"type": "string", "role": "closing verdict, 1-2 sentences", "voice": true},

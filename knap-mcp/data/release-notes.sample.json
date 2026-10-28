@@ -46,6 +46,23 @@
     {"on": "1.8.x", "effort": "config key plus driver bump", "downtime": "one restart", "bother": "yes, this week"},
     {"on": "1.7 or older", "effort": "dump and reload", "downtime": "plan a window", "bother": "yes, but bring snacks"}
   ],
+  "preflight": [
+    "Back up the AcmeDB data directory",
+    "Bump every client driver to 1.8 or newer",
+    "Check free disk space for the snapshot store"
+  ],
+  "upgrade_steps": [
+    "Stop the AcmeDB 1.x server",
+    "Rename wal_dir to storage.wal_path in acmedb.toml",
+    "Install AcmeDB 2.0 with the command below",
+    "Start AcmeDB and confirm acmedb doctor is green"
+  ],
+  "upgrade_command": "acmedb upgrade --to 2.0.0",
+  "rollback": [
+    "Stop AcmeDB 2.0",
+    "Restore the pre-upgrade backup of the data directory",
+    "Reinstall the 1.9.x package and start it"
+  ],
   "known_issues": [
     "Snapshots of databases over 2 TB take hours, not minutes.",
     "Still single-region. Cross-region replication is on the roadmap. Again."

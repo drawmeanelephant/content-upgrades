@@ -70,7 +70,25 @@
 {% for r in upgrade_matrix %}
 | {{ r.on }} | {{ r.effort }} | {{ r.downtime }} | {{ r.bother }} |
 {% endfor %}
-{{ "" }}{% endif %}{% if known_issues %}
+{{ "" }}{% endif %}{% if upgrade_steps %}
+
+{{ "Upgrade path" | h2 }}
+{% if preflight %}
+
+{{ "Before you start" | h3 }}
+
+{{ preflight | list:task }}
+{{ "" }}{% endif %}
+{{ "Steps" | h3 }}
+
+{{ upgrade_steps | list:numbered }}
+{% if upgrade_command %}
+
+{{ upgrade_command | code_block:"sh" }}
+{{ "" }}{% endif %}{% if rollback %}
+
+{{ rollback | list:numbered | callout:("warning", "Rollback plan", true) }}
+{{ "" }}{% endif %}{% endif %}{% if known_issues %}
 
 {{ "Still broken" | h2 }}
 
