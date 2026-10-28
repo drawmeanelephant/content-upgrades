@@ -18,7 +18,7 @@ const formatcheck = @import("formatcheck.zig");
 
 /// Scorer contract version. Any change to the tables below bumps it, and
 /// every published number cites it.
-pub const version = "density/2";
+pub const version = "density/3";
 
 /// Short docs are normalized as if they had this many words, so a 40-word
 /// stub with one table doesn't read as 25 tables per 1000 words. Positive
@@ -94,7 +94,7 @@ pub const specs = [_]Spec{
     .{ .id = .heading_levels, .weight = 3, .basis = .absolute, .sat = 3 },
     .{ .id = .heading_density, .weight = 4, .basis = .per_kwords, .sat = 8, .over = 50, .zero = 100 },
     .{ .id = .lists, .weight = 4, .basis = .per_kwords, .sat = 3, .over = 20, .zero = 40 },
-    .{ .id = .block_variety, .weight = 8, .basis = .absolute, .sat = 6 },
+    .{ .id = .block_variety, .weight = 8, .basis = .absolute, .sat = 8 },
     // Penalties.
     .{ .id = .raw_urls, .weight = -6, .basis = .per_kwords, .sat = 10 },
     .{ .id = .overload, .weight = -20, .basis = .absolute, .sat = 4 },
@@ -230,7 +230,7 @@ pub fn score(arena: std.mem.Allocator, markdown: []const u8) !Score {
     return .{ .total = std.math.clamp(total, 0, 100), .words = s.words, .signals = out, .warnings = warnings };
 }
 
-/// `{"scorer":"density/2","total":..,"words":..,"signals":[{name,raw,
+/// `{"scorer":"density/3","total":..,"words":..,"signals":[{name,raw,
 /// value,normalized,weight,contribution}..],"warnings":[{rule,line,
 /// detail}..]}`. Fixed precision, so equal docs give byte-identical JSON.
 pub fn writeJson(sc: Score, w: *std.Io.Writer) std.Io.Writer.Error!void {
@@ -280,7 +280,7 @@ fn penaltyIndex(rule: []const u8) usize {
 
 const Error = std.mem.Allocator.Error;
 
-const Kind = enum { frontmatter, paragraph, heading, list, quote, callout, table, code, footnote, rule };
+const Kind = enum { frontmatter, paragraph, heading, list, ordered, task, quote, callout, table, code, footnote, math, rule };
 const Style = enum { bold, italic, code, strike, highlight };
 
 /// Styled runs nest inside each other; past this depth markers are literal.
@@ -344,6 +344,8 @@ const Scan = struct {
             } else if (formatcheck.isRule(t)) {
                 s.kinds.insert(.rule);
                 i += 1;
+            } else if (std.mem.eql(u8, t, "$$")) {
+                i = s.mathBlock(ls, i);
             } else if (std.ascii.startsWithIgnoreCase(t, "<table")) {
                 i = try s.htmlTable(ls, i);
             } else if (pipeTableAt(ls, i)) {
@@ -385,6 +387,20 @@ const Scan = struct {
             }
         }
         // Unclosed: no credit; format_check charges for it.
+        return ls.len;
+    }
+
+    /// A line that trims to `$$` opens a display-math block that closes at
+    /// the next one. Math is opaque: its lines are neither prose words nor
+    /// inline-scanned, the same way fenced code is.
+    fn mathBlock(s: *Scan, ls: []const []const u8, start: usize) usize {
+        for (ls[start + 1 ..], start + 1..) |line, i| {
+            if (std.mem.eql(u8, trim(line), "$$")) {
+                s.kinds.insert(.math);
+                return i + 1;
+            }
+        }
+        // Unclosed: no credit.
         return ls.len;
     }
 
@@ -477,7 +493,7 @@ const Scan = struct {
     /// either; anything else ends the list.
     fn list(s: *Scan, ls: []const []const u8, start: usize) Error!usize {
         s.lists += 1;
-        s.kinds.insert(.list);
+        s.kinds.insert(listKind(ls[start]));
         var i = start;
         while (i < ls.len) {
             const line = ls[i];
@@ -525,7 +541,22 @@ const Scan = struct {
     }
 
     fn prose(s: *Scan, text: []const u8) Error!void {
-        s.words += formatcheck.countWords(text);
+        // Math is not prose: count words only in the gaps between $…$
+        // spans, the same way the inline scan skips over them.
+        var start: usize = 0;
+        var i: usize = 0;
+        while (i < text.len) {
+            if (text[i] == '$') {
+                if (mathSpanEnd(text[0..@min(text.len, i + max_span)], i)) |end| {
+                    s.words += formatcheck.countWords(text[start..i]);
+                    i = end;
+                    start = end;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        s.words += formatcheck.countWords(text[start..]);
         try s.inlines(text, 0);
     }
 
@@ -643,6 +674,11 @@ const Scan = struct {
                 if (!s.no_raw_urls) s.raw_urls += 1;
                 return end;
             },
+            '$' => {
+                // Math is opaque: no styled runs, no coverage, no URLs.
+                if (mathSpanEnd(text, i)) |end| return end;
+                return null;
+            },
             '*', '_', '~', '=' => return s.styledRun(text, i, depth),
             else => return null,
         }
@@ -745,8 +781,20 @@ fn startsBlock(ls: []const []const u8, i: usize) bool {
     const line = ls[i];
     const t = trim(line);
     return formatcheck.fenceOpen(line) != null or formatcheck.headingLevel(t) > 0 or t[0] == '>' or formatcheck.isRule(t) or
-        std.ascii.startsWithIgnoreCase(t, "<table") or formatcheck.footnoteDefId(t) != null or
+        std.mem.eql(u8, t, "$$") or std.ascii.startsWithIgnoreCase(t, "<table") or formatcheck.footnoteDefId(t) != null or
         formatcheck.listItem(line) != null or pipeTableAt(ls, i);
+}
+
+/// A list's kind comes from its first item: content starting `[ ]`,
+/// `[x]` or `[X]` is a task list, an `N.`/`N)` marker is ordered, and
+/// anything else is a bullet list. `line` is known to be a list item.
+fn listKind(line: []const u8) Kind {
+    const content = formatcheck.listItem(line) orelse return .list;
+    if (std.mem.startsWith(u8, content, "[ ]") or std.mem.startsWith(u8, content, "[x]") or
+        std.mem.startsWith(u8, content, "[X]")) return .task;
+    const t = std.mem.trimStart(u8, line, " \t");
+    if (std.ascii.isDigit(t[0])) return .ordered;
+    return .list;
 }
 
 // --- Inline helpers ----------------------------------------------------------
@@ -755,9 +803,28 @@ fn startsBlock(ls: []const []const u8, i: usize) bool {
 /// max_span on a failed match — what the inlines() scan budget charges.
 fn isScanMarker(c: u8) bool {
     return switch (c) {
-        '`', '!', '[', '^', '<', '*', '_', '~', '=' => true,
+        '`', '!', '[', '^', '<', '*', '_', '~', '=', '$' => true,
         else => false,
     };
+}
+
+/// Inline math `$…$`: the index just past the closer when `t[i]` opens a
+/// span, else null. Pandoc's rule — the opener's `$` is followed by a
+/// non-space, non-`$`; the closer's `$` is preceded by a non-space and
+/// not followed by a digit — so `$400 or $500` stays prose. Scan text is
+/// always one line, so the no-newline rule needs no check. Must match
+/// `structhash.zig` (lane MD-SH implements the same rule there).
+fn mathSpanEnd(t: []const u8, i: usize) ?usize {
+    if (i + 1 >= t.len) return null;
+    const first = t[i + 1];
+    if (std.ascii.isWhitespace(first) or first == '$') return null;
+    var p = i + 1;
+    while (std.mem.findScalarPos(u8, t, p, '$')) |at| {
+        if (!std.ascii.isWhitespace(t[at - 1]) and (at + 1 >= t.len or !std.ascii.isDigit(t[at + 1])))
+            return at + 1;
+        p = at + 1;
+    }
+    return null;
 }
 
 /// A closing backtick run of exactly `n`.
@@ -934,6 +1001,50 @@ test "lists: blocks, not items; rules are not lists" {
     defer arena.deinit();
     const sc = try score(arena.allocator(), "- a\n- b\n  continued\n\n- c\n\n---\n\n1. one\n2) two\n\nprose\n\n* * *\n");
     try testing.expectEqual(@as(usize, 2), rawOf(sc, "lists"));
+}
+
+test "ordered, task, and bullet lists are distinct kinds" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const flat = try score(a, "para\n\n- a\n\ntext\n\n- b\n\nmore\n\n- c\n");
+    const split = try score(a, "para\n\n1. a\n\ntext\n\n- [ ] b\n\nmore\n\n- c\n");
+    try testing.expectEqual(@as(usize, 3), rawOf(flat, "lists"));
+    try testing.expectEqual(@as(usize, 3), rawOf(split, "lists"));
+    try testing.expectEqual(@as(usize, 2), rawOf(flat, "block_variety")); // paragraph, list
+    try testing.expectEqual(@as(usize, 4), rawOf(split, "block_variety")); // paragraph, ordered, task, list
+    try testing.expect(signal(split, "block_variety").value > signal(flat, "block_variety").value);
+    const paren = try score(a, "1) a\n2) b\n");
+    try testing.expectEqual(@as(usize, 1), rawOf(paren, "block_variety")); // `N)` is ordered too
+}
+
+test "display math is a kind and opaque to prose" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const with = try score(a, "before\n\n$$\nt = n / r *x* y\n$$\n\nafter\n");
+    const without = try score(a, "before\n\nafter\n");
+    try testing.expectEqual(rawOf(with, "block_variety"), rawOf(without, "block_variety") + 1); // math
+    try testing.expectEqual(without.words, with.words); // `t n r x y` never counted
+    try testing.expectEqual(@as(usize, 0), rawOf(with, "styled_runs"));
+    // Unclosed: swallows the rest, no kind credit.
+    const open = try score(a, "before\n\n$$\nx + y\n");
+    try testing.expectEqual(rawOf(without, "block_variety"), rawOf(open, "block_variety"));
+}
+
+test "inline math is opaque but prices stay prose" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // `*c*` inside $…$ is not a styled run; math words are not prose.
+    const math = try score(a, "one $a_b *c* d$ two\n");
+    try testing.expectEqual(@as(usize, 0), rawOf(math, "styled_runs"));
+    try testing.expectEqual(@as(usize, 2), math.words);
+    // Closer before a space is not a closer; $400 and $500 are dollars.
+    const price = try score(a, "costs $400 or $500 today\n");
+    try testing.expectEqual(@as(usize, 5), price.words);
+    const digits = try score(a, "pays $x$2 now\n");
+    try testing.expect(digits.words > 2); // $x$2 never opened a span
 }
 
 test "heading levels and density" {
