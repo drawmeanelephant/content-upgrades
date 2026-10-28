@@ -540,7 +540,7 @@ test "groupName: first segment, stem for root files, --per-dir, --per-glob" {
     const per_dir: Opts = .{ .dir = "d", .per_dir = true };
     try std.testing.expectEqualStrings("a/b", groupName("a/b/c.md", per_dir));
     try std.testing.expectEqualStrings(".", groupName("top.md", per_dir));
-    const groups = [_]Group{ .{ .name = "verse", .pattern = "haikus/**" } };
+    const groups = [_]Group{.{ .name = "verse", .pattern = "haikus/**" }};
     const per_glob: Opts = .{ .dir = "d", .per_glob = &groups };
     try std.testing.expectEqualStrings("verse", groupName("haikus/HA-1.md", per_glob));
     try std.testing.expectEqualStrings("posts", groupName("posts/p.md", per_glob));
