@@ -278,6 +278,25 @@
       "max_calls": 1,
       "mock": {"sections[+]:steps": []},
       "expect": {"stop": "budget", "reject": {"declined": 1}}
+    },
+    {
+      "id": "fixture-record-grounded",
+      "template_id": "filed-mascot",
+      "data": "@ratchet/record.data.json",
+      "expect": {"min_accepted": 1, "reject": {"ungrounded": 1}}
+    },
+    {
+      "id": "fixture-record-ungrounded",
+      "template_id": "filed-mascot",
+      "data": "@ratchet/record-thin.data.json",
+      "expect": {"stop": "stalled", "reject": {"ungrounded": 1}}
+    },
+    {
+      "id": "adv-record-fabrication",
+      "template_id": "filed-mascot",
+      "data": "@ratchet/record.data.json",
+      "mock": {"ledger[+]": [{"entry": "origin", "detail": "Bricky was hatched from a brass egg in the lighthouse nursery."}]},
+      "expect": {"reject": {"verifier": 1}}
     }
   ]
 }

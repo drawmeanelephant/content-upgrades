@@ -202,6 +202,31 @@
       "sections[+]:quote": [
         {"kind": "quote", "text": "Snapshots are online, incremental, and restorable to any point in the last seven days."}
       ]
+    },
+    "filed-mascot": {
+      "ledger[+]": [
+        {"entry": "flood recovery", "detail": "an entry the archive kept from the flood recovery"},
+        {"entry": "map seventy-two", "detail": "the provenance ledger records Bricky under map seventy-two"}
+      ],
+      "field_notes[+]:callout": [
+        {"kind": "callout", "text": "Stacks coins in archways and hums while stamping paperwork."},
+        {"kind": "callout", "text": "Caretaker Mimsy files beside Bricky."}
+      ],
+      "field_notes[+]:quote": [
+        {"kind": "quote", "line": "Caretaker Mimsy files beside Bricky and signs every field note in the system."}
+      ],
+      "field_notes[+]:list": [
+        {"kind": "list", "items": ["Stacks coins in archways", "hums while stamping paperwork"]}
+      ],
+      "testimony[+]": [
+        {"line": "the hallway moved again overnight", "attribution": "Caretaker Mimsy"}
+      ],
+      "system_messages[+]": [
+        "MSG: the hallway moved again overnight"
+      ],
+      "notes{+}": [
+        "Stacks coins in archways and hums while stamping paperwork."
+      ]
     }
   }
 }
