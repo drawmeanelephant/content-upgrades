@@ -541,6 +541,59 @@ test "tool_flags checked against tool input_schema" {
     try std.testing.expect(!schemaHasProp(ratchet, flagProp("target")));
 }
 
+fn testCtx(a: std.mem.Allocator, env: *std.process.Environ.Map, tmp: *std.testing.TmpDir) !Ctx {
+    return .{
+        .arena = a,
+        .gpa = a,
+        .io = std.testing.io,
+        .environ = env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path[0..]}),
+        .project_root = ".",
+    };
+}
+
+test "custom commands reject surplus arguments" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+    var surplus = [_][]const u8{ "bogus-1", "bogus-2" };
+    for (&commands) |*c| {
+        const f = switch (c.run) {
+            .custom => |f| f,
+            .tool => continue,
+        };
+        // -h/--help/-v/--version are meta rows that print and exit 0.
+        if (std.mem.startsWith(u8, c.name, "-")) continue;
+        try std.testing.expect(try f(&ctx, surplus[0..]) != 0);
+    }
+}
+
+test "structhash positionals are all hashed, not dropped" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+    const cli = @import("tools/structure_hash.zig").cli;
+    const f1 = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/one.md", .{tmp.sub_path});
+    const f2 = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/two.md", .{tmp.sub_path});
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = f1, .data = "# A\n\nx\n" });
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = f2, .data = "# B\n\n## C\n" });
+    var both = [_][]const u8{ f1, f2 };
+    try std.testing.expectEqual(@as(u8, 0), try cli(&ctx, both[0..]));
+    var second_bad = [_][]const u8{ f1, "no-such-doc-or-file" };
+    try std.testing.expectEqual(@as(u8, 1), try cli(&ctx, second_bad[0..]));
+}
+
 // Test discovery: `zig build test` only runs tests in files listed here,
 // one line per file under src/.
 test {
