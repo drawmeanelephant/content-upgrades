@@ -213,11 +213,11 @@ pub fn run(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: anytype) !
 fn probeEngine(ctx: *Ctx) Error!void {
     const tpl = try store.scratchFile(ctx, "knap");
     defer std.Io.Dir.deleteFile(.cwd(), ctx.io, tpl) catch {};
-    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = tpl, .data = "probe\n" }) catch
+    store.writePrivate(ctx, tpl, "probe\n") catch
         return ctx.fail("cannot stage engine probe", .{});
     const data = try store.scratchFile(ctx, "json");
     defer std.Io.Dir.deleteFile(.cwd(), ctx.io, data) catch {};
-    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = data, .data = "{}\n" }) catch
+    store.writePrivate(ctx, data, "{}\n") catch
         return ctx.fail("cannot stage engine probe data", .{});
     switch (try engine.render(ctx, .markdown, tpl, data)) {
         .ok => {},
@@ -272,7 +272,7 @@ fn statusOf(control: bool, converged: bool, iterations: usize) Status {
 fn baseRender(ctx: *Ctx, seed_id: []const u8, base: []const u8, data_path: []const u8) Error!?[]const u8 {
     const path = try store.scratchFile(ctx, "knap");
     defer std.Io.Dir.deleteFile(.cwd(), ctx.io, path) catch {};
-    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = base }) catch
+    store.writePrivate(ctx, path, base) catch
         return ctx.fail("cannot stage base template", .{});
     switch (try engine.render(ctx, .markdown, path, data_path)) {
         .ok => |doc| return doc,
@@ -547,7 +547,7 @@ fn resolveData(ctx: *Ctx, corpus_dir: []const u8, v: std.json.Value) Error![]con
         else => {
             const json = std.json.Stringify.valueAlloc(ctx.arena, v, .{}) catch return error.OutOfMemory;
             const path = try store.scratchFile(ctx, "json");
-            std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = json }) catch
+            store.writePrivate(ctx, path, json) catch
                 return ctx.fail("cannot stage seed data", .{});
             return path;
         },

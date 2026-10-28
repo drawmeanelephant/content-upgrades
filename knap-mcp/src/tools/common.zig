@@ -55,7 +55,7 @@ pub fn templateText(ctx: *Ctx, template_id: []const u8) Error![]const u8 {
 /// Write `data` JSON to a scratch file; engines take --data <file>.
 pub fn stageData(ctx: *Ctx, data_json: []const u8) Error![]const u8 {
     const path = try store.scratchFile(ctx, "json");
-    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = data_json }) catch
+    store.writePrivate(ctx, path, data_json) catch
         return ctx.fail("cannot stage data file", .{});
     return path;
 }
