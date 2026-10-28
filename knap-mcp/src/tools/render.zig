@@ -23,7 +23,12 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     const template_id = try common.requireStr(ctx, args, "template_id");
     const target = engine.targetFromName(common.getStr(args, "target") orelse "markdown") orelse
         return ctx.fail("target must be " ++ engine.target_names, .{});
-    const data = try common.stageData(ctx, try common.requireData(ctx, args));
+    const data_json = try common.requireData(ctx, args);
+    if (target == .html) {
+        if (common.htmlDataViolation(args.?.get("data").?)) |why|
+            return ctx.fail("html target: data {s}", .{why});
+    }
+    const data = try common.stageData(ctx, data_json);
     const tpl = try common.templatePath(ctx, template_id);
 
     switch (try engine.render(ctx, target, tpl, data)) {
