@@ -20,10 +20,17 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 bin="$root/zig-out/bin/knap-mcp"
 [ -x "$bin" ] || (cd "$root" && zig build)
-export KNAP_MCP_HOME="${KNAP_MCP_HOME:-$(mktemp -d)}"
+own_home=
+if [ -z "${KNAP_MCP_HOME:-}" ]; then
+    KNAP_MCP_HOME=$(mktemp -d)
+    own_home=1
+fi
+export KNAP_MCP_HOME
 
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+# Remove the store only when this script created it; a caller's
+# KNAP_MCP_HOME is never deleted.
+trap 'rm -rf "$work" ${own_home:+"$KNAP_MCP_HOME"}' EXIT
 site="$work/site"
 mkdir -p "$site/content/mascots" "$site/content/limericks" "$site/content/aphorisms" "$site/content/snippets"
 cp -R "$root/../boris-site/themes" "$site/"
