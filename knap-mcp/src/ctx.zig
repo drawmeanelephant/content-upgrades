@@ -100,18 +100,27 @@ pub const Ctx = struct {
         return error.ToolFailed;
     }
 
+    /// Cap on parsed `KNAP_*_TIMEOUT` values (24 h). `envSecs` saturates
+    /// to it so callers' deadline arithmetic can't overflow.
+    pub const max_env_secs: u64 = 86_400;
+
     /// Seconds-valued env var, or `default` when unset or unparseable.
+    /// A parsed value saturates to `max_env_secs`; `0` keeps its
+    /// "no deadline" meaning.
     pub fn envSecs(ctx: *Ctx, name: []const u8, default: u64) u64 {
         const s = ctx.environ.get(name) orelse return default;
-        return std.fmt.parseInt(u64, std.mem.trim(u8, s, " \t"), 10) catch default;
+        const v = std.fmt.parseInt(u64, std.mem.trim(u8, s, " \t"), 10) catch return default;
+        return @min(v, max_env_secs);
     }
 
     /// `.none` for 0, else a hard deadline `secs` from now on the awake
     /// clock — a cap on the whole child process, not per-I/O idle time.
+    /// A value past i64 seconds degrades to `.none` rather than panic.
     pub fn deadline(ctx: *Ctx, secs: u64) std.Io.Timeout {
         if (secs == 0) return .none;
+        const s = std.math.cast(i64, secs) orelse return .none;
         return .{ .deadline = .fromNow(ctx.io, .{
-            .raw = .fromSeconds(@intCast(secs)),
+            .raw = .fromSeconds(s),
             .clock = .awake,
         }) };
     }
@@ -239,4 +248,24 @@ test "a stray ./templates in cwd cannot shadow the exe-relative shipped set" {
     // No shipped set beside the exe (relocated binary): ./templates fallback.
     try std.testing.expectEqualStrings("templates", try defaultTemplatesDir(std.testing.io, a, null));
     try std.testing.expectEqualStrings("templates", try defaultTemplatesDir(std.testing.io, a, "/nonexistent/bin"));
+}
+
+test "envSecs saturates past max_env_secs; deadline never panics" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    var ctx: Ctx = undefined;
+    ctx.environ = &env;
+    ctx.io = std.testing.io;
+    try env.put("KNAP_T", "18446744073709551615");
+    try std.testing.expectEqual(@as(u64, Ctx.max_env_secs), ctx.envSecs("KNAP_T", 5));
+    // `0` keeps its "no deadline" meaning; unset/unparseable still mean default.
+    try env.put("KNAP_T", "0");
+    try std.testing.expectEqual(@as(u64, 0), ctx.envSecs("KNAP_T", 5));
+    try env.put("KNAP_T", "junk");
+    try std.testing.expectEqual(@as(u64, 5), ctx.envSecs("KNAP_T", 5));
+    try std.testing.expectEqual(@as(u64, 5), ctx.envSecs("KNAP_MISSING", 5));
+    // Past-i64 input degrades to no deadline instead of panicking.
+    try std.testing.expectEqual(std.Io.Timeout.none, ctx.deadline(std.math.maxInt(u64)));
+    _ = ctx.deadline(Ctx.max_env_secs + 15);
 }
