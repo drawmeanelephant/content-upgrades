@@ -3,13 +3,35 @@
 //! sins (dangling footnotes, bare URLs, skipped heading levels, fences
 //! left open) as diagnostics instead of letting them ship silently.
 //! Pure text in, warnings out; runs on artifact-store docs by handle.
+//!
+//! A resolved site profile (boris.zig's siteProfile → Site) opts the doc
+//! into the boris-surface rule pack: closed frontmatter schemas,
+//! `{{include}}` transclusions, `<Aside>`/`<Details>` components and
+//! canonical-id wiki-link targets. No profile, no new warnings — the
+//! frozen-site output stays byte-identical.
 
 const std = @import("std");
+const frontmatter = @import("frontmatter.zig");
 
 pub const Warning = struct {
     rule: []const u8,
     line: u32, // 1-based; 0 for document-wide findings
     detail: []const u8,
+};
+
+/// The boris-surface rule pack's inputs, resolved from the site profile.
+/// Every field off/empty is the frozen-site behavior.
+pub const Site = struct {
+    /// Declared closed frontmatter schema (knap-site.json "frontmatter");
+    /// an empty list skips the unknown-key check.
+    schema: []const []const u8 = &.{},
+    /// Wiki-link targets must be canonical ids (case-sensitive paths).
+    canonical_ids: bool = false,
+    /// Content root that `{{include}}` paths resolve against; null skips
+    /// the existence half of the unresolved-include rule.
+    content_dir: ?[]const u8 = null,
+    /// IO for the existence probes; only read when content_dir is set.
+    io: std.Io = undefined,
 };
 
 const Note = struct {
@@ -23,6 +45,12 @@ const heading_word_floor = 300;
 const list_warn_min = 3;
 
 pub fn check(alloc: std.mem.Allocator, doc: []const u8) ![]Warning {
+    return checkSite(alloc, doc, null);
+}
+
+/// `check` plus the profile-declared boris rules; `site == null` is the
+/// frozen path — identical warnings, byte for byte.
+pub fn checkSite(alloc: std.mem.Allocator, doc: []const u8, site: ?Site) ![]Warning {
     var warnings: std.ArrayList(Warning) = .empty;
     var refs: std.ArrayList(Note) = .empty;
     var defs: std.ArrayList(Note) = .empty;
@@ -32,6 +60,20 @@ pub fn check(alloc: std.mem.Allocator, doc: []const u8) ![]Warning {
     // Leading frontmatter is skipped wholesale only when it closes; an
     // unterminated `---` block is prose, matching density.
     const front_end = frontmatterEnd(doc);
+
+    // The closed-schema check reads the block's key set once, up front —
+    // the keys sit inside the lines the main loop skips.
+    if (site) |s| {
+        if (s.schema.len > 0) {
+            if (try frontmatter.parse(alloc, doc)) |b| {
+                for (b.keys, 0..) |k, i| {
+                    for (s.schema) |allowed| {
+                        if (std.mem.eql(u8, k, allowed)) break;
+                    } else try warnFmt(&warnings, alloc, "unknown-frontmatter-key", b.key_lines[i], "frontmatter key \"{s}\" is outside the declared schema", .{k});
+                }
+            }
+        }
+    }
     var fence: ?Fence = null;
     var last_fence: u32 = 0;
     var prev_heading: usize = 0;
@@ -46,6 +88,7 @@ pub fn check(alloc: std.mem.Allocator, doc: []const u8) ![]Warning {
     var callout_open: u32 = 0;
     var in_table = false;
     var prev_para = false;
+    var open_component: ?Component = null;
 
     var line_no: u32 = 0;
     var lines = std.mem.splitScalar(u8, doc, '\n');
@@ -66,6 +109,11 @@ pub fn check(alloc: std.mem.Allocator, doc: []const u8) ![]Warning {
             prev_para = false;
             continue;
         }
+
+        // The boris pack scans body lines with code spans masked — like
+        // boris's own scanners, includes and component-looking text inside
+        // backticks or fences are literal, never directives.
+        if (site) |s| try scanBorisLine(alloc, &warnings, s, &open_component, t, line_no);
 
         // `===`/`---` under a prose line is a setext heading, not a rule.
         const setext = setextLevel(t);
@@ -140,6 +188,8 @@ pub fn check(alloc: std.mem.Allocator, doc: []const u8) ![]Warning {
 
     if (callout_open != 0)
         try warn(&warnings, alloc, "empty-callout", callout_open, "callout marker has no '> ' body line");
+    if (open_component) |c|
+        try warnFmt(&warnings, alloc, "unclosed-component", c.line, "<{s}> opened here is never closed (missing line-start </{s}>)", .{ c.name, c.name });
     try flushRun(&warnings, alloc, &run_start, &run_len);
 
     for (refs.items) |r| {
@@ -165,6 +215,214 @@ pub fn check(alloc: std.mem.Allocator, doc: []const u8) ![]Warning {
 
 fn warn(warnings: *std.ArrayList(Warning), alloc: std.mem.Allocator, rule: []const u8, line: u32, detail: []const u8) !void {
     try warnings.append(alloc, .{ .rule = rule, .line = line, .detail = detail });
+}
+
+// --- Boris surface (opt-in via the site profile) -----------------------------
+//
+// The rules boris itself hard-errors on, downgraded to advisories: an
+// `{{include}}` whose path is illegal or missing, an `<Aside>`/`<Details>`
+// opened and never closed (or nested/cross-closed), and wiki-links whose
+// targets aren't canonical ids for that site. Everything here keys off
+// the resolved Site — nothing fires on the frozen path.
+
+const Component = struct {
+    name: []const u8,
+    line: u32,
+};
+
+/// A trimmed line that opens `<Aside` or `<Details`: the name plus a
+/// lexical boundary, with `>` reached on the same line (boris's open-tag
+/// scan is line-bounded). Returns the component name.
+fn componentOpen(t: []const u8) ?[]const u8 {
+    if (!std.mem.startsWith(u8, t, "<") or (t.len > 1 and t[1] == '/')) return null;
+    const name: []const u8 = if (std.mem.startsWith(u8, t[1..], "Aside"))
+        "Aside"
+    else if (std.mem.startsWith(u8, t[1..], "Details"))
+        "Details"
+    else
+        return null;
+    const after = t[1 + name.len ..];
+    if (after.len == 0) return null;
+    if (after[0] != ' ' and after[0] != '\t' and after[0] != '>' and after[0] != '/') return null;
+    var q: u8 = 0;
+    for (after) |c| {
+        if (q != 0) {
+            if (c == q) q = 0;
+        } else if (c == '"' or c == '\'') {
+            q = c;
+        } else if (c == '>') {
+            return name;
+        } else if (c == '<') return null;
+    }
+    return null;
+}
+
+/// A trimmed line that is exactly `</Aside>` or `</Details>` (optional
+/// outer whitespace already trimmed by the caller).
+fn componentClose(t: []const u8) ?[]const u8 {
+    inline for (.{ "Aside", "Details" }) |name| {
+        if (std.mem.eql(u8, t, "</" ++ name ++ ">")) return name;
+    }
+    return null;
+}
+
+/// `include <path>` after `{{include`, per boris's directive form; returns
+/// the path span, or null when the text isn't a terminated directive
+/// (`{{includeX` and an unterminated `{{include x` are not directives).
+const Include = struct { path: []const u8, end: usize };
+
+fn includeAt(t: []const u8, i: usize) ?Include {
+    const kw = "{{include";
+    if (!std.mem.startsWith(u8, t[i..], kw)) return null;
+    var j = i + kw.len;
+    if (j >= t.len or (t[j] != ' ' and t[j] != '\t')) return null;
+    while (j < t.len and (t[j] == ' ' or t[j] == '\t')) j += 1;
+    const ps = j;
+    while (j < t.len and t[j] != '}') j += 1;
+    var pe = j;
+    while (pe > ps and (t[pe - 1] == ' ' or t[pe - 1] == '\t')) pe -= 1;
+    if (j + 1 >= t.len or t[j] != '}' or t[j + 1] != '}') return null;
+    return .{ .path = t[ps..pe], .end = j + 2 };
+}
+
+/// Content-root-relative include path grammar, verbatim from boris's
+/// validateIncludePath: `/`-joined `[A-Za-z0-9._-]` segments, no `\`, no
+/// absolute, no empty/`. ` /`..`/dot-leading segment.
+fn validIncludePath(path: []const u8) bool {
+    if (path.len == 0 or path[0] == '/' or path[0] == '\\') return false;
+    if (std.mem.indexOfScalar(u8, path, '\\') != null) return false;
+    var it = std.mem.splitScalar(u8, path, '/');
+    while (it.next()) |seg| {
+        if (seg.len == 0 or std.mem.eql(u8, seg, ".") or std.mem.eql(u8, seg, "..")) return false;
+        if (seg[0] == '.') return false;
+        for (seg) |c| {
+            if (!std.ascii.isAlphanumeric(c) and c != '.' and c != '_' and c != '-') return false;
+        }
+    }
+    return true;
+}
+
+/// `limericks/LIM-0155` — the canonical-id shape for a case-sensitive
+/// entity graph: `/`-joined segments of word/path bytes (non-ASCII text
+/// stays legal), no empty/`.`/`..` segment, no page extension, ≤255
+/// bytes. A slug-rewritten title ("AcmeDB docs — backups") fails it.
+pub fn isCanonicalId(id: []const u8) bool {
+    if (id.len == 0 or id.len > 255) return false;
+    inline for (.{ ".md", ".mdx", ".textile", ".cook" }) |ext| {
+        if (std.mem.endsWith(u8, id, ext)) return false;
+    }
+    var it = std.mem.splitScalar(u8, id, '/');
+    while (it.next()) |seg| {
+        if (seg.len == 0 or std.mem.eql(u8, seg, ".") or std.mem.eql(u8, seg, "..")) return false;
+        for (seg) |c| {
+            if (!std.ascii.isAlphanumeric(c) and c != '.' and c != '_' and c != '-' and c < 0x80) return false;
+        }
+    }
+    return true;
+}
+
+/// The link target of `[[t]]`, `[[t|label]]`, `[[t#frag]]`,
+/// `[[t#frag|label]]` or `![[…]]` starting at `[`/`!`: the entity id is
+/// the text before `|`/`#`. Returns the target or null (no `]]`).
+fn wikiTarget(t: []const u8, i: usize) ?struct { target: []const u8, end: usize } {
+    const inner_start = i + 2;
+    const end = std.mem.indexOfPos(u8, t, inner_start, "]]") orelse return null;
+    var target = t[inner_start..end];
+    if (std.mem.indexOfScalar(u8, target, '|')) |p| target = target[0..p];
+    if (std.mem.indexOfScalar(u8, target, '#')) |h| target = target[0..h];
+    return .{ .target = target, .end = end + 2 };
+}
+
+/// A copy of `line` with complete inline code spans blanked: directives
+/// and component text inside matching backtick runs are literal.
+fn maskCodeSpans(alloc: std.mem.Allocator, line: []const u8) ![]const u8 {
+    const m = try alloc.dupe(u8, line);
+    var i: usize = 0;
+    while (i < m.len) {
+        if (m[i] != '`') {
+            i += 1;
+            continue;
+        }
+        const n = runLen(m, i, '`');
+        const ticks = try alloc.alloc(u8, n);
+        @memset(ticks, '`');
+        if (std.mem.indexOfPos(u8, m, i + n, ticks)) |e| {
+            @memset(m[i .. e + n], ' ');
+            i = e + n;
+        } else i += n;
+    }
+    return m;
+}
+
+/// The boris rules on one body line (already frontmatter/fence filtered).
+/// `t` is the trimmed line; `open` tracks the pending component.
+fn scanBorisLine(
+    alloc: std.mem.Allocator,
+    warnings: *std.ArrayList(Warning),
+    site: Site,
+    open: *?Component,
+    t: []const u8,
+    line_no: u32,
+) !void {
+    if (open.*) |c| {
+        if (componentClose(t)) |n| {
+            if (std.mem.eql(u8, n, c.name)) {
+                open.* = null;
+            } else {
+                // boris: cross-nested close is a hard error; the open stays.
+                try warnFmt(warnings, alloc, "mismatched-component-close", line_no, "</{s}> cannot close an open <{s}> (line {d})", .{ n, c.name, c.line });
+            }
+        }
+    } else if (componentClose(t)) |n| {
+        try warnFmt(warnings, alloc, "stray-component-close", line_no, "</{s}> closes nothing — no <{s}> is open", .{ n, n });
+    }
+    if (componentOpen(t)) |n| {
+        if (open.*) |c| {
+            try warnFmt(warnings, alloc, "nested-component", line_no, "<{s}> opens inside <{s}> (line {d}); components cannot nest", .{ n, c.name, c.line });
+        } else {
+            open.* = .{ .name = n, .line = line_no };
+        }
+    }
+
+    const masked = try maskCodeSpans(alloc, t);
+    var i: usize = 0;
+    while (i < masked.len) {
+        switch (masked[i]) {
+            '{' => {
+                if (includeAt(masked, i)) |inc| {
+                    if (!validIncludePath(inc.path)) {
+                        try warnFmt(warnings, alloc, "bad-include-path", line_no, "include path \"{s}\" is not a content-root-relative path", .{inc.path});
+                    } else if (site.content_dir) |root| {
+                        const full = try std.fmt.allocPrint(alloc, "{s}/{s}", .{ root, inc.path });
+                        std.Io.Dir.access(.cwd(), site.io, full, .{}) catch
+                            try warnFmt(warnings, alloc, "unresolved-include", line_no, "include target \"{s}\" not found under the site content root", .{inc.path});
+                    }
+                    i = inc.end;
+                    continue;
+                }
+                // `{{` that never reaches `}}` on this line isn't a
+                // directive; boris's unterminated include is a syntax
+                // error only when the keyword matched.
+                if (std.mem.startsWith(u8, masked[i..], "{{include") and
+                    (masked.len == i + "{{include".len or masked[i + "{{include".len] == ' ' or masked[i + "{{include".len] == '\t'))
+                    try warn(warnings, alloc, "bad-include-path", line_no, "unterminated {{include …}} directive");
+                i += 1;
+            },
+            '[', '!' => {
+                const at = i + @intFromBool(masked[i] == '!');
+                if (at + 1 < masked.len and masked[at] == '[' and masked[at + 1] == '[') {
+                    if (wikiTarget(masked, at)) |w| {
+                        if (site.canonical_ids and !isCanonicalId(w.target))
+                            try warnFmt(warnings, alloc, "noncanonical-link", line_no, "wiki-link target \"{s}\" is not a canonical id for this site", .{w.target});
+                        i = w.end;
+                        continue;
+                    }
+                }
+                i += 1;
+            },
+            else => i += 1,
+        }
+    }
 }
 
 fn warnFmt(warnings: *std.ArrayList(Warning), alloc: std.mem.Allocator, rule: []const u8, line: u32, comptime fmt: []const u8, args: anytype) !void {
@@ -537,6 +795,124 @@ fn countRule(warnings: []const Warning, rule: []const u8) usize {
         if (std.mem.eql(u8, w.rule, rule)) n += 1;
     }
     return n;
+}
+
+fn countRules(warnings: []const Warning, rules: []const []const u8) usize {
+    var n: usize = 0;
+    for (rules) |r| n += countRule(warnings, r);
+    return n;
+}
+
+const boris_rules = [_][]const u8{
+    "unknown-frontmatter-key", "bad-include-path",      "unresolved-include",
+    "unclosed-component",      "stray-component-close", "mismatched-component-close",
+    "nested-component",        "noncanonical-link",
+};
+
+fn filedSite(io: std.Io, content_dir: ?[]const u8) Site {
+    return .{
+        .schema = &.{ "id", "title", "parent", "status", "tags", "relations", "published_at", "summary" },
+        .canonical_ids = true,
+        .content_dir = content_dir,
+        .io = io,
+    };
+}
+
+test "boris pack: a declared schema flags foreign frontmatter keys, frozen stays silent" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const doc = "---\ntitle: T\nid: limericks/LIM-0001\nmood: feral\nyear: 2026\n---\n\nBody.\n";
+    const w = try checkSite(a, doc, filedSite(std.testing.io, null));
+    try std.testing.expectEqual(@as(usize, 2), countRule(w, "unknown-frontmatter-key"));
+    try std.testing.expectEqual(@as(u32, 4), w[0].line);
+    // The frozen path — no profile at all — reports nothing new.
+    const frozen = try check(a, doc);
+    try std.testing.expectEqual(@as(usize, 0), countRules(frozen, &boris_rules));
+    // An empty schema declaration also stays silent.
+    const bare = try checkSite(a, doc, .{});
+    try std.testing.expectEqual(@as(usize, 0), countRules(bare, &boris_rules));
+}
+
+test "boris pack: canonical-id wiki-link targets" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const site = filedSite(std.testing.io, null);
+    const doc = "See [[limericks/LIM-0155|L]], [[lorelog]], [[id#frag|x]] and ![[mascots/M-0090]].\n";
+    try std.testing.expectEqual(@as(usize, 0), countRule(try checkSite(a, doc, site), "noncanonical-link"));
+    const bad = "See [[AcmeDB docs — backups|x]], [[limericks/lim 0155]] and [[page.md]].\n";
+    const w = try checkSite(a, bad, site);
+    try std.testing.expectEqual(@as(usize, 3), countRule(w, "noncanonical-link"));
+    // canonical_ids off: the same doc is silent.
+    const off = try checkSite(a, bad, .{});
+    try std.testing.expectEqual(@as(usize, 0), countRule(off, "noncanonical-link"));
+    // `[[x]]` inside a code span is literal, not a link.
+    const literal = try checkSite(a, "`[[AcmeDB docs]]` [[limericks/LIM-1]]\n", site);
+    try std.testing.expectEqual(@as(usize, 0), countRule(literal, "noncanonical-link"));
+}
+
+test "boris pack: includes resolve against the content root" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.createDirPath(std.testing.io, "content/includes");
+    try tmp.dir.writeFile(std.testing.io, .{ .sub_path = "content/includes/note.md", .data = "x\n" });
+    const root = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/content", .{tmp.sub_path});
+    const site = filedSite(std.testing.io, root);
+
+    const good = try checkSite(a, "lead {{include includes/note.md}} tail\n", site);
+    try std.testing.expectEqual(@as(usize, 0), countRule(good, "unresolved-include"));
+    const missing = try checkSite(a, "lead {{include includes/gone.md}} tail\n", site);
+    try std.testing.expectEqual(@as(usize, 1), countRule(missing, "unresolved-include"));
+    const illegal = try checkSite(a, "a {{include ../escape.md}} b {{include /abs.md}} c\n", site);
+    try std.testing.expectEqual(@as(usize, 2), countRule(illegal, "bad-include-path"));
+    const unterminated = try checkSite(a, "a {{include x.md\n", site);
+    try std.testing.expectEqual(@as(usize, 1), countRule(unterminated, "bad-include-path"));
+    // Fenced and inline code keep directives literal.
+    const fenced = try checkSite(a, "```\n{{include gone.md}}\n```\n`{{include gone.md}}`\n", site);
+    try std.testing.expectEqual(@as(usize, 0), countRules(fenced, &boris_rules));
+}
+
+test "boris pack: components must close, same-name only, never nest" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const site = filedSite(std.testing.io, null);
+    const ok = try checkSite(a, "<Aside kind=\"tip\">\nx\n</Aside>\n<Details summary=\"s\">\ny\n</Details>\n", site);
+    try std.testing.expectEqual(@as(usize, 0), countRules(ok, &boris_rules));
+    const unclosed = try checkSite(a, "<Aside kind=\"note\">\nx\n", site);
+    try std.testing.expectEqual(@as(usize, 1), countRule(unclosed, "unclosed-component"));
+    const stray = try checkSite(a, "text\n</Aside>\n", site);
+    try std.testing.expectEqual(@as(usize, 1), countRule(stray, "stray-component-close"));
+    const crossed = try checkSite(a, "<Aside>\nx\n</Details>\ny\n</Aside>\n", site);
+    try std.testing.expectEqual(@as(usize, 1), countRule(crossed, "mismatched-component-close"));
+    try std.testing.expectEqual(@as(usize, 0), countRule(crossed, "unclosed-component"));
+    const nested = try checkSite(a, "<Aside>\n<Details summary=\"s\">\n</Details>\n</Aside>\n", site);
+    try std.testing.expectEqual(@as(usize, 1), countRule(nested, "nested-component"));
+    // Mid-line tags and fenced tags are not components.
+    const midline = try checkSite(a, "text <Aside> here\n", site);
+    try std.testing.expectEqual(@as(usize, 0), countRules(midline, &boris_rules));
+    const fenced = try checkSite(a, "```\n<Aside>\n```\n", site);
+    try std.testing.expectEqual(@as(usize, 0), countRule(fenced, "unclosed-component"));
+}
+
+test "isCanonicalId: canonical paths pass, slugs and titles fail" {
+    try std.testing.expect(isCanonicalId("limericks/LIM-0155"));
+    try std.testing.expect(isCanonicalId("lorelog"));
+    try std.testing.expect(isCanonicalId("mascots/003.blamey-mctypoface"));
+    try std.testing.expect(isCanonicalId("claims/backup-gap"));
+    try std.testing.expect(!isCanonicalId("AcmeDB docs — backups"));
+    try std.testing.expect(!isCanonicalId("limericks/lim 0155"));
+    try std.testing.expect(!isCanonicalId("page.md"));
+    try std.testing.expect(!isCanonicalId("../x"));
+    try std.testing.expect(!isCanonicalId("a//b"));
+    try std.testing.expect(!isCanonicalId("/abs"));
+    try std.testing.expect(!isCanonicalId("a\\b"));
+    try std.testing.expect(!isCanonicalId("a#frag"));
+    try std.testing.expect(!isCanonicalId(""));
 }
 
 // check() never frees (production callers pass an arena), so each test

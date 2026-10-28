@@ -4,6 +4,7 @@ const std = @import("std");
 const Ctx = @import("../ctx.zig").Ctx;
 const store = @import("../store.zig");
 const formatcheck = @import("../formatcheck.zig");
+const boris = @import("../boris.zig");
 const tools = @import("../tools.zig");
 const common = @import("common.zig");
 
@@ -28,7 +29,9 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
     const ext = extensionOf(ctx, doc_id);
     if (!std.mem.eql(u8, ext, "md"))
         return ctx.fail("format_check is markdown only: doc '{s}' is .{s}; render with target markdown or oliver", .{ doc_id, ext });
-    const warnings = try formatcheck.check(ctx.arena, doc);
+    // FILED-BORIS: a knap-site.json profile opts the doc into the boris
+    // rule pack; frozen (or no profile) resolves to plain check().
+    const warnings = try formatcheck.checkSite(ctx.arena, doc, try boris.siteRules(ctx));
     try out.writer.writeAll("{\"ok\":true,\"warnings\":[");
     for (warnings, 0..) |w, i| {
         if (i > 0) try out.writer.writeAll(",");

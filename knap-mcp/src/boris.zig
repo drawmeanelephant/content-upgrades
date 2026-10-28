@@ -24,6 +24,7 @@
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
 const store = @import("store.zig");
+const formatcheck = @import("formatcheck.zig");
 
 pub const Error = error{ ToolFailed, OutOfMemory };
 
@@ -69,38 +70,56 @@ pub fn siteDir(ctx: *Ctx) Error![]const u8 {
 }
 
 /// The resolved site configuration: the staging profile plus the knobs
-/// `boris validate` needs for a non-default site.
+/// `boris validate` and the format-check rule pack need for a
+/// non-default site.
 pub const SiteConfig = struct {
     profile: Profile = .frozen,
     /// Theme root for `boris validate --theme` (validate renders pages,
     /// so a site whose layout is not `themes/boris` must name it). null
     /// keeps boris's built-in default.
     theme: ?[]const u8 = null,
+    /// The closed frontmatter schema the site declares; empty = undeclared.
+    schema: []const []const u8 = &.{},
+    /// Wiki-link targets are canonical ids: default on under `raw`,
+    /// overridable per site.
+    canonical_ids: bool = false,
 };
 
 /// `<site>/knap-site.json`, discovered next to `content/`:
-/// `{"staging": "frozen"|"raw", "theme": "<theme root, site-relative>"}`.
-/// Each key has an env override — `KNAP_BORIS_STAGING`, `KNAP_BORIS_THEME`
-/// — and a default (frozen; boris's own theme default). A set-but-unknown
-/// staging name, a malformed file, or an escaping theme path fails
-/// loudly — never a silent fallback.
+/// `{"staging"|"profile": "frozen"|"raw", "theme": "<theme root>",
+///  "frontmatter": ["id", ...], "canonical_ids": true|false}`.
+/// `profile` and `staging` name the same thing (`profile` wins when
+/// both appear). Profile and theme have env overrides —
+/// `KNAP_BORIS_STAGING`, `KNAP_BORIS_THEME` — and defaults (frozen;
+/// boris's own theme default). A set-but-unknown profile name, a
+/// malformed file, or an escaping theme path fails loudly — never a
+/// silent fallback.
 pub fn siteConfig(ctx: *Ctx, site: []const u8) Error!SiteConfig {
     var c: SiteConfig = .{};
+    var ids_declared = false;
     const path = try std.fmt.allocPrint(ctx.arena, "{s}/knap-site.json", .{site});
     const bytes = std.Io.Dir.readFileAlloc(.cwd(), ctx.io, path, ctx.arena, .limited(1024 * 1024)) catch |e| switch (e) {
         error.FileNotFound => null,
         else => return ctx.fail("cannot read {s} ({s})", .{ path, @errorName(e) }),
     };
     if (bytes) |b| {
-        const SiteProfile = struct {
+        const SiteFile = struct {
             staging: ?[]const u8 = null,
+            profile: ?[]const u8 = null,
             theme: ?[]const u8 = null,
+            frontmatter: ?[]const []const u8 = null,
+            canonical_ids: ?bool = null,
         };
-        const p = std.json.parseFromSliceLeaky(SiteProfile, ctx.arena, b, .{ .ignore_unknown_fields = true }) catch
+        const p = std.json.parseFromSliceLeaky(SiteFile, ctx.arena, b, .{ .ignore_unknown_fields = true }) catch
             return ctx.fail("cannot parse {s} as JSON", .{path});
-        if (p.staging) |s| c.profile = std.meta.stringToEnum(Profile, s) orelse
+        if (p.profile orelse p.staging) |s| c.profile = std.meta.stringToEnum(Profile, s) orelse
             return ctx.fail("{s}: staging '{s}' is not a staging profile (frozen|raw)", .{ path, s });
         c.theme = p.theme;
+        if (p.frontmatter) |f| c.schema = f;
+        if (p.canonical_ids) |ids| {
+            c.canonical_ids = ids;
+            ids_declared = true;
+        }
     }
     if (ctx.environ.get("KNAP_BORIS_STAGING")) |v| {
         const s = std.mem.trim(u8, v, " \t\r\n");
@@ -115,6 +134,7 @@ pub fn siteConfig(ctx: *Ctx, site: []const u8) Error!SiteConfig {
         if (std.fs.path.isAbsolute(t) or std.mem.indexOf(u8, t, "..") != null)
             return ctx.fail("theme '{s}' must stay inside the site (a relative path like themes/boris)", .{t});
     }
+    if (!ids_declared) c.canonical_ids = c.profile == .raw;
     return c;
 }
 
@@ -463,6 +483,35 @@ fn rewriteLine(
         consumed += m[1];
     }
     try out.appendSlice(arena, line[consumed..]);
+}
+
+// --- site profile ------------------------------------------------------------------
+// FILED-BORIS (#254) owns the schema-consumer side; FILED-PUB (#252)
+// owns staging. Both resolve through `siteConfig` (above):
+// `<site>/knap-site.json` may declare
+//
+//   {"profile": "frozen"|"raw",        // "staging" is accepted too
+//    "frontmatter": ["id", "title", "parent", "status", "tags",
+//                    "relations", "published_at", "summary"],
+//    "canonical_ids": true|false}      // default: on under raw, off frozen
+//
+// `KNAP_BORIS_STAGING=<name>` overrides the file's profile name; an
+// unknown name — file or env — fails loudly, never a silent frozen
+// fallback. No file and no env is `frozen` with no declared schema.
+
+/// format-check's view of the site config: null under `frozen` so
+/// frozen-site warnings stay byte-identical; else the boris-surface rule
+/// pack inputs.
+pub fn siteRules(ctx: *Ctx) Error!?formatcheck.Site {
+    const site = try siteDir(ctx);
+    const c = try siteConfig(ctx, site);
+    if (c.profile == .frozen) return null;
+    return formatcheck.Site{
+        .schema = c.schema,
+        .canonical_ids = c.canonical_ids,
+        .content_dir = try std.fmt.allocPrint(ctx.arena, "{s}/content", .{site}),
+        .io = ctx.io,
+    };
 }
 
 // --- report mapping ---------------------------------------------------------------
@@ -823,6 +872,11 @@ fn testCtx(a: std.mem.Allocator, env: *std.process.Environ.Map) Ctx {
     };
 }
 
+fn writeSiteFile(a: std.mem.Allocator, dir: *const std.testing.TmpDir, data: []const u8) ![]const u8 {
+    try dir.dir.writeFile(testing.io, .{ .sub_path = "knap-site.json", .data = data });
+    return std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{dir.sub_path});
+}
+
 test "siteConfig: env wins, file next, default frozen, unknown fails" {
     var a = std.heap.ArenaAllocator.init(testing.allocator);
     defer a.deinit();
@@ -894,4 +948,87 @@ test "sourceRelPath maps --as onto a content-relative .md path" {
     try testing.expectError(error.ToolFailed, sourceRelPath(&ctx, "content/"));
     try testing.expectError(error.ToolFailed, sourceRelPath(&ctx, "content/mascots/x"));
     try testing.expectError(error.ToolFailed, sourceRelPath(&ctx, "/tmp/x.md"));
+}
+
+test "siteConfig: no file is frozen with no declared schema" {
+    var a = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a.deinit();
+    const ar = a.allocator();
+    var env: std.process.Environ.Map = .init(ar);
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const site = try std.fmt.allocPrint(ar, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    try env.put("KNAP_BORIS_SITE", site);
+    var ctx = testCtx(ar, &env);
+    const c = try siteConfig(&ctx, site);
+    try testing.expectEqual(Profile.frozen, c.profile);
+    try testing.expectEqual(@as(usize, 0), c.schema.len);
+    try testing.expect(!c.canonical_ids);
+    try testing.expect((try siteRules(&ctx)) == null);
+}
+
+test "siteConfig: knap-site.json declares profile, schema and canonical_ids" {
+    var a = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a.deinit();
+    const ar = a.allocator();
+    var env: std.process.Environ.Map = .init(ar);
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const site = try writeSiteFile(ar, &tmp,
+        \\{"profile": "raw", "frontmatter": ["id", "title", "parent"],
+        \\"canonical_ids": false}
+    );
+    try env.put("KNAP_BORIS_SITE", site);
+    var ctx = testCtx(ar, &env);
+    const c = try siteConfig(&ctx, site);
+    try testing.expectEqual(Profile.raw, c.profile);
+    try testing.expectEqual(@as(usize, 3), c.schema.len);
+    try testing.expectEqualStrings("parent", c.schema[2]);
+    try testing.expect(!c.canonical_ids);
+    const rules = (try siteRules(&ctx)).?;
+    try testing.expectEqual(@as(usize, 3), rules.schema.len);
+    try testing.expect(!rules.canonical_ids);
+    try testing.expectEqualStrings(try std.fmt.allocPrint(ar, "{s}/content", .{site}), rules.content_dir.?);
+}
+
+test "siteConfig: raw defaults canonical_ids on; staging key and env override work" {
+    var a = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a.deinit();
+    const ar = a.allocator();
+    var env: std.process.Environ.Map = .init(ar);
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const site = try writeSiteFile(ar, &tmp, "{\"staging\": \"raw\"}");
+    try env.put("KNAP_BORIS_SITE", site);
+    var ctx = testCtx(ar, &env);
+    var c = try siteConfig(&ctx, site);
+    try testing.expectEqual(Profile.raw, c.profile);
+    try testing.expect(c.canonical_ids);
+    // The env override wins over the file, either direction.
+    try env.put("KNAP_BORIS_STAGING", "frozen");
+    c = try siteConfig(&ctx, site);
+    try testing.expectEqual(Profile.frozen, c.profile);
+    try testing.expect((try siteRules(&ctx)) == null);
+    try env.put("KNAP_BORIS_STAGING", "raw");
+    c = try siteConfig(&ctx, site);
+    try testing.expectEqual(Profile.raw, c.profile);
+}
+
+test "siteConfig: env-only raw needs no file; unknown names fail loudly" {
+    var a = std.heap.ArenaAllocator.init(testing.allocator);
+    defer a.deinit();
+    const ar = a.allocator();
+    var env: std.process.Environ.Map = .init(ar);
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const site = try std.fmt.allocPrint(ar, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    try env.put("KNAP_BORIS_STAGING", "raw");
+    var ctx = testCtx(ar, &env);
+    try testing.expectEqual(Profile.raw, (try siteConfig(&ctx, site)).profile);
+    try env.put("KNAP_BORIS_STAGING", "bogus");
+    try testing.expectError(error.ToolFailed, siteConfig(&ctx, site));
+    try testing.expect(std.mem.indexOf(u8, ctx.err_msg, "is not a staging profile") != null);
+    try testing.expect(env.swapRemove("KNAP_BORIS_STAGING"));
+    _ = try writeSiteFile(ar, &tmp, "{\"profile\": \"bogus\"}");
+    try testing.expectError(error.ToolFailed, siteConfig(&ctx, site));
 }
