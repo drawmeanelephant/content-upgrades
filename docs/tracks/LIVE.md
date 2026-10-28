@@ -104,7 +104,10 @@ make live P=fake                                     # credential-free self-test
    boundary brought `droid-nemotron` to **8/8 rewritten, 0 rejected** across
    `mild`, `spicy`, and `feral`.
 8. **Live-model `knap_ratchet` schema & slice fixes lifted `ratchet.live.json`
-   from 3/9 to 9/9.** Live ACP runs exposed four issues in `src/ratchet.zig`:
+   from 3/9 to 9/9 in post-fix reruns.** The post-fix numbers were never
+   committed — the in-tree `ratchet.out` artifacts are the pre-fix runs, so
+   they are marked † in the results table below (#205). Live ACP runs
+   exposed four issues in `src/ratchet.zig`:
    - `parseShape` left container types (`array<object>`, `object<string,string>`,
      `max_items`) in `slot.schema`, causing models to wrap single-step items
      in `[…]` or `{"key": "val"}` and fail `checkSchema`. `slot.schema` now
@@ -129,18 +132,22 @@ plus this branch. Raw outputs and provenance are in
 
 | profile | model (agent-reported) | smoke | repair `seeds.json` | ratchet `ratchet.live.json` | voice (verdict) |
 |---|---|---|---|---|---|
-| droid-nemotron | `nemotron-3.5-super`, effort none | 6/6 ok, 1.7 s/call | 17/22 conv (77%) | 8/9 ok (`verdict-min` +38.6, `reading-note-min` +40.1, `release-notes-min` +28.9) | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 8/8, **0 rejected**) |
-| droid-glm | `glm-5.3-flash`, effort none | 6/6 ok, 5.8 s/call | 14/22 conv (64%) | **9/9 ok** (`verdict-min` +37.4, `reading-note-min` +26.7, `release-notes-min` +29.3) | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 5/8) |
-| droid-deepseek | `deepseek-v4.1-flash`, effort none | 6/6 ok, 2.3 s/call | 15/22 conv (68%) | — | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 4/8) |
-| devin-nemotron | `nemotron-3-ultra-high` | 6/6 ok, 1.5 s/call | — | 8/9 ok (`verdict-min` +37.0, `reading-note-min` +45.3, `apparatus-min` +25.2) | 3/3 layout-identical (`mild` 5/8, `spicy` 6/8, `feral` 6/8) |
+| droid-nemotron | `nemotron-3.5-super`, effort none | 6/6 ok, 1.7 s/call | 17/22 conv (77%) † | 8/9 ok † (`verdict-min` +38.6, `reading-note-min` +40.1, `release-notes-min` +28.9) | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 8/8, **0 rejected**) |
+| droid-glm | `glm-5.3-flash`, effort none | 6/6 ok, 5.8 s/call | 14/22 conv (64%) † | **9/9 ok** † (`verdict-min` +37.4, `reading-note-min` +26.7, `release-notes-min` +29.3) | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 5/8) |
+| droid-deepseek | `deepseek-v4.1-flash`, effort none | 6/6 ok, 2.3 s/call | 15/22 conv (68%) † | — | 3/3 layout-identical (`mild` 8/8, `spicy` 8/8, `feral` 4/8) |
+| devin-nemotron | `nemotron-3-ultra-high` | 6/6 ok, 1.5 s/call | — | 8/9 ok † (`verdict-min` +37.0, `reading-note-min` +45.3, `apparatus-min` +25.2) | 3/3 layout-identical (`mild` 5/8, `spicy` 6/8, `feral` 6/8) |
 | devin-wonder | `muse-wonder-1-0-high`, effort low | 6/6 ok, 2.5 s/call | 22/22 conv, 1.05 iters, 11/22 exact (2nd run; first runs 1.09/1.05 iters, 8/22, 10/22 exact); 2nap 167/167, see I2.md | 3/9 ok (pre-fix), **inert 0** | 2/2 layout-identical (feral: 1 of 8 rejected) |
-| devin-swe-2 | `swe-2-high`, effort medium | 6/6 ok, 2.2 s/call | 22/22 conv, 1.09 iters, 9/22 exact | **9/9 ok** (`reading-note-min` +52.0 ceiling, `release-notes-min` +29.4, `verdict-min` +22.7, `apparatus-min` +21.5) | 3/3 layout-identical (`mild` 8/8, `spicy` 7/8, `feral` 4/8) |
+| devin-swe-2 | `swe-2-high`, effort medium | 6/6 ok, 2.2 s/call | 22/22 conv, 1.09 iters, 9/22 exact | 3/9 ok, **inert 0** (committed, pre-fix); post-fix rerun reported **9/9 ok** † (`reading-note-min` +52.0 ceiling, `release-notes-min` +29.4, `verdict-min` +22.7, `apparatus-min` +21.5) | 2/2 layout-identical, `mild` 7/8 + `feral` 6/8 (committed); a 3-tone rerun † reported `mild` 8/8, `spicy` 7/8, `feral` 4/8 |
 | devin-summarizer | unreported | 6/6 ok | (I2/I3 columns) | | |
 | ollama (qwen2.5-coder:1.5b, local) | `qwen2.5-coder:1.5b` | 5/6 ok, repair-patch wrong shape | gated off | | |
 | gemini (gemini-cli `--acp`) | `gemini-1.5-flash` | 0/6: 403 "Consumer 'projects/undefined' has been suspended" — account-side auth | | | |
 | codex (`@zed-industries/codex-acp`) | `gpt-6-luna` | 0/6: "model is not supported when using Codex with a ChatGPT account" for every cached slug | | | |
 | opencode-spark-1.3 / -1.2 / wonder-1.0 | correct model | 0/6: insufficient account funds | | | |
 | spark / wonder / baseten | | skipped: needs `MODEL_API_KEY` | | | |
+
+† uncommitted rerun; raw outputs not in tree (#205). Only smoke and voice
+artifacts are committed for the droid-* / devin-nemotron profiles, and the
+in-tree `devin-swe-2/ratchet.out` predates the #195 ratchet schema fixes.
 
 Labels: `Muse Wonder 1.0 via ACP (devin, low thinking)` and `SWE-2 via ACP
 (devin, free tier)`. These are not direct-API numbers.
