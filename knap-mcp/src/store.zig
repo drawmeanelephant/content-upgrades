@@ -183,15 +183,16 @@ extern "kernel32" fn OpenProcess(
     dwProcessId: std.os.windows.DWORD,
 ) callconv(.winapi) ?std.os.windows.HANDLE;
 
-/// Delete any process's `scratch-*` files older than an hour. main calls
-/// this once at startup so leftovers of a SIGKILLed or crashed run —
-/// request bodies holding full prompts, staged data, working templates —
-/// don't linger forever; everything in tmp/ is written 0600 owner-only
-/// via writePrivate. sweepScratch still handles the live pid's files per
-/// request. A `scratch-<pid>-…` file whose pid is still alive is skipped:
-/// a long-lived server or CLI can hold a scratch file past the cutoff.
-/// Names that don't parse to a pid get the age-only rule. Non-`scratch-`
-/// names are never touched.
+/// Delete any process's `scratch-*` files and directories older than an
+/// hour. main calls this once at startup so leftovers of a SIGKILLed or
+/// crashed run — request bodies holding full prompts, staged data,
+/// working templates, boris.check's staged site copies — don't linger
+/// forever; everything in tmp/ is written 0600 owner-only via
+/// writePrivate. sweepScratch still handles the live pid's files per
+/// request. A `scratch-<pid>-…` entry whose pid is still alive is
+/// skipped: a long-lived server or CLI can hold scratch state past the
+/// cutoff. Names that don't parse to a pid get the age-only rule.
+/// Non-`scratch-` names are never touched.
 pub fn sweepStale(ctx: *Ctx) void {
     const dir_path = std.fmt.allocPrint(ctx.arena, "{s}/tmp", .{ctx.store_dir}) catch return;
     var d = std.Io.Dir.openDir(.cwd(), ctx.io, dir_path, .{ .iterate = true }) catch return;
@@ -199,9 +200,9 @@ pub fn sweepStale(ctx: *Ctx) void {
     const cutoff = std.Io.Timestamp.now(ctx.io, .real).nanoseconds - std.time.ns_per_hour;
     var it = d.iterate();
     while (it.next(ctx.io) catch null) |entry| {
-        if (entry.kind != .file) continue;
+        if (entry.kind != .file and entry.kind != .directory) continue;
         if (!std.mem.startsWith(u8, entry.name, "scratch-")) continue;
-        // A live pid may still be staging the file — its age means
+        // A live pid may still be staging the entry — its age means
         // nothing while the process is up.
         if (scratchPid(entry.name)) |pid| {
             if (pidAlive(pid)) continue;
@@ -209,7 +210,11 @@ pub fn sweepStale(ctx: *Ctx) void {
         const stat = d.statFile(ctx.io, entry.name, .{}) catch continue;
         if (stat.mtime.nanoseconds >= cutoff) continue;
         const rel = std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ dir_path, entry.name }) catch continue;
-        std.Io.Dir.deleteFile(.cwd(), ctx.io, rel) catch {};
+        if (entry.kind == .directory) {
+            std.Io.Dir.deleteTree(.cwd(), ctx.io, rel) catch {};
+        } else {
+            std.Io.Dir.deleteFile(.cwd(), ctx.io, rel) catch {};
+        }
     }
 }
 
@@ -365,7 +370,7 @@ test "scratch files and artifacts land 0600 in 0700 dirs" {
     try expectMode(try std.fmt.allocPrint(a, "{s}/tmp", .{ctx.store_dir}), 0o700);
 }
 
-test "sweepStale removes only aged scratch files" {
+test "sweepStale removes only aged scratch files and directories" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -385,11 +390,24 @@ test "sweepStale removes only aged scratch files" {
     const keeper = try std.fmt.allocPrint(a, "{s}/keep.txt", .{dir});
     for ([_][]const u8{ stale, live, unparsed, fresh, keeper }) |p|
         try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = p, .data = "{}" });
+    // boris.check stages into a scratch-*.boris directory; a SIGKILLed
+    // run leaves it behind.
+    const stale_dir = try std.fmt.allocPrint(a, "{s}/scratch-{d}-5-5.boris", .{ dir, dead_pid });
+    const live_dir = try std.fmt.allocPrint(a, "{s}/scratch-{d}-6-6.boris", .{ dir, processId() });
+    const fresh_dir = try std.fmt.allocPrint(a, "{s}/scratch-{d}-7-7.boris", .{ dir, dead_pid });
+    const keep_dir = try std.fmt.allocPrint(a, "{s}/keep.d", .{dir});
+    for ([_][]const u8{ stale_dir, live_dir, fresh_dir, keep_dir }) |p| {
+        try std.Io.Dir.createDirPath(.cwd(), std.testing.io, p);
+        try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{
+            .sub_path = try std.fmt.allocPrint(a, "{s}/x.md", .{p}),
+            .data = "x",
+        });
+    }
     // Two hours old — past the sweep cutoff.
     const old: std.Io.Timestamp = .{
         .nanoseconds = std.Io.Timestamp.now(std.testing.io, .real).nanoseconds - 2 * std.time.ns_per_hour,
     };
-    for ([_][]const u8{ stale, live, unparsed, keeper }) |p|
+    for ([_][]const u8{ stale, live, unparsed, keeper, stale_dir, live_dir, keep_dir }) |p|
         try std.Io.Dir.setTimestamps(.cwd(), std.testing.io, p, .{ .modify_timestamp = .{ .new = old } });
 
     sweepStale(&ctx);
@@ -397,11 +415,15 @@ test "sweepStale removes only aged scratch files" {
     // Dead pid or unparseable name: the age-only rule applies.
     try std.testing.expectError(error.FileNotFound, std.Io.Dir.statFile(.cwd(), std.testing.io, stale, .{}));
     try std.testing.expectError(error.FileNotFound, std.Io.Dir.statFile(.cwd(), std.testing.io, unparsed, .{}));
-    // A scratch file whose pid is still alive is kept despite its age.
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.statFile(.cwd(), std.testing.io, stale_dir, .{}));
+    // Scratch entries whose pid is still alive are kept despite their age.
     _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, live, .{});
+    _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, live_dir, .{});
     _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, fresh, .{});
-    // Stale files that aren't scratch-* are left alone.
+    _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, fresh_dir, .{});
+    // Stale entries that aren't scratch-* are left alone.
     _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, keeper, .{});
+    _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, keep_dir, .{});
 }
 
 test "prune orders mixed legacy and new doc ids by stamp" {
