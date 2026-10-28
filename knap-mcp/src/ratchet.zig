@@ -18,6 +18,19 @@
 //! to an `object<string,string>` map and, in the same write, sets the empty
 //! `ref` field of an existing array element to that key. The server picks
 //! the element and the key slug; the model writes only the note text.
+//!
+//! Block palettes extend "the server picks the slot" to "the server picks
+//! the block kind". A `palette` slot is an `array<object>` whose items
+//! carry an enum `variant` field; `variants` names the item fields each
+//! kind uses, and the template renders each kind with its own
+//! `{% if s.kind == "..." %}` branch. Probing expands the slot into one
+//! candidate per kind (`sections[+]:steps`, ...) that stubs only that
+//! kind's fields, and ranks them with every other slot by stub gain, so
+//! the scorer's variety gradient decides which kind a doc gets next. The
+//! slice names the server-chosen kind and asks only for its fields; a
+//! reply that sets another kind, or fills another kind's fields, is a
+//! `schema` rejection. Each iteration probes at most `max_variant_probes`
+//! kinds of a palette, in a round-robin window (see that constant).
 
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
@@ -42,6 +55,19 @@ pub const top_k = 2;
 /// Hard cost cap on backend calls per run.
 pub const max_backend_calls = 10;
 pub const max_slice_bytes = 4096;
+/// Kinds of one palette slot probed per iteration (and per stubCeiling
+/// step). A palette costs `min(kinds, max_variant_probes)` probe renders
+/// per iteration instead of one; renders are not backend calls, so asks
+/// still draw on `max_backend_calls` exactly as any other slot's do.
+/// The window is round-robin over the shape's enum order, starting at
+/// `iteration * max_variant_probes`: deterministic, starvation-free
+/// (every kind is probed within ceil(kinds / 3) iterations), stateless,
+/// so stubCeiling replays the same policy. A last-gain order would starve
+/// kinds first probed on a short doc, where the length factor shrinks
+/// every gain. Three, not two, so consecutive windows overlap on a
+/// four-kind palette: the variety gradient, not the cursor, has to choose
+/// between a kind already on the page and a new one.
+pub const max_variant_probes = 3;
 /// Stub size for a string slot with no `words` annotation.
 const default_stub_words = 8;
 /// Growth bound for an array slot with no `max_items` annotation.
@@ -72,7 +98,7 @@ pub const Error = error{ ToolFailed, OutOfMemory, WriteFailed } || std.process.R
 
 /// Shape `apparatus` vocabulary: what a slot renders as. `link` is the one
 /// addition to the plan's list (a plain URL slot rendered through `link`).
-pub const Apparatus = enum { footnote, callout, wikilink, embed, image, link, fragment_link, table, quote, frontmatter, list, code };
+pub const Apparatus = enum { footnote, callout, wikilink, embed, image, link, fragment_link, table, quote, frontmatter, list, code, palette };
 
 /// Value kinds the ratchet can grow. `keyed` is an `object<string,string>`
 /// map (footnote notes) that grows one key at a time through a paired
@@ -112,8 +138,22 @@ pub const Field = struct {
     /// literal-safe and the evidence gate is exact-substring.
     code: bool = false,
     words: usize = default_stub_words,
+    /// Item bound of an array item field (palette `items`); top-level
+    /// slots keep theirs on `Slot.max_items`.
+    max_items: ?usize = null,
     /// Item fields of an array<object>.
     sub: []const Field = &.{},
+};
+
+/// One kind of a palette slot: the item fields it uses, led by the variant
+/// field narrowed to this kind, all required.
+pub const Variant = struct {
+    name: []const u8,
+    sub: []const Field,
+    /// SCHEMA for this kind's slice.
+    schema: []const u8,
+    /// `name[+]:kind`: the step label and mock key.
+    path: []const u8,
 };
 
 pub const Slot = struct {
@@ -130,6 +170,24 @@ pub const Slot = struct {
     /// Keyed slots: the item ref fields a new key can anchor to, in shape
     /// order.
     hosts: []const RefSite = &.{},
+    /// Palette slots: the item field naming the kind, and the kinds in
+    /// enum order. Never probed or asked as-is, only through `pick`.
+    variant: ?[]const u8 = null,
+    variants: []const Variant = &.{},
+    /// Set on a `pick`ed slot: the server-chosen kind.
+    chosen: ?[]const u8 = null,
+
+    /// The palette slot narrowed to kind `k`: its fields, schema and path.
+    pub fn pick(s: Slot, k: usize) Slot {
+        const v = s.variants[k];
+        var p = s;
+        p.field.sub = v.sub;
+        p.schema = v.schema;
+        p.path = v.path;
+        p.chosen = v.name;
+        p.variants = &.{};
+        return p;
+    }
 
     pub fn isArray(s: Slot) bool {
         return switch (s.field.kind) {
@@ -141,7 +199,7 @@ pub const Slot = struct {
     pub fn gated(s: Slot) bool {
         if (s.field.code) return true;
         if (s.field.evidence) return true;
-        for (s.field.sub) |f| if (f.evidence) return true;
+        for (s.field.sub) |f| if (f.evidence or f.code) return true;
         return false;
     }
 };
@@ -208,6 +266,8 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
         var schema = try spec.object.clone(arena);
         _ = schema.orderedRemove("role");
         _ = schema.orderedRemove("max_items");
+        _ = schema.orderedRemove("variant");
+        _ = schema.orderedRemove("variants");
         try schema.put(arena, "type", .{ .string = switch (f.kind) {
             .string, .strings, .keyed => "string",
             .number => "number",
@@ -231,9 +291,82 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
         slot.field.code = apparatus == .code;
         if (slot.isArray()) slot.path = try std.fmt.allocPrint(arena, "{s}[+]", .{name});
         if (f.kind == .keyed) slot.path = try std.fmt.allocPrint(arena, "{s}{{+}}", .{name});
+        if (apparatus == .palette or spec.object.get("variant") != null or spec.object.get("variants") != null) {
+            if (apparatus != .palette or f.kind != .objects) return error.BadShape;
+            slot.variant = str(spec.object, "variant") orelse return error.BadShape;
+            slot.variants = try parseVariants(arena, spec.object, f, slot.path);
+        }
         try slots.append(arena, slot);
     }
     return .{ .template_id = id, .slots = slots.items, .headline = headline.items, .refs = refs };
+}
+
+/// A palette's kinds, in the variant field's enum order. `variants` keys
+/// and the enum must match exactly, every listed field must be an item
+/// field other than the variant itself, and an item field the shape marks
+/// required must be listed by every kind. Anything else is BadShape.
+fn parseVariants(arena: std.mem.Allocator, spec: ObjectMap, f: Field, path: []const u8) ![]const Variant {
+    const vname = str(spec, "variant") orelse return error.BadShape;
+    const vv = spec.get("variants") orelse return error.BadShape;
+    if (vv != .object) return error.BadShape;
+    const vf = subField(f, vname) orelse return error.BadShape;
+    if (vf.kind != .string or vf.optional or vf.enum_values.len == 0) return error.BadShape;
+    for (vf.enum_values, 0..) |e, i| {
+        for (vf.enum_values[0..i]) |p| if (std.mem.eql(u8, p, e)) return error.BadShape;
+    }
+    for (vv.object.keys()) |k| {
+        for (vf.enum_values) |e| {
+            if (std.mem.eql(u8, e, k)) break;
+        } else return error.BadShape;
+    }
+    const item_specs = spec.get("fields").?.object;
+    const out = try arena.alloc(Variant, vf.enum_values.len);
+    for (vf.enum_values, out) |kind, *o| {
+        const list = vv.object.get(kind) orelse return error.BadShape;
+        if (list != .array) return error.BadShape;
+        var narrowed = vf;
+        narrowed.enum_values = try arena.dupe([]const u8, &.{kind});
+        var subs: std.ArrayList(Field) = .empty;
+        try subs.append(arena, narrowed);
+        var kind_enum = std.json.Array.init(arena);
+        try kind_enum.append(.{ .string = kind });
+        var vspec = try item_specs.get(vname).?.object.clone(arena);
+        try vspec.put(arena, "enum", .{ .array = kind_enum });
+        var fields: ObjectMap = .empty;
+        try fields.put(arena, vname, .{ .object = vspec });
+        for (list.array.items) |lv| {
+            if (lv != .string or std.mem.eql(u8, lv.string, vname)) return error.BadShape;
+            for (subs.items) |seen| if (std.mem.eql(u8, seen.name, lv.string)) return error.BadShape;
+            var sf = subField(f, lv.string) orelse return error.BadShape;
+            sf.optional = false;
+            try subs.append(arena, sf);
+            var fs = try item_specs.get(lv.string).?.object.clone(arena);
+            _ = fs.orderedRemove("optional");
+            try fields.put(arena, lv.string, .{ .object = fs });
+        }
+        for (f.sub) |sf| {
+            if (sf.optional) continue;
+            for (subs.items) |u| {
+                if (std.mem.eql(u8, u.name, sf.name)) break;
+            } else return error.BadShape;
+        }
+        var schema = try spec.clone(arena);
+        for ([_][]const u8{ "role", "max_items", "variant", "variants", "apparatus", "optional" }) |k| _ = schema.orderedRemove(k);
+        try schema.put(arena, "type", .{ .string = "object" });
+        try schema.put(arena, "fields", .{ .object = fields });
+        o.* = .{
+            .name = kind,
+            .sub = subs.items,
+            .schema = try std.json.Stringify.valueAlloc(arena, Value{ .object = schema }, .{}),
+            .path = try std.fmt.allocPrint(arena, "{s}:{s}", .{ path, kind }),
+        };
+    }
+    return out;
+}
+
+fn subField(f: Field, name: []const u8) ?Field {
+    for (f.sub) |s| if (std.mem.eql(u8, s.name, name)) return s;
+    return null;
 }
 
 /// Every `ref` annotation, top-level and array<object> item fields, in
@@ -275,6 +408,7 @@ fn parseField(arena: std.mem.Allocator, name: []const u8, spec: ObjectMap, inher
         .ref = str(spec, "ref"),
         .evidence = boolean(spec, "evidence"),
         .words = int(spec, "words") orelse inherit_words,
+        .max_items = int(spec, "max_items"),
     };
     if (spec.get("enum")) |ev| {
         if (ev != .array) return error.BadShape;
@@ -291,9 +425,13 @@ fn parseField(arena: std.mem.Allocator, name: []const u8, spec: ObjectMap, inher
         var it = sv.object.iterator();
         while (it.next()) |e| {
             if (e.value_ptr.* != .object) return error.BadShape;
-            const sf = try parseField(arena, e.key_ptr.*, e.value_ptr.object, f.words);
+            var sf = try parseField(arena, e.key_ptr.*, e.value_ptr.object, f.words);
             // Only a string sub-field can carry a quotable claim.
             if (sf.evidence and sf.kind != .string) return error.BadShape;
+            // An item field rendered in a fence (a palette's `code` kind)
+            // takes the code slot's rules: string kinds only.
+            sf.code = std.mem.eql(u8, str(e.value_ptr.object, "apparatus") orelse "", "code");
+            if (sf.code and sf.kind != .string and sf.kind != .strings) return error.BadShape;
             try subs.append(arena, sf);
         }
         f.sub = subs.items;
@@ -479,7 +617,9 @@ pub fn stub(arena: std.mem.Allocator, data: ObjectMap, s: Slot) !Value {
             var o: ObjectMap = .empty;
             for (s.field.sub) |f| {
                 if (f.optional) continue;
-                try o.put(arena, f.name, .{ .string = try stubText(arena, f) });
+                // A picked kind stubs its fields typed (a list kind gets a
+                // full list); the narrowed variant field stubs to the kind.
+                try o.put(arena, f.name, if (s.chosen != null) try subStub(arena, f) else .{ .string = try stubText(arena, f) });
             }
             return .{ .object = o };
         },
@@ -490,6 +630,18 @@ pub fn stub(arena: std.mem.Allocator, data: ObjectMap, s: Slot) !Value {
             return .{ .array = row };
         },
         .other => unreachable,
+    }
+}
+
+fn subStub(arena: std.mem.Allocator, f: Field) !Value {
+    switch (f.kind) {
+        .number => return .{ .integer = 1 },
+        .strings => {
+            var arr = std.json.Array.init(arena);
+            for (0..f.max_items orelse default_max_items) |_| try arr.append(.{ .string = try stubText(arena, f) });
+            return .{ .array = arr };
+        },
+        else => return .{ .string = try stubText(arena, f) },
     }
 }
 
@@ -531,7 +683,10 @@ pub fn checkSchema(arena: std.mem.Allocator, s: Slot, value: Value, data: Object
             .integer, .float => null,
             else => "expected a number",
         },
-        .objects => return checkObject(arena, s.field.sub, value, data),
+        .objects => {
+            if (s.chosen) |k| if (try checkVariant(arena, s.variant.?, k, s.field.sub, value)) |why| return why;
+            return checkObject(arena, s.field.sub, value, data);
+        },
         .rows => {
             if (value != .array) return "expected a row (array of strings)";
             const want = rowWidth(data, s);
@@ -546,6 +701,22 @@ pub fn checkSchema(arena: std.mem.Allocator, s: Slot, value: Value, data: Object
         },
         .other => return "slot type not fillable",
     }
+}
+
+/// A picked palette item keeps the server's kind and only that kind's
+/// fields: the model choosing a kind would be the model choosing layout.
+fn checkVariant(arena: std.mem.Allocator, variant: []const u8, kind: []const u8, sub: []const Field, value: Value) !?[]const u8 {
+    if (value != .object) return null;
+    if (value.object.get(variant)) |kv| {
+        if (kv != .string or !std.mem.eql(u8, std.mem.trim(u8, kv.string, " \t\r\n"), kind))
+            return try std.fmt.allocPrint(arena, "variant: {s} must be '{s}', the server's pick", .{ variant, kind });
+    }
+    for (value.object.keys()) |k| {
+        for (sub) |f| {
+            if (std.mem.eql(u8, f.name, k)) break;
+        } else return try std.fmt.allocPrint(arena, "variant: field '{s}' is not used by {s} '{s}'", .{ k, variant, kind });
+    }
+    return null;
 }
 
 fn checkObject(arena: std.mem.Allocator, sub: []const Field, value: Value, data: ObjectMap) error{OutOfMemory}!?[]const u8 {
@@ -577,6 +748,8 @@ fn checkObject(arena: std.mem.Allocator, sub: []const Field, value: Value, data:
             },
             .strings => {
                 if (v != .array) return try std.fmt.allocPrint(arena, "{s}: expected an array", .{f.name});
+                if (f.max_items) |cap| if (v.array.items.len > cap)
+                    return try std.fmt.allocPrint(arena, "{s}: max_items: {d} > {d}", .{ f.name, v.array.items.len, cap });
                 for (v.array.items) |item| {
                     if (try checkString(arena, f, item)) |why|
                         return try std.fmt.allocPrint(arena, "{s}: {s}", .{ f.name, why });
@@ -773,6 +946,29 @@ fn codeViolation(value: Value) ?[]const u8 {
     return null;
 }
 
+/// The inert rule for a slot's value: the code rule for a code slot and
+/// for code item fields (a palette's `code` kind), the prose rule for
+/// everything else.
+fn slotViolation(s: Slot, value: Value) ?[]const u8 {
+    if (s.field.code) return codeViolation(value);
+    if (value != .object) return inertViolation(value);
+    for (value.object.keys(), value.object.values()) |k, v| {
+        const code = if (subField(s.field, k)) |f| f.code else false;
+        if (if (code) codeViolation(v) else inertViolation(v)) |why| return why;
+    }
+    return null;
+}
+
+/// The first code item field in `value` that is not verbatim in evidence.
+fn codeFieldMiss(s: Slot, value: Value, evidence: []const []const u8) ?[]const u8 {
+    if (value != .object) return null;
+    for (s.field.sub) |f| {
+        if (!f.code) continue;
+        if (value.object.get(f.name)) |v| if (!codeVerbatim(v, evidence)) return f.name;
+    }
+    return null;
+}
+
 /// The code evidence gate: a command is a quote, so only an exact
 /// substring of an evidence item is safe — no model judgement, no
 /// `verifier.checkCitation`. Every string in the value must pass.
@@ -929,6 +1125,9 @@ pub const Options = struct {
     /// Mock backend table: slot path -> array of canned values, used in
     /// order. A slot with no (or no more) values declines.
     mock: ObjectMap = .empty,
+    /// Backend-call budget; `max_backend_calls` is also the ceiling a
+    /// ratchet-eval case may set.
+    max_calls: usize = max_backend_calls,
 };
 
 pub const Outcome = union(enum) {
@@ -1028,11 +1227,59 @@ const Run = struct {
     }
 };
 
-const Cand = struct { slot: usize, gain: f64 };
+/// A probe candidate: a slot, and for a palette slot the kind it stubs.
+const Cand = struct {
+    slot: usize,
+    variant: ?usize = null,
+    gain: f64,
+
+    /// The slot this candidate fills: the palette narrowed to its kind.
+    fn of(c: Cand, slots: []const Slot) Slot {
+        return if (c.variant) |k| slots[c.slot].pick(k) else slots[c.slot];
+    }
+};
 
 fn candLess(_: void, x: Cand, y: Cand) bool {
     if (x.gain != y.gain) return x.gain > y.gain;
-    return x.slot < y.slot;
+    if (x.slot != y.slot) return x.slot < y.slot;
+    return (x.variant orelse 0) < (y.variant orelse 0);
+}
+
+/// Probes a slot gets per step: one, or a palette's window width.
+fn probeCount(s: Slot) usize {
+    return if (s.variants.len == 0) 1 else @min(s.variants.len, max_variant_probes);
+}
+
+/// The `j`th palette kind probed at `step`: a round-robin window of
+/// `probeCount` kinds over the enum order. Null for a plain slot.
+fn windowKind(s: Slot, step: usize, j: usize) ?usize {
+    if (s.variants.len == 0) return null;
+    return (step * max_variant_probes + j) % s.variants.len;
+}
+
+const Probe = struct { cand: Cand, best: Best };
+
+/// One stub render per growable slot, or per windowed kind of a palette
+/// slot, in shape order. Shared by stubCeiling and the loop so the
+/// ceiling is the loop's own probe policy.
+fn probeAll(r: *Run, base: Best, step: usize) Error![]const Probe {
+    const a = r.ctx.arena;
+    var out: std.ArrayList(Probe) = .empty;
+    for (r.shape.slots, 0..) |s, i| {
+        if (!canGrow(base.data, s)) continue;
+        for (0..probeCount(s)) |j| {
+            var c: Cand = .{ .slot = i, .variant = windowKind(s, step, j), .gain = 0 };
+            const ps = c.of(r.shape.slots);
+            switch (try r.render(try withValue(a, base.data, ps, try stub(a, base.data, ps)))) {
+                .ok => |p| {
+                    c.gain = p.score - base.score;
+                    try out.append(a, .{ .cand = c, .best = p });
+                },
+                .diag => {},
+            }
+        }
+    }
+    return out.items;
 }
 
 /// Rank the probes best-first and keep the ones worth a backend call: at
@@ -1051,18 +1298,11 @@ fn askSlice(cands: []Cand, eps: f64) []Cand {
 /// all-stub render scores 47 against a reachable 70), which would stop the
 /// loop early.
 fn stubCeiling(r: *Run, start: Best, opts: Options) Error!f64 {
-    const a = r.ctx.arena;
     var cur = start;
-    for (0..opts.max_iterations) |_| {
+    for (0..opts.max_iterations) |step| {
         var next: ?Best = null;
-        for (r.shape.slots) |s| {
-            if (!canGrow(cur.data, s)) continue;
-            switch (try r.render(try withValue(a, cur.data, s, try stub(a, cur.data, s)))) {
-                .ok => |p| if (p.score - cur.score >= opts.epsilon and (next == null or p.score > next.?.score)) {
-                    next = p;
-                },
-                .diag => {},
-            }
+        for (try probeAll(r, cur, step)) |p| {
+            if (p.best.score - cur.score >= opts.epsilon and (next == null or p.best.score > next.?.score)) next = p.best;
         }
         cur = next orelse break;
     }
@@ -1123,13 +1363,7 @@ pub fn run(
             break;
         }
         var cands: std.ArrayList(Cand) = .empty;
-        for (slots, 0..) |s, i| {
-            if (!canGrow(best.data, s)) continue;
-            switch (try r.render(try withValue(a, best.data, s, try stub(a, best.data, s)))) {
-                .ok => |p| try cands.append(a, .{ .slot = i, .gain = p.score - best.score }),
-                .diag => {},
-            }
-        }
+        for (try probeAll(&r, best, iter)) |p| try cands.append(a, p.cand);
         const ask = askSlice(cands.items, eps);
         if (ask.len == 0) {
             stop = .plateau;
@@ -1139,11 +1373,11 @@ pub fn run(
         iterations = iter + 1;
         var accepted = false;
         for (ask) |c| {
-            if (calls == max_backend_calls) {
+            if (calls >= opts.max_calls) {
                 stop = .budget;
                 break :outer;
             }
-            const s = slots[c.slot];
+            const s = c.of(slots);
             var step: Step = .{ .iteration = iter + 1, .slot = s.path, .probe_gain = c.gain };
             const reply = try r.ask(s, best.data);
             calls += 1;
@@ -1164,8 +1398,7 @@ pub fn run(
                         step.detail = why;
                         break :judge;
                     }
-                    const inert_why = if (s.field.code) codeViolation(v) else inertViolation(v);
-                    if (inert_why) |tok| {
+                    if (slotViolation(s, v)) |tok| {
                         step.reason = .inert;
                         step.detail = tok;
                         break :judge;
@@ -1179,6 +1412,10 @@ pub fn run(
                             step.detail = "code: not verbatim in evidence";
                             break :judge;
                         }
+                    } else if (codeFieldMiss(s, v, r.evidence)) |name| {
+                        step.reason = .verifier;
+                        step.detail = try std.fmt.allocPrint(a, "code: {s} not verbatim in evidence", .{name});
+                        break :judge;
                     } else if (s.gated() and opts.verifier != .none) if (try checkEvidence(ctx, opts.verifier, s, v, r.evidence)) |why| {
                         step.reason = .verifier;
                         step.detail = why;
@@ -1267,6 +1504,10 @@ pub fn buildSlice(
     try w.print("FIELD: {s}   ({s})\nSCHEMA: {s}\n", .{ s.path, mode, s.schema });
     // The cached prefix bans pipes; a code slot gets a per-slot override.
     if (s.field.code) try w.writeAll("This value is rendered verbatim inside a code block: copy the command exactly from EVIDENCE, one line, no backtick fences. Pipes and symbols are fine here.\n");
+    // A palette item: the server picked the kind; SCHEMA lists only its
+    // fields.
+    if (s.chosen) |k| try w.print("KIND: {s}   (chosen by the server: set \"{s}\" to \"{s}\" and fill only the fields in SCHEMA)\n", .{ k, s.variant.?, k });
+    for (s.field.sub) |f| if (f.code) try w.print("Field '{s}' is rendered verbatim inside a code block: copy the command exactly from EVIDENCE, one line, no backtick fences. Pipes and symbols are fine here.\n", .{f.name});
     try w.print("ROLE: {s}\n", .{s.role});
     if (tone) |t| try w.print("TONE: {s}\n", .{t});
 
@@ -1366,6 +1607,7 @@ const Case = struct {
     /// checkExpect fails the case on it.
     expect: ?Value,
     max_iterations: usize,
+    max_calls: usize,
 };
 
 const Row = struct {
@@ -1436,7 +1678,7 @@ pub fn evalRun(ctx: *Ctx, corpus_path: []const u8, kind: backend.Kind, w: *std.I
         const c = try parseCase(ctx, dir, cv, mock_file);
         var row: Row = .{ .id = c.id, .max_iterations = c.max_iterations };
         const shape = try loadShape(ctx, c.shape);
-        const outcome = run(ctx, kind, c.tpl, shape, c.data, .{ .mock = c.mock, .max_iterations = c.max_iterations }) catch |e| {
+        const outcome = run(ctx, kind, c.tpl, shape, c.data, .{ .mock = c.mock, .max_iterations = c.max_iterations, .max_calls = c.max_calls }) catch |e| {
             if (e == error.OutOfMemory) return error.OutOfMemory;
             row.err = if (e == error.ToolFailed) ctx.err_msg else @errorName(e);
             row.check = "ERROR";
@@ -1561,7 +1803,12 @@ fn parseCase(ctx: *Ctx, dir: []const u8, cv: Value, mock_file: []const u8) Error
         .integer => |x| if (x >= 0 and x <= 20) @intCast(x) else return ctx.fail("case '{s}': max_iterations must be 0-20", .{id}),
         else => return ctx.fail("case '{s}': max_iterations must be an integer 0-20", .{id}),
     } else default_max_iterations;
-    return .{ .id = id, .tpl = tpl, .shape = shape, .data = data, .mock = mock, .expect = expect, .max_iterations = iters };
+    // A tighter call budget than the hard cap, never a looser one.
+    const calls: usize = if (o.get("max_calls")) |v| switch (v) {
+        .integer => |x| if (x >= 0 and x <= max_backend_calls) @intCast(x) else return ctx.fail("case '{s}': max_calls must be 0-{d}", .{ id, max_backend_calls }),
+        else => return ctx.fail("case '{s}': max_calls must be an integer 0-{d}", .{ id, max_backend_calls }),
+    } else max_backend_calls;
+    return .{ .id = id, .tpl = tpl, .shape = shape, .data = data, .mock = mock, .expect = expect, .max_iterations = iters, .max_calls = calls };
 }
 
 /// `{"min_gain": n, "stop": "plateau", "min_accepted": n,
@@ -1734,6 +1981,164 @@ test "code gate: verbatim substring of evidence, trim-insensitive" {
     try bad_items.append(.{ .string = "acmedb snapshot list | head -5" });
     try bad_items.append(.{ .string = "rm -rf /" });
     try testing.expect(!codeVerbatim(.{ .array = bad_items }, &ev));
+}
+
+const palette_shape =
+    \\{"template_id":"p","fields":{
+    \\ "title":{"type":"string"},
+    \\ "pull":{"type":"string","optional":true,"apparatus":"quote","evidence":true},
+    \\ "sections":{"type":"array<object>","optional":true,"apparatus":"palette","max_items":3,"role":"a block",
+    \\  "variant":"kind","variants":{"steps":["title","items"],"code":["command"],"quote":["text"],"rule":[]},
+    \\  "fields":{
+    \\   "kind":{"type":"string","enum":["steps","code","quote","rule"]},
+    \\   "title":{"type":"string","optional":true,"words":3},
+    \\   "items":{"type":"array<string>","optional":true,"max_items":2,"words":2},
+    \\   "command":{"type":"string","optional":true,"apparatus":"code"},
+    \\   "text":{"type":"string","optional":true,"evidence":true}}}}}
+;
+
+test "palette: kinds parse in enum order, each narrowed to its own fields" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const sh = try parseShape(arena.allocator(), palette_shape);
+    const s = slotNamed(sh, "sections[+]");
+    try testing.expectEqualStrings("kind", s.variant.?);
+    try testing.expectEqual(@as(usize, 4), s.variants.len);
+    const steps = s.pick(0);
+    try testing.expectEqualStrings("sections[+]:steps", steps.path);
+    try testing.expectEqualStrings("steps", steps.chosen.?);
+    try testing.expectEqual(@as(usize, 3), steps.field.sub.len);
+    try testing.expectEqualStrings("steps", steps.field.sub[0].enum_values[0]);
+    for (steps.field.sub) |f| try testing.expect(!f.optional);
+    try testing.expectEqual(@as(usize, 0), steps.variants.len);
+    try testing.expect(s.pick(1).gated());
+    try testing.expect(s.pick(1).field.sub[1].code);
+    // The kind's SCHEMA names only its own fields and its own kind.
+    try testing.expect(std.mem.indexOf(u8, steps.schema, "\"enum\":[\"steps\"]") != null);
+    try testing.expect(std.mem.indexOf(u8, steps.schema, "command") == null);
+    try testing.expect(std.mem.indexOf(u8, steps.schema, "variants") == null);
+    try testing.expectEqual(@as(usize, 1), s.pick(3).field.sub.len);
+}
+
+test "palette: parseShape rejects a malformed palette" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bad = [_][]const u8{
+        // a variants key outside the enum
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","variant":"k","variants":{"a":[],"b":[],"c":[]},"fields":{"k":{"type":"string","enum":["a","b"]}}}}}
+        ,
+        // an enum value with no variants entry
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","variant":"k","variants":{"a":[]},"fields":{"k":{"type":"string","enum":["a","b"]}}}}}
+        ,
+        // a listed field that does not exist
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","variant":"k","variants":{"a":["x"]},"fields":{"k":{"type":"string","enum":["a"]}}}}}
+        ,
+        // the variant field listed as a kind's field
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","variant":"k","variants":{"a":["k"]},"fields":{"k":{"type":"string","enum":["a"]}}}}}
+        ,
+        // variant names a field with no enum
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","variant":"k","variants":{"a":[]},"fields":{"k":{"type":"string"}}}}}
+        ,
+        // a palette with no variant
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","fields":{"k":{"type":"string","enum":["a"]}}}}}
+        ,
+        // variants on a non-palette slot
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"list","variant":"k","variants":{"a":[]},"fields":{"k":{"type":"string","enum":["a"]}}}}}
+        ,
+        // a required item field some kind leaves out
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","variant":"k","variants":{"a":["t"],"b":[]},"fields":{"k":{"type":"string","enum":["a","b"]},"t":{"type":"string"}}}}}
+        ,
+        // a code item field on a number
+        \\{"fields":{"s":{"type":"array<object>","optional":true,"apparatus":"palette","variant":"k","variants":{"a":["n"]},"fields":{"k":{"type":"string","enum":["a"]},"n":{"type":"number","optional":true,"apparatus":"code"}}}}}
+        ,
+    };
+    for (bad) |b| try testing.expectError(error.BadShape, parseShape(a, b));
+}
+
+test "palette: a picked stub sets the kind and stubs only its fields, typed" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, palette_shape);
+    const s = slotNamed(sh, "sections[+]");
+    const d = try testData(a, "{}");
+    const st = try stub(a, d, s.pick(0));
+    try testing.expectEqualStrings("steps", st.object.get("kind").?.string);
+    try testing.expectEqual(@as(usize, 2), st.object.get("items").?.array.items.len);
+    try testing.expectEqual(@as(usize, 3), st.object.count());
+    try testing.expectEqual(@as(?[]const u8, null), try checkSchema(a, s.pick(0), st, d));
+    const q = try stub(a, d, s.pick(2));
+    try testing.expectEqual(@as(usize, 2), q.object.count());
+    try testing.expect(q.object.get("text") != null);
+}
+
+test "palette: a reply that swaps the kind or fills another kind's fields is schema" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, palette_shape);
+    const steps = slotNamed(sh, "sections[+]").pick(0);
+    const d = try testData(a, "{}");
+    const cases = [_]struct { []const u8, ?[]const u8 }{
+        .{ "{\"kind\":\"steps\",\"title\":\"Do it\",\"items\":[\"one\",\"two\"]}", null },
+        .{ "{\"kind\":\"code\",\"title\":\"Do it\",\"items\":[\"one\"]}", "variant: kind must be 'steps', the server's pick" },
+        .{ "{\"kind\":3,\"title\":\"Do it\",\"items\":[\"one\"]}", "variant: kind must be 'steps', the server's pick" },
+        .{ "{\"kind\":\"steps\",\"title\":\"Do it\",\"items\":[\"one\"],\"command\":\"ls\"}", "variant: field 'command' is not used by kind 'steps'" },
+        .{ "{\"title\":\"Do it\",\"items\":[\"one\"]}", "missing field 'kind'" },
+        .{ "{\"kind\":\"steps\",\"items\":[\"one\"]}", "missing field 'title'" },
+        .{ "{\"kind\":\"steps\",\"title\":\"Do it\",\"items\":[\"a\",\"b\",\"c\"]}", "items: max_items: 3 > 2" },
+    };
+    for (cases) |c| {
+        const why = try checkSchema(a, steps, .{ .object = try testData(a, c[0]) }, d);
+        if (c[1]) |want| try testing.expectEqualStrings(want, why.?) else try testing.expectEqual(@as(?[]const u8, null), why);
+    }
+}
+
+test "palette: code item fields take the code rules, the rest the prose rules" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, palette_shape);
+    const s = slotNamed(sh, "sections[+]");
+    const code = s.pick(1);
+    try testing.expectEqual(@as(?[]const u8, null), slotViolation(code, .{ .object = try testData(a, "{\"kind\":\"code\",\"command\":\"a | b\"}") }));
+    try testing.expectEqualStrings("```", slotViolation(code, .{ .object = try testData(a, "{\"kind\":\"code\",\"command\":\"```sh\"}") }).?);
+    try testing.expectEqualStrings("|", slotViolation(s.pick(0), .{ .object = try testData(a, "{\"kind\":\"steps\",\"title\":\"a | b\",\"items\":[]}") }).?);
+    const ev = [_][]const u8{"Run acmedb snapshot list | head -5 to see the newest snapshots."};
+    try testing.expectEqual(@as(?[]const u8, null), codeFieldMiss(code, .{ .object = try testData(a, "{\"command\":\"acmedb snapshot list | head -5\"}") }, &ev));
+    try testing.expectEqualStrings("command", codeFieldMiss(code, .{ .object = try testData(a, "{\"command\":\"acmedb snapshots list\"}") }, &ev).?);
+}
+
+test "palette: a round-robin window of max_variant_probes kinds per step" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const sh = try parseShape(arena.allocator(), palette_shape);
+    const s = slotNamed(sh, "sections[+]");
+    try testing.expectEqual(@as(usize, max_variant_probes), probeCount(s));
+    const want = [_][3]usize{ .{ 0, 1, 2 }, .{ 3, 0, 1 }, .{ 2, 3, 0 }, .{ 1, 2, 3 } };
+    for (want, 0..) |w, step| {
+        for (w, 0..) |k, j| try testing.expectEqual(@as(?usize, k), windowKind(s, step, j));
+    }
+    // Plain slots probe once, with no kind.
+    try testing.expectEqual(@as(usize, 1), probeCount(slotNamed(sh, "pull")));
+    try testing.expectEqual(@as(?usize, null), windowKind(slotNamed(sh, "pull"), 5, 0));
+}
+
+test "palette: the slice names the server's kind and asks only for its fields" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a, palette_shape);
+    const s = slotNamed(sh, "sections[+]");
+    const d = try testData(a, "{\"title\":\"T\"}");
+    const slice = try buildSlice(a, s.pick(1), sh, d, &.{}, null);
+    try testing.expect(std.mem.indexOf(u8, slice, "FIELD: sections[+]:code   (append one item)") != null);
+    try testing.expect(std.mem.indexOf(u8, slice, "KIND: code   (chosen by the server: set \"kind\" to \"code\"") != null);
+    try testing.expect(std.mem.indexOf(u8, slice, "Field 'command' is rendered verbatim inside a code block") != null);
+    try testing.expect(std.mem.indexOf(u8, slice, "\"items\"") == null);
+    // A plain slot's slice carries no KIND line.
+    try testing.expect(std.mem.indexOf(u8, try buildSlice(a, slotNamed(sh, "pull"), sh, d, &.{}, null), "KIND:") == null);
 }
 
 test "canGrow and withValue never touch a non-empty value" {

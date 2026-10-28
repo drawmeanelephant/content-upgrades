@@ -1,0 +1,63 @@
+{
+  "template_id": "palette",
+  "description": "Ratchet eval fixture: a block palette (lane MD-PAL). `sections` items carry a `kind` the server picks from the enum; `variants` names the item fields each kind fills, and the template renders each kind in its own branch (numbered list, task list, code block, blockquote). The model never picks the kind.",
+  "fields": {
+    "title": {
+      "type": "string",
+      "role": "page heading"
+    },
+    "intro": {
+      "type": "string",
+      "role": "one paragraph of prose",
+      "voice": true
+    },
+    "sections": {
+      "type": "array<object>",
+      "role": "one block of the page, of the kind the server chose",
+      "optional": true,
+      "apparatus": "palette",
+      "max_items": 3,
+      "variant": "kind",
+      "variants": {
+        "steps": ["title", "items"],
+        "checklist": ["title", "items"],
+        "code": ["title", "command"],
+        "quote": ["text"]
+      },
+      "fields": {
+        "kind": {
+          "type": "string",
+          "role": "block kind; the server picks it, copy it as given",
+          "enum": ["steps", "checklist", "code", "quote"]
+        },
+        "title": {
+          "type": "string",
+          "role": "section heading, one short line",
+          "optional": true,
+          "words": 4
+        },
+        "items": {
+          "type": "array<string>",
+          "role": "steps kind: one numbered step each, in order; checklist kind: one task item each",
+          "optional": true,
+          "max_items": 4,
+          "words": 6
+        },
+        "command": {
+          "type": "string",
+          "role": "one shell command, copied verbatim from a source, rendered in a code block",
+          "optional": true,
+          "apparatus": "code",
+          "max_words": 20
+        },
+        "text": {
+          "type": "string",
+          "role": "one verbatim line from a source, rendered as a blockquote",
+          "optional": true,
+          "evidence": true,
+          "max_words": 30
+        }
+      }
+    }
+  }
+}
