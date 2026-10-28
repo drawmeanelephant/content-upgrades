@@ -920,16 +920,19 @@ fn opened(toks: []const structhash.Token, kind: []const u8) isize {
     return n;
 }
 
-/// voice.awk's `gsub(/`[^`]*`/, "x", out)`: every `` `…` `` span collapses
-/// to a single `x` so a `~~` quoted in code can't pair as a strike. An
-/// unclosed backtick stays literal, as the regex leaves it.
+/// voice.awk's W3 code-span mask: every byte of a `` `…` `` span becomes
+/// `x` so a `~~` quoted in code can't pair as a strike. The mask keeps
+/// `out`'s length so positions line up — the strike inner is then read
+/// from `out` itself, and a strike around a code span quoting input
+/// words can't hide its contents behind the mask. An unclosed backtick
+/// stays literal.
 fn hideCodeSpans(a: Allocator, out: []const u8) Allocator.Error![]const u8 {
     var hid: std.ArrayList(u8) = .empty;
     var i: usize = 0;
     while (i < out.len) {
         if (out[i] == '`') {
             if (std.mem.indexOfScalarPos(u8, out, i + 1, '`')) |j| {
-                try hid.append(a, 'x');
+                try hid.appendNTimes(a, 'x', j + 1 - i);
                 i = j + 1;
                 continue;
             }
@@ -943,12 +946,13 @@ fn hideCodeSpans(a: Allocator, out: []const u8) Allocator.Error![]const u8 {
 /// May a `~~inner~~` span stand in the reply? It may not retract anything
 /// the input said: no number token at all, none of the input's protected
 /// tokens, no negation, and no word sharing a stem with an input content
-/// word (exact stems plus inflections the crude stemmer misses).
-fn strikeInnerOk(a: Allocator, inner: []const u8, fi: *const Facts, ci: []const []const u8) Allocator.Error!bool {
+/// word (exact stems plus inflections the crude stemmer misses). Returns
+/// the offending token when the inner retracts input content, else null.
+fn strikeInnerBad(a: Allocator, inner: []const u8, fi: *const Facts, ci: []const []const u8) Allocator.Error!?[]const u8 {
     var nf: Facts = .{};
     try numbers(a, inner, &nf);
-    if (nf.list.items.len > 0) return false;
-    for (fi.list.items) |t| if (present(inner, t)) return false;
+    if (nf.list.items.len > 0) return nf.list.items[0].text;
+    for (fi.list.items) |t| if (present(inner, t)) return t.text;
     var i: usize = 0;
     while (i < inner.len) {
         if (!std.ascii.isAlphabetic(inner[i])) {
@@ -958,12 +962,12 @@ fn strikeInnerOk(a: Allocator, inner: []const u8, fi: *const Facts, ci: []const 
         const p = i;
         while (i < inner.len and std.ascii.isAlphabetic(inner[i])) i += 1;
         const w = try std.ascii.allocLowerString(a, inner[p..i]);
-        if (listed(&negations, w)) return false;
+        if (listed(&negations, w)) return w;
     }
     for (try contentWords(a, inner)) |w| {
-        for (ci) |c| if (sameStem(w, c)) return false;
+        for (ci) |c| if (sameStem(w, c)) return w;
     }
-    return true;
+    return null;
 }
 
 /// True when `out` adds an HTML entity (`&#…;` or `&name;`) the input
@@ -1090,7 +1094,8 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
 
     // W3: a strike retracts meaning, so `~~` may only surround words the
     // reply itself added — no input fact, negation or content word. Code
-    // spans are hidden first so a quoted `~~` can't open a strike.
+    // spans are masked for the pairing scan so a quoted `~~` can't open
+    // a strike; the inner is judged on `out` itself.
     {
         const hid = try hideCodeSpans(a, out);
         var open: ?usize = null;
@@ -1110,13 +1115,13 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
                 i += 2;
                 continue;
             }
-            const inner = hid[open.?..i];
+            const inner = out[open.?..i];
             open = null;
             i += 2;
             const span = try std.fmt.allocPrint(a, "~~{s}~~", .{inner});
             if (std.mem.indexOf(u8, in_, span) != null) continue;
-            if (!try strikeInnerOk(a, inner, &fi, ci))
-                try H.add(a, &c.hard, "strikes input words", .{});
+            if (try strikeInnerBad(a, inner, &fi, ci)) |bad|
+                try H.add(a, &c.hard, "strikes input words: {s}", .{bad});
         }
     }
 
@@ -1809,7 +1814,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 54), lines.len);
+    try testing.expectEqual(@as(usize, 56), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, false, l.input, l.output);
         const all = try joined(a, c.hard.items);
@@ -2088,6 +2093,13 @@ test "guard W3: strikethrough may only cover words the reply added" {
     // And a strike the reply added stays legal past a quoted `~~`.
     c = try guard(a, .feral, "r", false, "it uses `a~~b` markers", "it uses `a~~b` markers, ~~newly~~");
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words") == null);
+    // A strike around a code span quoting input words still retracts
+    // them: the inner is judged on the real text, and the reason names
+    // what was struck.
+    c = try guard(a, .feral, "r", false, "uses `vacuum` daily", "uses ~~`vacuum`~~ daily");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words: vacuum") != null);
+    c = try guard(a, .feral, "r", false, "it handles `50k` messages", "it ~~`50k`~~ messages");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words: 50k") != null);
 }
 
 test "guard W4: plain-role slots take no added formatting or emoji" {
