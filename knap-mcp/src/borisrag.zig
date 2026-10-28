@@ -1,13 +1,19 @@
-//! Retrieval and claim checking over the frozen boris site artifact.
+//! Retrieval and claim checking over boris site artifacts.
 //!
-//! Reads `<site>/artifact/search-index.json` and `completion.json` only;
-//! no live indexing, no boris binary. `ask` is a byte-exact port of
-//! `boris-site/ask.sh` (itself a port of the boris starter theme's search
-//! client). `check` retrieves over claim pages the way `ask.sh --claims`
-//! does, then decides yes / no / unknown from the claim's verdict tag, a
-//! negation-polarity comparison and a term-coverage floor.
+//! Two export shapes are readable. The frozen shape is
+//! `artifact/search-index.json` + `completion.json`; `ask` over it is a
+//! byte-exact port of `boris-site/ask.sh` (itself a port of the boris
+//! starter theme's search client). The filed shape is a publish export:
+//! `rag/working-*.md` verbatim context packs (+ `rag/manifest.json`) carry
+//! the documents `ask` ranks, and `ir/completion.json` supplies entities
+//! when present. Filed exports carry no claim-tagged pages, so `check`
+//! there always reports unknown with an explicit reason rather than a
+//! fabricated verdict.
 //!
-//! Site = KNAP_BORIS_SITE, else `<templates_dir>/../../boris-site`.
+//! Artifact resolution: KNAP_BORIS_ARTIFACT points directly at a directory
+//! holding either shape; else under the site (KNAP_BORIS_SITE, else
+//! `<templates_dir>/../../boris-site`) `artifact/` is probed before
+//! `publish/`, and at each root the frozen pair wins over `rag/`.
 
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;
@@ -17,6 +23,20 @@ const Writer = std.Io.Writer;
 
 pub const search_format = "boris-rendered-search-index";
 pub const completion_format = "boris-completion-index";
+pub const rag_format = "boris-rag";
+
+/// Which export shape an artifact was loaded from; reported in tool JSON.
+pub const Shape = enum {
+    frozen,
+    filed_rag,
+
+    pub fn name(s: Shape) []const u8 {
+        return switch (s) {
+            .frozen => "frozen",
+            .filed_rag => "filed-rag",
+        };
+    }
+};
 
 pub const default_limit: usize = 5;
 /// `check` answers unknown below this fraction of covered query terms.
@@ -51,6 +71,7 @@ pub const Entity = struct {
 pub const Artifact = struct {
     documents: []const Document,
     entities: []const Entity,
+    shape: Shape = .frozen,
 
     pub fn entity(a: *const Artifact, id: []const u8) ?*const Entity {
         for (a.entities) |*e| {
@@ -92,10 +113,11 @@ pub fn verdictTag(e: *const Entity) ?[]const u8 {
 
 pub const ParseError = error{ BadArtifact, OutOfMemory };
 
+const Search = struct { documents: []const Document };
+const Completion = struct { entities: []const Entity };
+
 /// Parse both artifact files. On `BadArtifact`, `msg` says which file and why.
 pub fn parse(arena: Allocator, search_json: []const u8, completion_json: []const u8, msg: *[]const u8) ParseError!Artifact {
-    const Search = struct { documents: []const Document };
-    const Completion = struct { entities: []const Entity };
     const s = try parseChecked(Search, arena, search_json, search_format, "search-index.json", msg);
     const c = try parseChecked(Completion, arena, completion_json, completion_format, "completion.json", msg);
     return .{ .documents = s.documents, .entities = c.entities };
@@ -140,21 +162,334 @@ pub fn siteDir(ctx: *Ctx) error{OutOfMemory}![]const u8 {
     return std.fmt.allocPrint(ctx.arena, "{s}/../../boris-site", .{ctx.templates_dir});
 }
 
+/// Resolve and read the artifact. KNAP_BORIS_ARTIFACT names a directory
+/// holding either shape directly; otherwise the site dir (KNAP_BORIS_SITE,
+/// else the shipped boris-site) is probed at `artifact/` then `publish/`.
+/// A shape's signature file commits to that shape — a present but broken
+/// export is an error, not a skip to the next candidate.
 pub fn load(ctx: *Ctx) error{ ToolFailed, OutOfMemory }!Artifact {
-    const site = try siteDir(ctx);
-    const search = try readArtifact(ctx, site, "search-index.json");
-    const completion = try readArtifact(ctx, site, "completion.json");
-    var msg: []const u8 = "";
-    return parse(ctx.arena, search, completion, &msg) catch |e| switch (e) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.BadArtifact => ctx.fail("boris artifact in {s}: {s}", .{ site, msg }),
+    var probed: std.ArrayList(u8) = .empty;
+    if (ctx.environ.get("KNAP_BORIS_ARTIFACT")) |dir| {
+        if (try probe(ctx, dir, &probed)) |art| return art;
+    } else {
+        const site = try siteDir(ctx);
+        inline for (.{ "artifact", "publish" }) |sub| {
+            const root = try std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ site, sub });
+            if (try probe(ctx, root, &probed)) |art| return art;
+        }
+    }
+    return ctx.fail(
+        "no readable boris artifact; probed: {s} (set KNAP_BORIS_SITE or KNAP_BORIS_ARTIFACT)",
+        .{probed.items},
+    );
+}
+
+/// One candidate root: the frozen pair first, then the filed `rag/` dir.
+/// Null means neither signature file exists here.
+fn probe(ctx: *Ctx, root: []const u8, probed: *std.ArrayList(u8)) error{ ToolFailed, OutOfMemory }!?Artifact {
+    const a = ctx.arena;
+    const search = try std.fmt.allocPrint(a, "{s}/search-index.json", .{root});
+    const completion = try std.fmt.allocPrint(a, "{s}/completion.json", .{root});
+    if (exists(ctx, search) or exists(ctx, completion)) {
+        var msg: []const u8 = "";
+        var art = parse(a, try readPath(ctx, search), try readPath(ctx, completion), &msg) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.BadArtifact => return ctx.fail("boris artifact in {s}: {s}", .{ root, msg }),
+        };
+        art.shape = .frozen;
+        return art;
+    }
+    try probeNote(a, probed, search);
+    try probeNote(a, probed, completion);
+    const manifest = try std.fmt.allocPrint(a, "{s}/rag/manifest.json", .{root});
+    if (exists(ctx, manifest)) return try loadFiled(ctx, root, manifest);
+    try probeNote(a, probed, manifest);
+    return null;
+}
+
+fn probeNote(a: Allocator, probed: *std.ArrayList(u8), path: []const u8) Allocator.Error!void {
+    if (probed.items.len > 0) try probed.appendSlice(a, ", ");
+    try probed.appendSlice(a, path);
+}
+
+fn exists(ctx: *Ctx, path: []const u8) bool {
+    std.Io.Dir.access(.cwd(), ctx.io, path, .{}) catch return false;
+    return true;
+}
+
+fn readPath(ctx: *Ctx, path: []const u8) error{ ToolFailed, OutOfMemory }![]const u8 {
+    return std.Io.Dir.readFileAlloc(.cwd(), ctx.io, path, ctx.arena, .limited(64 * 1024 * 1024)) catch
+        ctx.fail("cannot read {s} (set KNAP_BORIS_SITE or KNAP_BORIS_ARTIFACT)", .{path});
+}
+
+/// The filed shape: `rag/` working packs become documents; entities come
+/// from `ir/completion.json` when the publish run exported it.
+fn loadFiled(ctx: *Ctx, root: []const u8, manifest_path: []const u8) error{ ToolFailed, OutOfMemory }!Artifact {
+    const a = ctx.arena;
+    const rag = try std.fmt.allocPrint(a, "{s}/rag", .{root});
+    var docs: std.ArrayList(Document) = .empty;
+    for (try ragPacks(ctx, rag, try readPath(ctx, manifest_path))) |pack| {
+        const bytes = try readPath(ctx, try std.fmt.allocPrint(a, "{s}/{s}", .{ rag, pack }));
+        try parsePack(a, bytes, &docs);
+    }
+    var entities: []const Entity = &.{};
+    const ir = try std.fmt.allocPrint(a, "{s}/ir/completion.json", .{root});
+    if (exists(ctx, ir)) {
+        var msg: []const u8 = "";
+        const c = parseChecked(Completion, a, try readPath(ctx, ir), completion_format, "ir/completion.json", &msg) catch |e| switch (e) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.BadArtifact => return ctx.fail("boris artifact in {s}: {s}", .{ root, msg }),
+        };
+        entities = c.entities;
+    }
+    return .{ .documents = docs.items, .entities = entities, .shape = .filed_rag };
+}
+
+/// Pack filenames in manifest `upload_files` order; a manifest without
+/// that list falls back to `working-*.md` sorted by pack number.
+fn ragPacks(ctx: *Ctx, rag_dir: []const u8, manifest: []const u8) error{ ToolFailed, OutOfMemory }![]const []const u8 {
+    const a = ctx.arena;
+    const v = std.json.parseFromSliceLeaky(std.json.Value, a, manifest, .{}) catch |e| {
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        return ctx.fail("{s}/manifest.json is not valid JSON", .{rag_dir});
+    };
+    if (v != .object) return ctx.fail("{s}/manifest.json is not a JSON object", .{rag_dir});
+    const format = v.object.get("format") orelse .null;
+    if (!(format == .string and std.mem.eql(u8, format.string, rag_format))) {
+        return ctx.fail("{s}/manifest.json: unsupported format {s} (want \"{s}\")", .{
+            rag_dir,
+            try std.json.Stringify.valueAlloc(a, format, .{}),
+            rag_format,
+        });
+    }
+    const Manifest = struct { upload_files: []const struct { path: []const u8 } = &.{} };
+    const m = std.json.parseFromValueLeaky(Manifest, a, v, .{ .ignore_unknown_fields = true }) catch |e| {
+        if (e == error.OutOfMemory) return error.OutOfMemory;
+        return ctx.fail("{s}/manifest.json: unexpected shape ({s})", .{ rag_dir, @errorName(e) });
+    };
+    if (m.upload_files.len > 0) {
+        const names = try a.alloc([]const u8, m.upload_files.len);
+        for (m.upload_files, names) |f, *n| n.* = f.path;
+        return names;
+    }
+    var names: std.ArrayList([]const u8) = .empty;
+    var d = std.Io.Dir.openDir(.cwd(), ctx.io, rag_dir, .{ .iterate = true }) catch
+        return ctx.fail("cannot list {s} (set KNAP_BORIS_SITE or KNAP_BORIS_ARTIFACT)", .{rag_dir});
+    defer d.close(ctx.io);
+    var it = d.iterate();
+    while (it.next(ctx.io) catch return ctx.fail("cannot list {s}", .{rag_dir})) |ent| {
+        if (ent.kind != .file) continue;
+        if (std.mem.startsWith(u8, ent.name, "working-") and std.mem.endsWith(u8, ent.name, ".md"))
+            try names.append(a, try a.dupe(u8, ent.name));
+    }
+    std.mem.sort([]const u8, names.items, {}, packLess);
+    if (names.items.len == 0)
+        return ctx.fail("{s}/manifest.json lists no packs and no working-*.md files exist", .{rag_dir});
+    return names.items;
+}
+
+/// `working-9.md` before `working-10.md`: order by the number after the
+/// last `-`, falling back to byte order.
+fn packLess(_: void, a: []const u8, b: []const u8) bool {
+    const na = packNumber(a);
+    const nb = packNumber(b);
+    return if (na != nb) na < nb else std.mem.order(u8, a, b) == .lt;
+}
+
+fn packNumber(name: []const u8) usize {
+    const base = std.fs.path.stem(name);
+    const dash = std.mem.lastIndexOfScalar(u8, base, '-') orelse return 0;
+    return std.fmt.parseInt(usize, base[dash + 1 ..], 10) catch 0;
+}
+
+// --- filed-rag: working-pack parsing -----------------------------------------
+
+const pack_marker = "<!-- boris-rag-doc:";
+
+/// A working pack is verbatim boris source files, each opened by a
+/// `<!-- boris-rag-doc: id="..." source="..." ... -->` marker. The marker
+/// must start a line: the pack's own header names it inside backticks.
+fn parsePack(arena: Allocator, bytes: []const u8, docs: *std.ArrayList(Document)) Allocator.Error!void {
+    var pos: usize = 0;
+    while (nextMarker(bytes, pos)) |at| {
+        const end = nextMarker(bytes, at + 1) orelse bytes.len;
+        pos = end;
+        const block = bytes[at..end];
+        const nl = std.mem.indexOfScalar(u8, block, '\n') orelse block.len;
+        try docs.append(arena, try parseDoc(arena, block[0..nl], if (nl < block.len) block[nl + 1 ..] else ""));
+    }
+}
+
+fn nextMarker(bytes: []const u8, from: usize) ?usize {
+    var pos = from;
+    while (std.mem.indexOfPos(u8, bytes, pos, pack_marker)) |at| {
+        if (at == 0 or bytes[at - 1] == '\n') return at;
+        pos = at + 1;
+    }
+    return null;
+}
+
+/// One marked-up source file -> a Document. The entity id is the
+/// frontmatter `id`, else the marker `id` minus boris's `content/` prefix.
+fn parseDoc(arena: Allocator, marker: []const u8, text0: []const u8) Allocator.Error!Document {
+    var text = text0;
+    var title: ?[]const u8 = null;
+    var id: ?[]const u8 = null;
+    if (frontmatter(text)) |fm| {
+        title = fmScalar(fm.data, "title");
+        id = fmScalar(fm.data, "id");
+        text = fm.rest;
+    }
+    const path = id orelse markerEntityId(marker) orelse "unknown";
+    const sections = try splitSections(arena, text);
+    return .{
+        .path = path,
+        .title = title orelse firstHeading(sections) orelse path,
+        .sections = sections,
     };
 }
 
-fn readArtifact(ctx: *Ctx, site: []const u8, name: []const u8) error{ ToolFailed, OutOfMemory }![]const u8 {
-    const path = try std.fmt.allocPrint(ctx.arena, "{s}/artifact/{s}", .{ site, name });
-    return std.Io.Dir.readFileAlloc(.cwd(), ctx.io, path, ctx.arena, .limited(64 * 1024 * 1024)) catch
-        ctx.fail("cannot read {s} (set KNAP_BORIS_SITE to the boris site directory)", .{path});
+/// `id` minus the `content/` prefix; `source` minus `.md` as fallback.
+fn markerEntityId(marker: []const u8) ?[]const u8 {
+    if (attr(marker, "id")) |id|
+        return if (std.mem.startsWith(u8, id, "content/")) id["content/".len..] else id;
+    if (attr(marker, "source")) |src|
+        return if (std.mem.endsWith(u8, src, ".md")) src[0 .. src.len - ".md".len] else src;
+    return null;
+}
+
+/// A ` name="value"` attribute on a boris-rag-doc marker line.
+fn attr(marker: []const u8, name: []const u8) ?[]const u8 {
+    var pos: usize = 0;
+    while (std.mem.indexOfPos(u8, marker, pos, name)) |at| {
+        pos = at + name.len;
+        if (at == 0 or marker[at - 1] != ' ') continue;
+        if (pos + 1 < marker.len and marker[pos] == '=' and marker[pos + 1] == '"') {
+            const v1 = std.mem.indexOfScalarPos(u8, marker, pos + 2, '"') orelse return null;
+            return marker[pos + 2 .. v1];
+        }
+    }
+    return null;
+}
+
+const Frontmatter = struct { data: []const u8, rest: []const u8 };
+
+/// `---\n ... \n---` opening a source file; the closing line may be `...`.
+fn frontmatter(text: []const u8) ?Frontmatter {
+    if (!std.mem.startsWith(u8, text, "---\n")) return null;
+    var i: usize = "---\n".len;
+    while (i < text.len) {
+        const nl = std.mem.indexOfScalarPos(u8, text, i, '\n') orelse text.len;
+        const line = std.mem.trimEnd(u8, text[i..nl], " \t\r");
+        if (std.mem.eql(u8, line, "---") or std.mem.eql(u8, line, "..."))
+            return .{ .data = text["---\n".len..i], .rest = if (nl < text.len) text[nl + 1 ..] else "" };
+        i = nl + 1;
+    }
+    return null;
+}
+
+/// A scalar frontmatter field: `key: value`, with one level of quotes
+/// stripped. Block scalars and lists read as absent.
+fn fmScalar(fm: []const u8, key: []const u8) ?[]const u8 {
+    var it = std.mem.splitScalar(u8, fm, '\n');
+    while (it.next()) |line0| {
+        const line = std.mem.trimEnd(u8, line0, " \t\r");
+        const colon = std.mem.indexOfScalar(u8, line, ':') orelse continue;
+        if (!std.mem.eql(u8, std.mem.trim(u8, line[0..colon], " \t"), key)) continue;
+        var v = std.mem.trim(u8, line[colon + 1 ..], " \t");
+        if (v.len == 0) return null;
+        if (v.len >= 2 and ((v[0] == '"' and v[v.len - 1] == '"') or (v[0] == '\'' and v[v.len - 1] == '\'')))
+            v = v[1 .. v.len - 1];
+        return v;
+    }
+    return null;
+}
+
+/// Markdown body -> search-index-ish sections: an ATX heading opens a new
+/// section, fenced code lands in `code`, prose in `text`; content before
+/// the first heading is the level-0 preamble.
+fn splitSections(arena: Allocator, text: []const u8) Allocator.Error![]const Section {
+    var sections: std.ArrayList(Section) = .empty;
+    var sec: Section = .{ .level = 0 };
+    var prose: std.ArrayList(u8) = .empty;
+    var code: std.ArrayList(u8) = .empty;
+    var in_code = false;
+    var it = std.mem.splitScalar(u8, text, '\n');
+    while (it.next()) |line0| {
+        const line = std.mem.trimEnd(u8, line0, "\r");
+        if (isFence(std.mem.trimStart(u8, line, " \t"))) {
+            in_code = !in_code;
+            continue;
+        }
+        if (!in_code) {
+            if (heading(line)) |h| {
+                try flushSection(arena, &sections, &sec, &prose, &code);
+                sec = .{ .level = h.level, .heading = h.text, .fragment = try slug(arena, h.text) };
+                continue;
+            }
+        }
+        const buf = if (in_code) &code else &prose;
+        try buf.appendSlice(arena, line0);
+        try buf.append(arena, '\n');
+    }
+    try flushSection(arena, &sections, &sec, &prose, &code);
+    return sections.items;
+}
+
+fn flushSection(arena: Allocator, sections: *std.ArrayList(Section), sec: *Section, prose: *std.ArrayList(u8), code: *std.ArrayList(u8)) Allocator.Error!void {
+    const t = std.mem.trim(u8, prose.items, " \t\r\n");
+    const c = std.mem.trim(u8, code.items, " \t\r\n");
+    defer {
+        prose.clearRetainingCapacity();
+        code.clearRetainingCapacity();
+    }
+    if (sec.heading == null and t.len == 0 and c.len == 0) return;
+    sec.text = if (t.len > 0) try arena.dupe(u8, t) else null;
+    sec.code = if (c.len > 0) try arena.dupe(u8, c) else null;
+    try sections.append(arena, sec.*);
+}
+
+fn isFence(trimmed_line: []const u8) bool {
+    return std.mem.startsWith(u8, trimmed_line, "```") or std.mem.startsWith(u8, trimmed_line, "~~~");
+}
+
+const Heading = struct { level: i64, text: []const u8 };
+
+/// An ATX heading line: 1-6 `#`, whitespace, text; an optional closing
+/// hash run is stripped.
+fn heading(line: []const u8) ?Heading {
+    var n: usize = 0;
+    while (n < line.len and line[n] == '#') n += 1;
+    if (n == 0 or n > 6) return null;
+    if (n < line.len and line[n] != ' ' and line[n] != '\t') return null;
+    var t = std.mem.trim(u8, line[n..], " \t");
+    var end = t.len;
+    while (end > 0 and t[end - 1] == '#') end -= 1;
+    if (end < t.len and (end == 0 or t[end - 1] == ' ' or t[end - 1] == '\t'))
+        t = std.mem.trimEnd(u8, t[0..end], " \t");
+    return .{ .level = @intCast(n), .text = t };
+}
+
+/// Lowercase ASCII slug matching the search-index fragment style:
+/// alnum runs joined by `-`.
+fn slug(arena: Allocator, s: []const u8) Allocator.Error![]const u8 {
+    var out = try std.ArrayList(u8).initCapacity(arena, s.len);
+    var dash = false;
+    for (s) |b| {
+        if (std.ascii.isAlphanumeric(b)) {
+            if (dash and out.items.len > 0) out.appendAssumeCapacity('-');
+            dash = false;
+            out.appendAssumeCapacity(std.ascii.toLower(b));
+        } else dash = true;
+    }
+    return out.items;
+}
+
+fn firstHeading(sections: []const Section) ?[]const u8 {
+    for (sections) |s| {
+        if (s.heading) |h| return h;
+    }
+    return null;
 }
 
 // --- ask: the ask.sh port ----------------------------------------------------
@@ -451,6 +786,17 @@ pub fn check(arena: Allocator, art: *const Artifact, claim: []const u8) Allocato
         try pages.append(arena, di);
         try sets.append(arena, try pageTerms(arena, doc));
     }
+    if (pages.items.len == 0) return .{
+        .answer = .unknown,
+        .verdict = null,
+        .polarity = null,
+        .coverage = 0,
+        .matched = null,
+        .reason = if (art.shape == .filed_rag)
+            "filed publish exports carry no claim-tagged pages (no claim/verdict tags or cites relations), so a claim cannot be checked either way"
+        else
+            "the artifact has no claim pages to check against",
+    };
 
     var terms: std.ArrayList([]const u8) = .empty;
     for (query_words) |w| {
@@ -571,10 +917,10 @@ fn sourceUrl(doc: *const Document) ?[]const u8 {
 
 // --- JSON output -------------------------------------------------------------
 
-pub fn writeAskJson(w: *Writer, query: []const u8, hits: []const Hit) Writer.Error!void {
+pub fn writeAskJson(w: *Writer, query: []const u8, hits: []const Hit, shape: Shape) Writer.Error!void {
     try w.writeAll("{\"query\":");
     try str(w, query);
-    try w.writeAll(",\"results\":[");
+    try w.print(",\"artifact\":\"{s}\",\"results\":[", .{shape.name()});
     for (hits, 0..) |h, i| {
         if (i > 0) try w.writeAll(",");
         const s = h.doc.sections[h.section];
@@ -595,10 +941,10 @@ pub fn writeAskJson(w: *Writer, query: []const u8, hits: []const Hit) Writer.Err
     try w.writeAll("]}");
 }
 
-pub fn writeCheckJson(w: *Writer, claim: []const u8, v: Verdict) Writer.Error!void {
+pub fn writeCheckJson(w: *Writer, claim: []const u8, v: Verdict, shape: Shape) Writer.Error!void {
     try w.writeAll("{\"claim\":");
     try str(w, claim);
-    try w.print(",\"answer\":\"{s}\",\"verdict\":", .{@tagName(v.answer)});
+    try w.print(",\"artifact\":\"{s}\",\"answer\":\"{s}\",\"verdict\":", .{ shape.name(), @tagName(v.answer) });
     try str(w, v.verdict);
     try w.writeAll(",\"polarity\":");
     try str(w, if (v.polarity) |p| @tagName(p) else null);
@@ -810,15 +1156,180 @@ test "JSON output shapes" {
     defer a.deinit();
     const art = try fixture(a.allocator());
     var out: Writer.Allocating = .init(a.allocator());
-    try writeAskJson(&out.writer, "zed \"q\"", try ask(a.allocator(), &art, "keyspace", 1, false));
+    try writeAskJson(&out.writer, "zed \"q\"", try ask(a.allocator(), &art, "keyspace", 1, false), art.shape);
     try std.testing.expectEqualStrings(
-        \\{"query":"zed \"q\"","results":[{"score":26,"id":"claims/sharding","path":"claims/sharding.html","fragment":"zed-shards-the-keyspace","title":"Zed shards the keyspace","heading":"Zed shards the keyspace","snippet":"Zed shards the keyspace"}]}
+        \\{"query":"zed \"q\"","artifact":"frozen","results":[{"score":26,"id":"claims/sharding","path":"claims/sharding.html","fragment":"zed-shards-the-keyspace","title":"Zed shards the keyspace","heading":"Zed shards the keyspace","snippet":"Zed shards the keyspace"}]}
     , out.written());
 
     var out2: Writer.Allocating = .init(a.allocator());
-    try writeCheckJson(&out2.writer, "Zed supports SQL", try check(a.allocator(), &art, "Zed supports SQL"));
+    try writeCheckJson(&out2.writer, "Zed supports SQL", try check(a.allocator(), &art, "Zed supports SQL"), art.shape);
     const parsed = try std.json.parseFromSliceLeaky(std.json.Value, a.allocator(), out2.written(), .{});
+    try std.testing.expectEqualStrings("frozen", parsed.object.get("artifact").?.string);
     try std.testing.expectEqualStrings("unknown", parsed.object.get("answer").?.string);
     try std.testing.expect(parsed.object.get("verdict").? == .null);
     try std.testing.expect(parsed.object.get("matched").? == .object);
+}
+
+const fixture_pack =
+    \\# Boris working context pack 1/1
+    \\
+    \\Each document below is a complete Boris source file. To reuse one, copy
+    \\everything after its `<!-- boris-rag-doc: ... -->` marker through the next
+    \\marker (or the end of the file).
+    \\
+    \\<!-- boris-rag-doc: id="content/lorelog/bin-8c" source="lorelog/bin-8c.md" category="content" -->
+    \\---
+    \\title: "Bin 8C Stabilization"
+    \\id: lorelog/bin-8c
+    \\parent: lorelog
+    \\tags: [lorelog]
+    \\---
+    \\
+    \\# Bin 8C Stabilization
+    \\
+    \\Preamble mentions custody drift.
+    \\
+    \\## Corrective Intent
+    \\
+    \\The RCI band clamps Bin 8C custody.
+    \\
+    \\```
+    \\rci.clamp(1.0, 2.0);
+    \\```
+    \\
+    \\## Aftermath
+    \\
+    \\Bin 8C stays in service.
+    \\
+    \\<!-- boris-rag-doc: id="content/mascots/peppy" source="mascots/peppy.md" category="content" -->
+    \\---
+    \\title: Peppy the Seal
+    \\---
+    \\
+    \\Peppy barks at auditors.
+    \\
+;
+
+fn fixtureFiled(arena: Allocator) !Artifact {
+    var docs: std.ArrayList(Document) = .empty;
+    try parsePack(arena, fixture_pack, &docs);
+    return .{ .documents = docs.items, .entities = &.{}, .shape = .filed_rag };
+}
+
+test "filed pack: markers, frontmatter, headings and code fences" {
+    var a = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer a.deinit();
+    const art = try fixtureFiled(a.allocator());
+    try std.testing.expectEqual(@as(usize, 2), art.documents.len);
+
+    const d0 = art.documents[0];
+    // Frontmatter id wins over the marker's content/-prefixed id.
+    try std.testing.expectEqualStrings("lorelog/bin-8c", d0.path);
+    try std.testing.expectEqualStrings("Bin 8C Stabilization", d0.title);
+    try std.testing.expectEqual(@as(usize, 3), d0.sections.len);
+    try std.testing.expectEqual(@as(i64, 1), d0.sections[0].level);
+    try std.testing.expectEqualStrings("bin-8c-stabilization", d0.sections[0].fragment.?);
+    try std.testing.expect(std.mem.indexOf(u8, d0.sections[0].text.?, "custody drift") != null);
+    try std.testing.expectEqualStrings("Corrective Intent", d0.sections[1].heading.?);
+    try std.testing.expectEqualStrings("rci.clamp(1.0, 2.0);", d0.sections[1].code.?);
+    try std.testing.expect(std.mem.indexOf(u8, d0.sections[1].text.?, "RCI band") != null);
+    try std.testing.expectEqualStrings("Aftermath", d0.sections[2].heading.?);
+
+    const d1 = art.documents[1];
+    // No frontmatter id: the marker id minus "content/" supplies the path.
+    try std.testing.expectEqualStrings("mascots/peppy", d1.path);
+    try std.testing.expectEqualStrings("Peppy the Seal", d1.title);
+    try std.testing.expectEqual(@as(usize, 1), d1.sections.len);
+    try std.testing.expect(std.mem.indexOf(u8, d1.sections[0].text.?, "barks at auditors") != null);
+}
+
+test "filed ask ranks pack docs; check reports no claim surface" {
+    var a = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer a.deinit();
+    const art = try fixtureFiled(a.allocator());
+    const hits = try ask(a.allocator(), &art, "Bin 8C custody", 5, false);
+    try std.testing.expectEqual(@as(usize, 1), hits.len);
+    try std.testing.expectEqualStrings("lorelog/bin-8c", hits[0].doc.path);
+    try std.testing.expect(std.mem.indexOf(u8, hits[0].snippet, "custody") != null);
+
+    const v = try check(a.allocator(), &art, "Bin 8C is decommissioned");
+    try std.testing.expectEqual(Answer.unknown, v.answer);
+    try std.testing.expect(v.matched == null);
+    try std.testing.expect(std.mem.indexOf(u8, v.reason, "no claim-tagged pages") != null);
+}
+
+const filed_manifest =
+    \\{"format":"boris-rag","schema_version":2,"upload_files":[{"path":"working-1.md"}],"documents":[]}
+;
+const filed_completion =
+    \\{"format":"boris-completion-index","schema_version":1,"entities":[
+    \\ {"id":"mascots/peppy","title":"Peppy the Seal","tags":["mascots"],"relations":[]}]}
+;
+
+fn testCtx(arena: Allocator, env: *std.process.Environ.Map) Ctx {
+    return .{
+        .arena = arena,
+        .gpa = arena,
+        .io = std.testing.io,
+        .environ = env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = ".knap-mcp",
+        .project_root = ".",
+    };
+}
+
+fn writeFile(dir: std.Io.Dir, sub_path: []const u8, data: []const u8) !void {
+    try dir.createDirPath(std.testing.io, std.fs.path.dirname(sub_path) orelse ".");
+    try dir.writeFile(std.testing.io, .{ .sub_path = sub_path, .data = data });
+}
+
+test "load: publish/rag filed shape, artifact override, probed-paths failure" {
+    var a = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer a.deinit();
+    const al = a.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const site = try std.fmt.allocPrint(al, ".zig-cache/tmp/{s}/site", .{tmp.sub_path});
+    const publish = try std.fmt.allocPrint(al, "{s}/publish", .{site});
+
+    try writeFile(tmp.dir, "site/publish/rag/manifest.json", filed_manifest);
+    try writeFile(tmp.dir, "site/publish/rag/working-1.md", fixture_pack);
+    try writeFile(tmp.dir, "site/publish/ir/completion.json", filed_completion);
+
+    // No artifact/ dir: the site probe falls through to publish/.
+    var env: std.process.Environ.Map = .init(al);
+    try env.put("KNAP_BORIS_SITE", site);
+    var ctx = testCtx(al, &env);
+    const art = try load(&ctx);
+    try std.testing.expectEqual(Shape.filed_rag, art.shape);
+    try std.testing.expectEqual(@as(usize, 2), art.documents.len);
+    try std.testing.expectEqual(@as(usize, 1), art.entities.len);
+    try std.testing.expectEqualStrings("mascots/peppy", art.entities[0].id);
+
+    // KNAP_BORIS_ARTIFACT points at the export dir directly.
+    var env2: std.process.Environ.Map = .init(al);
+    try env2.put("KNAP_BORIS_ARTIFACT", publish);
+    try env2.put("KNAP_BORIS_SITE", "/nonexistent");
+    var ctx2 = testCtx(al, &env2);
+    try std.testing.expectEqual(Shape.filed_rag, (try load(&ctx2)).shape);
+
+    // The frozen pair wins over publish/ at the same site.
+    try writeFile(tmp.dir, "site/artifact/search-index.json", fixture_search);
+    try writeFile(tmp.dir, "site/artifact/completion.json", fixture_completion);
+    try std.testing.expectEqual(Shape.frozen, (try load(&ctx)).shape);
+
+    // A site with neither shape names every probed path.
+    var tmp2 = std.testing.tmpDir(.{});
+    defer tmp2.cleanup();
+    const bare = try std.fmt.allocPrint(al, ".zig-cache/tmp/{s}/bare", .{tmp2.sub_path});
+    try tmp2.dir.createDirPath(std.testing.io, "bare");
+    var env3: std.process.Environ.Map = .init(al);
+    try env3.put("KNAP_BORIS_SITE", bare);
+    var ctx3 = testCtx(al, &env3);
+    try std.testing.expectError(error.ToolFailed, load(&ctx3));
+    try std.testing.expect(std.mem.indexOf(u8, ctx3.err_msg, "no readable boris artifact; probed:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ctx3.err_msg, "artifact/search-index.json") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ctx3.err_msg, "publish/rag/manifest.json") != null);
 }
