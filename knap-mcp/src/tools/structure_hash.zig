@@ -113,21 +113,20 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     defer w.flush() catch {};
     for (names.items) |name| {
         var format = target;
-        const doc = std.Io.Dir.readFileAlloc(.cwd(), ctx.io, name, ctx.arena, .limited(64 * 1024 * 1024)) catch
-            (store.read(ctx, name) catch null) orelse {
+        const r = common.resolveDoc(ctx, name) orelse {
             w.flush() catch {};
             std.debug.print("knap-mcp: no such file or doc '{s}'\n", .{name});
             return 1;
         };
-        if (format == null) format = if (std.Io.Dir.access(.cwd(), ctx.io, name, .{})) |_|
-            pathFormat(name, doc)
-        else |_|
-            docFormat(ctx, name, doc) catch {
+        if (format == null) format = if (r.file_path) |p|
+            pathFormat(p, r.bytes)
+        else
+            docFormat(ctx, name, r.bytes) catch {
                 w.flush() catch {};
                 std.debug.print("knap-mcp: {s}\n", .{ctx.err_msg});
                 return 1;
             };
-        const tokens = try structhash.skeletonOpts(ctx.arena, doc, format.?, .{ .strict = strict, .ignore_formatting = ignore_formatting });
+        const tokens = try structhash.skeletonOpts(ctx.arena, r.bytes, format.?, .{ .strict = strict, .ignore_formatting = ignore_formatting });
         if (explain) {
             for (tokens) |t| {
                 try w.interface.splatByteAll(' ', 2 * @as(usize, t.depth));
