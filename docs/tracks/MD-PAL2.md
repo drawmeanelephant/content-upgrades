@@ -106,3 +106,12 @@ nothing when the field is absent, and `sources` is not a rendered field.
 - The `runbook` description in the shape still doesn't mention the
   appendix; if a lane adds a shipped-template section about palettes,
   the shape `description` is the place.
+
+## 2026-10-28 audit re-check
+
+c305dd7 runbook-appendix claims from the 2026-10-28 audit — checked at
+c305dd7, not reproduced: `command` max_words:20 rejects oversized input
+as a schema error rather than silently truncating; `title` passes
+through the inert-token gate; the `code_block:"sh"` command context is
+covered by the code-field check plus the exact-substring evidence gate.
+No issue filed.
