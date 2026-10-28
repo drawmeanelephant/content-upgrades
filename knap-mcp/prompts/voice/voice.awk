@@ -475,27 +475,28 @@ function contentwords(s, C,    t, n, i, c, start, digits, w) {
 # May a ~~inner~~ span stand in the reply? It may not retract anything
 # the input said: no number token at all, none of the input's protected
 # tokens, no negation, and no word sharing a stem with an input content
-# word (CIWORDS holds the input's stemmed content words).
-function strikeinnerok(inner,    NF2, CW2, t, w, c, j, k) {
+# word (CIWORDS holds the input's stemmed content words). Returns the
+# offending token when the inner retracts input content, else "".
+function strikeinnerbad(inner,    NF2, CW2, t, w, c, j, k) {
 	split("", NF2); numbers(inner, NF2)
-	for (t in NF2) return 0
-	for (t in FI) if (present(inner, t, FI[t])) return 0
+	for (t in NF2) return t
+	for (t in FI) if (present(inner, t, FI[t])) return t
 	j = 1
 	while (j <= length(inner)) {
 		if (substr(inner, j, 1) !~ /[A-Za-z]/) { j++; continue }
 		k = j
 		while (k <= length(inner) && substr(inner, k, 1) ~ /[A-Za-z]/) k++
 		w = tolower(substr(inner, j, k - j))
-		if (index(NEGLIST, " " w " ") > 0) return 0
+		if (index(NEGLIST, " " w " ") > 0) return w
 		j = k
 	}
 	split("", CW2); contentwords(inner, CW2)
-	for (w in CW2) for (c in CIWORDS) if (samestem(w, c)) return 0
-	return 1
+	for (w in CW2) for (c in CIWORDS) if (samestem(w, c)) return w
+	return ""
 }
 
 # Sets REASONS to every way `out` breaks the voice contract for `in_`.
-function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, del_in, del_ou, hl_in, hl_ou, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, DROPSEEN) {
+function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words, tmp, nprof, nf, ncaps, nbang, lin, lou, em_in, em_ou, st_in, st_ou, del_in, del_ou, hl_in, hl_ou, nspans, pj, pk, rest, ent, b, l, seq, p, q, inner, sopen, hid, msk, badw, DROPSEEN) {
 	REASONS = ""
 	if (in_ == "") why("empty input")
 	if (out == "") { why("empty output"); return }
@@ -551,9 +552,17 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 
 	# W3: a strike retracts meaning, so ~~ may only surround words the
 	# reply itself added — no input fact, negation or content word.
-	# Code spans are hidden first so a quoted "~~" can't open a strike.
+	# Code spans are masked for the pairing scan so a quoted "~~" can't
+	# open a strike; the mask keeps out's length so positions line up
+	# and the inner is judged on out itself — a strike around a code
+	# span quoting input words can't hide its contents behind the mask.
 	split("", CIWORDS); contentwords(in_, CIWORDS)
-	hid = out; gsub(/`[^`]*`/, "x", hid)
+	hid = out
+	while (match(hid, /`[^`]*`/)) {
+		msk = substr(hid, RSTART, RLENGTH)
+		gsub(/./, "x", msk)
+		hid = substr(hid, 1, RSTART - 1) msk substr(hid, RSTART + RLENGTH)
+	}
 	i = 1; sopen = 0
 	while (i <= length(hid)) {
 		if (substr(hid, i, 1) != "~") { i++; continue }
@@ -561,10 +570,11 @@ function guard(tone, role, in_, out,    t, i, c, ni, no, L, O, lo, hi, nw, words
 		while (substr(hid, i + l, 1) == "~") l++
 		if (l != 2) { i += l; continue }
 		if (sopen == 0) { sopen = i + 2; i += 2; continue }
-		inner = substr(hid, sopen, i - sopen)
+		inner = substr(out, sopen, i - sopen)
 		sopen = 0; i += 2
 		if (index(in_, "~~" inner "~~") > 0) continue
-		if (!strikeinnerok(inner)) why("strikes input words")
+		badw = strikeinnerbad(inner)
+		if (badw != "") why("strikes input words: " badw)
 	}
 
 	# W5 feeds W4: plain slots take no added formatting and no emoji.

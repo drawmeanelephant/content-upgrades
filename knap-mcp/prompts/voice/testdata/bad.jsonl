@@ -52,3 +52,5 @@
 {"tone": "spicy", "template": "verdict", "field": "take", "field_role": "one-line hot take", "input": "the boring database that actually ships", "output": "the &#42;boring&#42; database that actually ships", "expect": "adds HTML entity"}
 {"tone": "feral", "template": "verdict", "field": "summary", "field_role": "the case, 2-4 sentences", "input": "Setup was quick in our test.", "output": "Setup was quick in our test &#128169;", "expect": "adds HTML entity"}
 {"tone": "mild", "template": "verdict", "field": "summary", "field_role": "the case, 2-4 sentences", "input": "Setup was quick in our test.", "output": "Setup was&nbsp;quick in our test.", "expect": "adds HTML entity"}
+{"tone": "feral", "template": "verdict", "field": "take", "field_role": "one-line hot take", "input": "uses `vacuum` daily", "output": "uses ~~`vacuum`~~ daily", "expect": "strikes input words: vacuum"}
+{"tone": "feral", "template": "verdict", "field": "take", "field_role": "one-line hot take", "input": "it handles `50k` messages", "output": "it ~~`50k`~~ messages", "expect": "strikes input words: 50k"}
