@@ -7,7 +7,8 @@
 //!     knap-mcp render <id> [-d <file|->] [--target <t>] [--out <file>]
 //!     knap-mcp repair <id> [-d <file|->] [--backend <b>]
 //!     knap-mcp lint <file.knap>             k4o lint passthrough
-//!     knap-mcp format-check <doc_id>        advisory structure lint on a doc
+//!     knap-mcp ingest <file>... [--force]   copy markdown docs into the store
+//!     knap-mcp format-check <doc_id|file>   advisory structure lint on a doc
 //!     knap-mcp eval [--corpus <seeds.json>] [--backend <b>]
 //!     knap-mcp backends [--probe]           backend availability + models
 //!     knap-mcp smoke [--backend <b>]        one live call per backend.Task
@@ -68,14 +69,16 @@ const commands = [_]Command{
     .{ .name = "render", .usage = "render <id> [options]", .summary = "render via k4o/dogbed, print doc", .run = .{ .tool = .{ .tool = "knap_render", .key = "template_id" } } },
     .{ .name = "repair", .usage = "repair <id> [options]", .summary = "bounded repair loop (max 4)", .run = .{ .tool = .{ .tool = "knap_repair", .key = "template_id" } } },
     .{ .name = "lint", .usage = "lint <file.knap>", .summary = "k4o lint passthrough", .run = .{ .tool = .{ .tool = "knap_lint", .key = "template_text", .exactly_one = "template file", .read_file = true } } },
-    .{ .name = "format-check", .usage = "format-check <doc_id>", .summary = "advisory structure lint (warnings only)", .run = .{ .tool = .{ .tool = "knap_format_check", .key = "doc_id", .exactly_one = "doc_id" } } },
+    .{ .name = "ingest", .usage = "ingest <file>... [--force]", .summary = "copy existing markdown docs into the store", .run = .{ .custom = @import("tools/ingest.zig").cli } },
+    .{ .name = "format-check", .usage = "format-check <doc_id|file>", .summary = "advisory structure lint (warnings only)", .run = .{ .custom = @import("tools/format_check.zig").cli } },
     .{ .name = "voice", .usage = "voice <id> --tone <t>", .summary = "rewrite voice: true values in a tone", .run = .{ .tool = .{ .tool = "knap_voice", .key = "template_id" } } },
     .{ .name = "structhash", .usage = "structhash <doc_id|file>...", .summary = "layout skeleton hash, text dropped", .run = .{ .custom = @import("tools/structure_hash.zig").cli } },
     .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "boris-ask", .usage = "boris-ask <query> [--limit n]", .summary = "ranked snippets from the boris artifact", .run = .{ .tool = .{ .tool = "boris_ask", .key = "query", .exactly_one = "query" } } },
     .{ .name = "boris-check", .usage = "boris-check <claim>", .summary = "yes/no/unknown from boris claim pages", .run = .{ .tool = .{ .tool = "boris_check", .key = "claim", .exactly_one = "claim" } } },
-    .{ .name = "publish-check", .usage = "publish-check <doc_id> [--as <path>]", .summary = "stage md doc in boris site; exit 1 unless ok", .run = .{ .tool = .{ .tool = "knap_publish_check", .key = "doc_id", .exactly_one = "doc_id" } } },
+    .{ .name = "publish-check", .usage = "publish-check <doc_id|file> [--as <path>]", .summary = "stage md doc in boris site; exit 1 unless ok", .run = .{ .custom = @import("tools/publish_check.zig").cli } },
     .{ .name = "density", .usage = "density <doc_id|file>", .summary = "formatting-density score (markdown)", .run = .{ .custom = @import("tools/density.zig").cmd } },
+    .{ .name = "audit", .usage = "audit <dir> [options]", .summary = "corpus density audit over a tree (read-only)", .run = .{ .custom = @import("tools/audit.zig").cli } },
     .{ .name = "ratchet", .usage = "ratchet <id> [options]", .summary = "values-only density ratchet", .run = .{ .tool = .{ .tool = "knap_ratchet", .key = "template_id" } } },
     .{ .name = "ratchet-eval", .usage = "ratchet-eval [--corpus f]", .summary = "ratchet climb table (eval/ratchet.json)", .run = .{ .custom = @import("ratchet.zig").cmdEval } },
     .{ .name = "eval", .usage = "eval [--corpus f] [--backend k]", .summary = "seeded-breakage convergence", .run = .{ .custom = cmdEval } },
@@ -113,6 +116,11 @@ const usage_tail =
     \\  --verifier <v>          heuristic (default) | none | decision
     \\  --limit <n>             boris-ask hits (default 5)
     \\  --max-iters <n>         ratchet iteration cap (default 6)
+    \\  --force                 ingest: admit non-markdown extensions
+    \\  --glob <p>              audit file glob (default **/*.md)
+    \\  --per-dir | --per-glob <name=glob,...>   audit rollup grouping
+    \\  --below <s>             audit: list docs whose total is under s
+    \\  --jsonl <file>          audit: per-doc rows to file (default stdout)
     \\  --as <path>             publish-check: staged source path (raw profile)
     \\  --probe                 backends: GET /models per live backend, acp handshake
     \\  -h, --help              this text; <command> -h shows that command's usage
@@ -134,6 +142,7 @@ const usage_tail =
     \\  KNAP_ACP_TIMEOUT / KNAP_ACP_INIT_TIMEOUT   acp call / spawn+init caps, seconds
     \\  KNAP_ACP_CWD                       acp session cwd (default: process cwd)
     \\  KNAP_BORIS_SITE                    boris site dir (default <templates>/../../boris-site)
+    \\  KNAP_BORIS_ARTIFACT                artifact dir override for boris-ask/check (frozen pair or publish exports)
     \\  KNAP_BORIS_PATH                    boris binary for publish-check (default: PATH)
     \\  KNAP_BORIS_STAGING                 publish-check staging profile (frozen|raw); overrides <site>/knap-site.json
     \\  KNAP_BORIS_THEME                   publish-check theme root for boris validate (default: knap-site.json or themes/boris)
@@ -550,6 +559,59 @@ test "tool_flags checked against tool input_schema" {
     try std.testing.expect(!schemaHasProp(publish_check, flagProp("target")));
 }
 
+fn testCtx(a: std.mem.Allocator, env: *std.process.Environ.Map, tmp: *std.testing.TmpDir) !Ctx {
+    return .{
+        .arena = a,
+        .gpa = a,
+        .io = std.testing.io,
+        .environ = env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = "templates",
+        .store_dir = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}", .{tmp.sub_path[0..]}),
+        .project_root = ".",
+    };
+}
+
+test "custom commands reject surplus arguments" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+    var surplus = [_][]const u8{ "bogus-1", "bogus-2" };
+    for (&commands) |*c| {
+        const f = switch (c.run) {
+            .custom => |f| f,
+            .tool => continue,
+        };
+        // -h/--help/-v/--version are meta rows that print and exit 0.
+        if (std.mem.startsWith(u8, c.name, "-")) continue;
+        try std.testing.expect(try f(&ctx, surplus[0..]) != 0);
+    }
+}
+
+test "structhash positionals are all hashed, not dropped" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+    const cli = @import("tools/structure_hash.zig").cli;
+    const f1 = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/one.md", .{tmp.sub_path});
+    const f2 = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/two.md", .{tmp.sub_path});
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = f1, .data = "# A\n\nx\n" });
+    try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = f2, .data = "# B\n\n## C\n" });
+    var both = [_][]const u8{ f1, f2 };
+    try std.testing.expectEqual(@as(u8, 0), try cli(&ctx, both[0..]));
+    var second_bad = [_][]const u8{ f1, "no-such-doc-or-file" };
+    try std.testing.expectEqual(@as(u8, 1), try cli(&ctx, second_bad[0..]));
+}
+
 // Test discovery: `zig build test` only runs tests in files listed here,
 // one line per file under src/.
 test {
@@ -569,11 +631,13 @@ test {
     _ = @import("store.zig");
     _ = @import("structhash.zig");
     _ = @import("tools.zig");
+    _ = @import("tools/audit.zig");
     _ = @import("tools/boris_ask.zig");
     _ = @import("tools/boris_check.zig");
     _ = @import("tools/common.zig");
     _ = @import("tools/density.zig");
     _ = @import("tools/format_check.zig");
+    _ = @import("tools/ingest.zig");
     _ = @import("tools/lint.zig");
     _ = @import("tools/publish_check.zig");
     _ = @import("tools/ratchet.zig");

@@ -50,6 +50,52 @@ fn writeReport(out: *Allocating, doc_id: []const u8, r: boris.Report) !void {
     try w.print(",\"elapsed_ms\":{d:.1}}}", .{r.elapsed_ms});
 }
 
+/// `knap-mcp publish-check <doc_id|file> [--as <path>]`: a readable file
+/// path is staged into the artifact store byte-for-byte first; anything
+/// else is a doc_id. --as is the raw-profile source path. The tool runs
+/// through the dispatcher, JSON on stdout; exit 0 when ok, 1 when not ok
+/// or the check could not run.
+pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
+    var as: ?[]const u8 = null;
+    var target: ?[]const u8 = null;
+    var bad = false;
+    var i: usize = 0;
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "--as")) {
+            i += 1;
+            if (i < args.len) as = args[i] else bad = true;
+        } else if (arg.len > 1 and arg[0] == '-') {
+            bad = true;
+        } else if (target == null) {
+            target = arg;
+        } else bad = true;
+    }
+    if (bad or target == null) {
+        std.debug.print("knap-mcp: publish-check needs exactly one doc_id or file\nusage: knap-mcp <command> [options]  (see --help)\n", .{});
+        return 1;
+    }
+    const doc_id = common.docIdOrStage(ctx, target.?) catch {
+        std.debug.print("knap-mcp: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "publish-check failed"});
+        return 1;
+    };
+    var a: ObjectMap = .empty;
+    try a.put(ctx.arena, "doc_id", .{ .string = doc_id });
+    if (as) |v| try a.put(ctx.arena, "as", .{ .string = v });
+    var out: Allocating = .init(ctx.arena);
+    tools.dispatch(ctx, tool.name, a, &out) catch {
+        std.debug.print("knap-mcp: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "publish-check failed"});
+        return 1;
+    };
+    var buf: [8192]u8 = undefined;
+    var w = std.Io.File.stdout().writer(ctx.io, &buf);
+    try w.interface.writeAll(out.written());
+    try w.interface.writeAll("\n");
+    try w.flush();
+    const res = try std.json.parseFromSliceLeaky(struct { ok: bool }, ctx.arena, out.written(), .{ .ignore_unknown_fields = true });
+    return @intFromBool(!res.ok);
+}
+
 test "writeReport emits the documented shape" {
     var a = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer a.deinit();
