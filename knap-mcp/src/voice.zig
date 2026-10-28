@@ -920,6 +920,26 @@ fn opened(toks: []const structhash.Token, kind: []const u8) isize {
     return n;
 }
 
+/// voice.awk's `gsub(/`[^`]*`/, "x", out)`: every `` `…` `` span collapses
+/// to a single `x` so a `~~` quoted in code can't pair as a strike. An
+/// unclosed backtick stays literal, as the regex leaves it.
+fn hideCodeSpans(a: Allocator, out: []const u8) Allocator.Error![]const u8 {
+    var hid: std.ArrayList(u8) = .empty;
+    var i: usize = 0;
+    while (i < out.len) {
+        if (out[i] == '`') {
+            if (std.mem.indexOfScalarPos(u8, out, i + 1, '`')) |j| {
+                try hid.append(a, 'x');
+                i = j + 1;
+                continue;
+            }
+        }
+        try hid.append(a, out[i]);
+        i += 1;
+    }
+    return hid.items;
+}
+
 /// May a `~~inner~~` span stand in the reply? It may not retract anything
 /// the input said: no number token at all, none of the input's protected
 /// tokens, no negation, and no word sharing a stem with an input content
@@ -1069,16 +1089,18 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
     const ci = try contentWords(a, in_);
 
     // W3: a strike retracts meaning, so `~~` may only surround words the
-    // reply itself added — no input fact, negation or content word.
+    // reply itself added — no input fact, negation or content word. Code
+    // spans are hidden first so a quoted `~~` can't open a strike.
     {
+        const hid = try hideCodeSpans(a, out);
         var open: ?usize = null;
         var i: usize = 0;
-        while (i < out.len) {
-            if (out[i] != '~') {
+        while (i < hid.len) {
+            if (hid[i] != '~') {
                 i += 1;
                 continue;
             }
-            const n = runLenAt(out, i);
+            const n = runLenAt(hid, i);
             if (n != 2) {
                 i += n;
                 continue;
@@ -1088,7 +1110,7 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
                 i += 2;
                 continue;
             }
-            const inner = out[open.?..i];
+            const inner = hid[open.?..i];
             open = null;
             i += 2;
             const span = try std.fmt.allocPrint(a, "~~{s}~~", .{inner});
@@ -1787,7 +1809,7 @@ test "guard catches every known-bad rewrite in testdata/bad.jsonl" {
     defer arena.deinit();
     const a = arena.allocator();
     const lines = try parseLines(a, try readTest(a, "prompts/voice/testdata/bad.jsonl"));
-    try testing.expectEqual(@as(usize, 50), lines.len);
+    try testing.expectEqual(@as(usize, 51), lines.len);
     for (lines) |l| {
         const c = try guard(a, parseTone(l.tone).?, l.field_role, false, l.input, l.output);
         const all = try joined(a, c.hard.items);
@@ -2059,6 +2081,13 @@ test "guard W3: strikethrough may only cover words the reply added" {
     // Numbers are facts; even inside a strike they cannot be retracted.
     c = try guard(a, .feral, "r", false, "it handles 50k messages", "it handles ~~50k~~ some messages");
     try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words") != null);
+    // A `~~` quoted in a code span can't open the strike: pairing must
+    // still reach the reply's own `~~boring~~`.
+    c = try guard(a, .feral, "r", false, "run `x~~` then the boring database ships", "run `x~~` then the ~~boring~~ database ships");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words") != null);
+    // And a strike the reply added stays legal past a quoted `~~`.
+    c = try guard(a, .feral, "r", false, "it uses `a~~b` markers", "it uses `a~~b` markers, ~~newly~~");
+    try testing.expect(std.mem.indexOf(u8, try joined(a, c.hard.items), "strikes input words") == null);
 }
 
 test "guard W4: plain-role slots take no added formatting or emoji" {
