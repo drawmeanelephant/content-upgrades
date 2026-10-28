@@ -175,4 +175,4 @@ calls, so it doesn't count against the budget.
 - Step labels for palette asks are `name[+]:kind`. Mock tables key
   palette values the same way.
 - Adopting the palette in a shipped template (e.g. a runbook appendix)
-  is out of scope here. It's filed as a follow-up.
+  is out of scope here. It's filed as #270.
