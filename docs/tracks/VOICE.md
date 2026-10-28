@@ -156,6 +156,20 @@ else. `==highlight==` landed with MD-VH (#229); details live in
 - `~~` inside link text or footnote-def text is parsed as `del` by
   structhash like CommonMark; multi-backtick spans never resolve, so
   adding one fails `unbalanced ``.
+
 - Fixed (#247, df64133): `voice.awk`'s `~` mirror now pairs by the same
   flanking rule as zig (`tildescan`), so `plan~~[^1]~~` fails both guards.
   The `==` mirror got the exact `eqscan` pairing in MD-VH.
+- Word caps (`one-word`, `four word` roles) split on Unicode White_Space,
+  not only ` \t\n` — NBSP, thin space, ideographic space and friends no
+  longer evade the cap (#334, both guards).
+- URL tokens end at whitespace, a quote, `<`, `>`, `)` or a backtick, so a
+  code span may quote the input's URL the way W6 intends (#334).
+- Trailing `.,;:!?` on a URL is the sentence's punctuation, not the
+  target's, and **may change** (#334): `script: https://x/b` and
+  `script, https://x/b,` carry the same URL. dogbed renders bare URLs as
+  text and linkifiers exclude trailing punctuation, so the rendered
+  target is unchanged; `examples/*.jsonl` already re-punctuate freely.
+  This is the rule `prompts/voice/README.md` documents ("minus trailing
+  `.,;:!?`").
+
