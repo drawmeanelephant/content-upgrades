@@ -136,6 +136,7 @@ const usage_tail =
     \\  KNAP_ACP_TIMEOUT / KNAP_ACP_INIT_TIMEOUT   acp call / spawn+init caps, seconds
     \\  KNAP_ACP_CWD                       acp session cwd (default: process cwd)
     \\  KNAP_BORIS_SITE                    boris site dir (default <templates>/../../boris-site)
+    \\  KNAP_BORIS_ARTIFACT                artifact dir override for boris-ask/check (frozen pair or publish exports)
     \\  KNAP_BORIS_PATH                    boris binary for publish-check (default: PATH)
     \\  KNAP_ENGINE_TIMEOUT                engine subprocess cap, seconds (default 60, 0 off)
     \\  KNAP_CURL_TIMEOUT                  live-backend curl cap, seconds (default 60)
