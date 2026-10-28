@@ -1,0 +1,8 @@
+{
+  "title": "Listing AcmeDB snapshots",
+  "intro": "Point-in-time snapshots are the headline AcmeDB 2.0 feature, and the newest ones are one command away. A snapshot runs online against a live primary, stays point-in-time consistent while writes continue, and restores to any second inside the retention window without a support ticket. The catalog tracks every snapshot the cluster still holds, in order, with the timestamp, the size on disk, and the incremental chain it hangs off, so the first question on any incident call — what can we restore to, and how fresh is it — has a one-command answer. Operators typically list the newest handful before anything else: before a risky migration, before a schema change, and before blaming the storage layer for a slowdown that might be a compaction storm instead. The command below prints the five most recent snapshots with their ids and timestamps, which is enough to confirm that the hourly schedule is actually firing and that the latest restore point is as fresh as the runbook promises. Everything after that first check — verifying a chain, restoring to a scratch instance, pruning past the retention window — builds on the same listing, so it is the one command every AcmeDB runbook opens with and the one this page leads with too.",
+  "sources": [
+    {"id": "runbook", "quote": "Run acmedb snapshot list | head -5 to see the newest snapshots."},
+    {"id": "runbook", "quote": "Snapshots are online, incremental, and restorable to any point in the last seven days."}
+  ]
+}

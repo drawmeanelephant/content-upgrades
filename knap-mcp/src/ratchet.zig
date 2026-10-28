@@ -72,7 +72,7 @@ pub const Error = error{ ToolFailed, OutOfMemory, WriteFailed } || std.process.R
 
 /// Shape `apparatus` vocabulary: what a slot renders as. `link` is the one
 /// addition to the plan's list (a plain URL slot rendered through `link`).
-pub const Apparatus = enum { footnote, callout, wikilink, embed, image, link, fragment_link, table, quote, frontmatter, list };
+pub const Apparatus = enum { footnote, callout, wikilink, embed, image, link, fragment_link, table, quote, frontmatter, list, code };
 
 /// Value kinds the ratchet can grow. `keyed` is an `object<string,string>`
 /// map (footnote notes) that grows one key at a time through a paired
@@ -108,6 +108,9 @@ pub const Field = struct {
     url: bool = false,
     /// Names a site page (wikilink and embed slots).
     page: bool = false,
+    /// Rendered verbatim inside a fenced code block: the inert rule is
+    /// literal-safe and the evidence gate is exact-substring.
+    code: bool = false,
     words: usize = default_stub_words,
     /// Item fields of an array<object>.
     sub: []const Field = &.{},
@@ -136,6 +139,7 @@ pub const Slot = struct {
     }
 
     pub fn gated(s: Slot) bool {
+        if (s.field.code) return true;
         if (s.field.evidence) return true;
         for (s.field.sub) |f| if (f.evidence) return true;
         return false;
@@ -183,6 +187,9 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
 
         const app_name = str(spec.object, "apparatus") orelse continue;
         const apparatus = std.meta.stringToEnum(Apparatus, app_name) orelse return error.BadShape;
+        // A code slot renders one line verbatim inside a fence; only a
+        // string (or one string item) can fill it.
+        if (apparatus == .code and f.kind != .string and f.kind != .strings) return error.BadShape;
         const has_max = spec.object.get("max_items") != null;
         // A required field grows only when the shape bounds it.
         if (f.kind == .other or (!f.optional and !has_max)) continue;
@@ -221,6 +228,7 @@ pub fn parseShape(arena: std.mem.Allocator, bytes: []const u8) !Shape {
         if (!slot.isArray() and f.kind != .keyed) slot.max_items = 1;
         slot.field.url = apparatus == .image or apparatus == .link;
         slot.field.page = apparatus == .wikilink or apparatus == .embed;
+        slot.field.code = apparatus == .code;
         if (slot.isArray()) slot.path = try std.fmt.allocPrint(arena, "{s}[+]", .{name});
         if (f.kind == .keyed) slot.path = try std.fmt.allocPrint(arena, "{s}{{+}}", .{name});
         try slots.append(arena, slot);
@@ -735,6 +743,58 @@ fn inertString(s: []const u8) ?[]const u8 {
     return null;
 }
 
+/// What can still break out of a fenced code block: a newline, a closing
+/// fence, or template syntax. Everything the prose rule rejects — pipes,
+/// backticks, emphasis openers, `<tag`, leading `#`/`>`/`- ` — is literal
+/// inside a fence, so the code rule rejects nothing else.
+const code_inert_tokens = [_][]const u8{ "```", "~~~", "{{", "{%" };
+
+fn codeInert(s: []const u8) ?[]const u8 {
+    if (std.mem.indexOfAny(u8, s, "\r\n") != null) return "newline";
+    for (code_inert_tokens) |t| {
+        if (std.mem.indexOf(u8, s, t) != null) return t;
+    }
+    return null;
+}
+
+/// inertViolation for a code field: the literal-safe rule, applied to
+/// every string in the value.
+fn codeViolation(value: Value) ?[]const u8 {
+    switch (value) {
+        .string => |s| return codeInert(s),
+        .array => |a| for (a.items) |v| {
+            if (codeViolation(v)) |why| return why;
+        },
+        .object => |o| for (o.values()) |v| {
+            if (codeViolation(v)) |why| return why;
+        },
+        else => {},
+    }
+    return null;
+}
+
+/// The code evidence gate: a command is a quote, so only an exact
+/// substring of an evidence item is safe — no model judgement, no
+/// `verifier.checkCitation`. Every string in the value must pass.
+fn codeVerbatim(value: Value, evidence: []const []const u8) bool {
+    return switch (value) {
+        .string => |s| blk: {
+            const t = std.mem.trim(u8, s, " \t\r\n");
+            for (evidence) |e| {
+                if (std.mem.indexOf(u8, e, t) != null) break :blk true;
+            }
+            break :blk false;
+        },
+        .array => |a| blk: {
+            for (a.items) |v| {
+                if (!codeVerbatim(v, evidence)) break :blk false;
+            }
+            break :blk true;
+        },
+        else => false,
+    };
+}
+
 /// Evidence quotes from `data.sources[*]` (objects with `quote` or `text`,
 /// or bare strings).
 pub fn dataEvidence(arena: std.mem.Allocator, data: ObjectMap) ![]const []const u8 {
@@ -1104,12 +1164,22 @@ pub fn run(
                         step.detail = why;
                         break :judge;
                     }
-                    if (inertViolation(v)) |tok| {
+                    const inert_why = if (s.field.code) codeViolation(v) else inertViolation(v);
+                    if (inert_why) |tok| {
                         step.reason = .inert;
                         step.detail = tok;
                         break :judge;
                     }
-                    if (s.gated() and opts.verifier != .none) if (try checkEvidence(ctx, opts.verifier, s, v, r.evidence)) |why| {
+                    // A code slot's gate is exact and always on; the
+                    // model verifier could wave a paraphrased command
+                    // through as entails.
+                    if (s.field.code) {
+                        if (!codeVerbatim(v, r.evidence)) {
+                            step.reason = .verifier;
+                            step.detail = "code: not verbatim in evidence";
+                            break :judge;
+                        }
+                    } else if (s.gated() and opts.verifier != .none) if (try checkEvidence(ctx, opts.verifier, s, v, r.evidence)) |why| {
                         step.reason = .verifier;
                         step.detail = why;
                         break :judge;
@@ -1194,7 +1264,10 @@ pub fn buildSlice(
         "write one note; the server picks its key and anchor"
     else
         "fill this empty field";
-    try w.print("FIELD: {s}   ({s})\nSCHEMA: {s}\nROLE: {s}\n", .{ s.path, mode, s.schema, s.role });
+    try w.print("FIELD: {s}   ({s})\nSCHEMA: {s}\n", .{ s.path, mode, s.schema });
+    // The cached prefix bans pipes; a code slot gets a per-slot override.
+    if (s.field.code) try w.writeAll("This value is rendered verbatim inside a code block: copy the command exactly from EVIDENCE, one line, no backtick fences. Pipes and symbols are fine here.\n");
+    try w.print("ROLE: {s}\n", .{s.role});
     if (tone) |t| try w.print("TONE: {s}\n", .{t});
 
     var head: ObjectMap = .empty;
@@ -1604,6 +1677,63 @@ test "slots: apparatus-annotated, growable kinds, required only with max_items" 
     try testing.expect(slotNamed(sh, "author").field.page);
     try testing.expect(slotNamed(sh, "quotes[+]").gated());
     try testing.expectEqual(@as(usize, 1), sh.headline.len);
+}
+
+test "slots: code apparatus marks string slots and rejects other kinds" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sh = try parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "cmd":{"type":"string","optional":true,"apparatus":"code"},
+        \\ "cmds":{"type":"array<string>","optional":true,"apparatus":"code","max_items":2}}}
+    );
+    try testing.expect(slotNamed(sh, "cmd").field.code);
+    try testing.expect(slotNamed(sh, "cmds[+]").field.code);
+    // Code slots are always evidence-gated; the flag is not needed.
+    try testing.expect(slotNamed(sh, "cmd").gated());
+    try testing.expectError(error.BadShape, parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "n":{"type":"number","optional":true,"apparatus":"code"}}}
+    ));
+    try testing.expectError(error.BadShape, parseShape(a,
+        \\{"template_id":"t","fields":{
+        \\ "objs":{"type":"array<object>","optional":true,"apparatus":"code","max_items":2,"fields":{"x":{"type":"string"}}}}}
+    ));
+}
+
+test "codeInert: literal-safe inside a fence" {
+    const good = [_][]const u8{ "a | b", "SELECT * FROM t", "# x", "`x`", "a > b && c < d", "- ls -la", "x = *p + _y" };
+    for (good) |g| try testing.expect(codeInert(g) == null);
+    const bad = [_]struct { []const u8, []const u8 }{
+        .{ "```sh acmedb snapshot list```", "```" },
+        .{ "~~~sh", "~~~" },
+        .{ "acmedb snapshot list\nrm -rf /", "newline" },
+        .{ "a\rb", "newline" },
+        .{ "{{ x }}", "{{" },
+        .{ "{% if %}", "{%" },
+    };
+    for (bad) |b| try testing.expectEqualStrings(b[1], codeInert(b[0]).?);
+}
+
+test "code gate: verbatim substring of evidence, trim-insensitive" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ev = [_][]const u8{"Run acmedb snapshot list | head -5 to see the newest snapshots."};
+    try testing.expect(codeVerbatim(.{ .string = "acmedb snapshot list | head -5" }, &ev));
+    try testing.expect(codeVerbatim(.{ .string = "  acmedb snapshot list | head -5  " }, &ev));
+    try testing.expect(!codeVerbatim(.{ .string = "acmedb snapshots list | head" }, &ev));
+    try testing.expect(!codeVerbatim(.{ .string = "acmedb snapshot list | head -6" }, &ev));
+    // An array<string> item must pass too, and one bad item fails the value.
+    var ok_items = std.json.Array.init(a);
+    try ok_items.append(.{ .string = "acmedb snapshot list | head -5" });
+    try ok_items.append(.{ .string = "Run acmedb" });
+    try testing.expect(codeVerbatim(.{ .array = ok_items }, &ev));
+    var bad_items = std.json.Array.init(a);
+    try bad_items.append(.{ .string = "acmedb snapshot list | head -5" });
+    try bad_items.append(.{ .string = "rm -rf /" });
+    try testing.expect(!codeVerbatim(.{ .array = bad_items }, &ev));
 }
 
 test "canGrow and withValue never touch a non-empty value" {

@@ -1,0 +1,22 @@
+{
+  "template_id": "code",
+  "description": "Ratchet eval fixture: a code slot (lane MD-RT1). `command` renders verbatim inside a fenced block, so pipes and symbols are literal; the slot is always evidence-gated on an exact substring of a source, never a model judgement.",
+  "fields": {
+    "title": {
+      "type": "string",
+      "role": "page heading"
+    },
+    "intro": {
+      "type": "string",
+      "role": "one paragraph of prose",
+      "voice": true
+    },
+    "command": {
+      "type": "string",
+      "role": "one shell command, copied verbatim from a source, rendered in a code block",
+      "optional": true,
+      "apparatus": "code",
+      "max_words": 20
+    }
+  }
+}
