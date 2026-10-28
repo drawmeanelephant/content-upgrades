@@ -103,7 +103,90 @@ fn htmlString(s: []const u8) ?[]const u8 {
         if (!htmlSchemeOk(s[d..])) return "has a link/image target outside http:|https:|mailto:";
         i = p + 2;
     }
+    var pos: usize = 0;
+    while (pos < s.len) {
+        const eol = std.mem.indexOfAnyPos(u8, s, pos, "\r\n") orelse s.len;
+        if (refDefDest(s, pos, eol)) |dest| {
+            if (!htmlSchemeOk(dest)) return "has a link/image target outside http:|https:|mailto:";
+        }
+        pos = eol + 1;
+    }
     return null;
+}
+
+/// The destination of a link/image reference definition starting at `start`
+/// (`end` bounds its line), or null when the line isn't one dogbed would
+/// parse. Reference defs `[label]: dest` feed both [text][label] links and
+/// ![alt][label] images; dogbed parses them at up to 3 spaces of indent and
+/// inside `>` and list (`-`, `*`, `+`, `N.`/`N)`) containers, and allows the
+/// destination on the next physical line after a single line ending. The
+/// destination must end the construct — after it only whitespace or a
+/// "title"/'title'/(title) may remain, so `[Note]: this is a note` passes
+/// unflagged. `[^label]:` is a footnote, not a link def.
+fn refDefDest(s: []const u8, start: usize, end: usize) ?[]const u8 {
+    var i = start;
+    var spaces: usize = 0;
+    while (i < end and s[i] == ' ') : (i += 1) spaces += 1;
+    if (spaces > 3) return null;
+    while (i < end) {
+        if (s[i] == '>') {
+            i += 1;
+        } else if (s[i] == '-' or s[i] == '*' or s[i] == '+') {
+            if (i + 1 >= end or (s[i + 1] != ' ' and s[i + 1] != '\t')) break;
+            i += 1;
+        } else if (std.ascii.isDigit(s[i])) {
+            var j = i;
+            while (j < end and std.ascii.isDigit(s[j])) j += 1;
+            if (j + 1 >= end or (s[j] != '.' and s[j] != ')') or
+                (s[j + 1] != ' ' and s[j + 1] != '\t')) break;
+            i = j + 1;
+        } else break;
+        while (i < end and (s[i] == ' ' or s[i] == '\t')) i += 1;
+    }
+    if (i >= end or s[i] != '[') return null;
+    i += 1;
+    const label_start = i;
+    while (i < end and s[i] != ']') {
+        if (s[i] == '[') return null;
+        if (s[i] == '\\') i += 1;
+        i += 1;
+    }
+    if (i >= end or i == label_start or s[label_start] == '^') return null;
+    i += 1;
+    if (i >= end or s[i] != ':') return null;
+    i += 1;
+    var j = i;
+    var crossed = false;
+    while (j < s.len) {
+        if (s[j] == ' ' or s[j] == '\t') {
+            j += 1;
+        } else if (!crossed and (s[j] == '\r' or s[j] == '\n')) {
+            crossed = true;
+            j += if (s[j] == '\r' and j + 1 < s.len and s[j + 1] == '\n') 2 else 1;
+        } else break;
+    }
+    const dstart = j;
+    while (j < s.len and !std.ascii.isWhitespace(s[j])) j += 1;
+    if (j == dstart) return null;
+    const dest = s[dstart..j];
+    while (j < s.len and (s[j] == ' ' or s[j] == '\t')) j += 1;
+    if (j >= s.len or s[j] == '\r' or s[j] == '\n') return dest;
+    const close: u8 = switch (s[j]) {
+        '"' => '"',
+        '\'' => '\'',
+        '(' => ')',
+        else => return null,
+    };
+    j += 1;
+    while (j < s.len and s[j] != close and s[j] != '\r' and s[j] != '\n') {
+        if (s[j] == '\\') j += 1;
+        j += 1;
+    }
+    if (j >= s.len or s[j] != close) return null;
+    j += 1;
+    while (j < s.len and (s[j] == ' ' or s[j] == '\t')) j += 1;
+    if (j < s.len and s[j] != '\r' and s[j] != '\n') return null;
+    return dest;
 }
 
 /// The first html-target violation in any string inside `value`, or
@@ -216,6 +299,62 @@ test "htmlDataViolation rejects raw HTML and off-scheme link targets" {
         \\{"u":"[ok](https://x.y) [m](mailto:a@b) [h](HTTP://x) [s]( http://x )"}
         ,
         \\{"n":3,"b":true,"u":null,"o":{"k":"v"},"a":["x","**emphasis**"]}
+        ,
+    };
+    for (good) |r| {
+        const v = try std.json.parseFromSliceLeaky(std.json.Value, a, r, .{});
+        try std.testing.expect(htmlDataViolation(v) == null);
+    }
+}
+
+test "htmlDataViolation rejects reference-style link/image definitions" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const bad = [_][]const u8{
+        \\{"u":"see [c][x]\n\n[x]: javascript:alert(1)"}
+        ,
+        \\{"u":"![pic][x]\n\n[x]: data:text/html,x"}
+        ,
+        \\{"u":"see [c][x]\n\n[x]: //evil.example/x"}
+        ,
+        \\{"u":"see [c][x]\n\n   [x]: javascript:x"}
+        ,
+        \\{"u":"see [c][x]\n\n> [x]: javascript:x"}
+        ,
+        \\{"u":"see [c][x]\n\n- [x]: javascript:x"}
+        ,
+        \\{"u":"see [c][x]\n\n[x]:\njavascript:x"}
+        ,
+        \\{"u":"see [c][x]\n\n[x]:javascript:x"}
+        ,
+        \\{"u":"see [c][x]\n\n[x]: javascript:x \"t\""}
+        ,
+        \\{"u":"see [c][x]\n\n[x]: relative/path"}
+        ,
+    };
+    for (bad) |r| {
+        const v = try std.json.parseFromSliceLeaky(std.json.Value, a, r, .{});
+        try std.testing.expect(htmlDataViolation(v) != null);
+    }
+
+    const good = [_][]const u8{
+        \\{"u":"see [c][x]\n\n[x]: https://ok.example"}
+        ,
+        \\{"u":"[a][x] [b][m]\n\n[x]: http://ok\n[m]: mailto:a@b"}
+        ,
+        \\{"u":"see [c][x]\n\n[x]: javascript:x extra"}
+        ,
+        \\{"u":"[Note]: this is a note"}
+        ,
+        \\{"u":"see [c][x]\n\n    [x]: javascript:x"}
+        ,
+        \\{"u":"text [x]: javascript:x"}
+        ,
+        \\{"u":"see [c][^x]\n\n[^x]: footnote text"}
+        ,
+        \\{"u":"see [c][x]\n\n[x]:"}
         ,
     };
     for (good) |r| {
