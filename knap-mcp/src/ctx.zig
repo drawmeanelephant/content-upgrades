@@ -88,7 +88,7 @@ pub const Ctx = struct {
                 .k4o = env.get("KNAP_K4O_PATH") orelse "k4o",
                 .dogbed = env.get("KNAP_DOGBED_PATH") orelse "dogbed",
             },
-            .backend_kind = backend.parseKind(env.get("KNAP_BACKEND") orelse "mock") orelse .mock,
+            .backend_kind = try backendKind(env),
             .templates_dir = templates_dir,
             .store_dir = env.get("KNAP_MCP_HOME") orelse ".knap-mcp",
             .project_root = project_root,
@@ -116,6 +116,22 @@ pub const Ctx = struct {
         }) };
     }
 };
+
+/// KNAP_BACKEND selects the default backend kind. A set-but-unknown
+/// value is an init error, not a quiet fallthrough to mock: canned
+/// output while the operator believes the calls are live is worse than
+/// no run at all (#209). Empty (after trim) reads as unset → mock.
+fn backendKind(env: *std.process.Environ.Map) error{InvalidKNAP_BACKEND}!backend.Kind {
+    const raw = std.mem.trim(u8, env.get("KNAP_BACKEND") orelse "", " \t\r\n");
+    if (raw.len == 0) return .mock;
+    return backend.parseKind(raw) orelse {
+        std.debug.print(
+            "knap-mcp: KNAP_BACKEND '{s}' is not a backend kind (mock|spark|wonder|baseten|acp|compat)\n",
+            .{raw},
+        );
+        return error.InvalidKNAP_BACKEND;
+    };
+}
 
 /// KNAP_TEMPLATES_DIR wins; then the dir two levels up from the
 /// executable (covers zig-out/bin/knap-mcp -> <root>/templates); then
@@ -172,6 +188,22 @@ test "countUsage sums metered fields, leaves unmetered at 0" {
     try std.testing.expectEqual(@as(u64, 265), ctx.completion_tokens);
     try std.testing.expectEqual(@as(u64, 421), ctx.total_tokens);
     try std.testing.expectEqual(@as(u64, 256), ctx.reasoning_tokens);
+}
+
+test "KNAP_BACKEND: unset or blank is mock, a typo fails init loudly" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var env: std.process.Environ.Map = .init(arena.allocator());
+    try std.testing.expectEqual(backend.Kind.mock, try backendKind(&env));
+    try env.put("KNAP_BACKEND", "");
+    try std.testing.expectEqual(backend.Kind.mock, try backendKind(&env));
+    try env.put("KNAP_BACKEND", " spark ");
+    try std.testing.expectEqual(backend.Kind.spark, try backendKind(&env));
+    // Set-but-unknown: refuse rather than silently serve canned patches.
+    try env.put("KNAP_BACKEND", "bogus");
+    try std.testing.expectError(error.InvalidKNAP_BACKEND, backendKind(&env));
+    try env.put("KNAP_BACKEND", "MOCK");
+    try std.testing.expectError(error.InvalidKNAP_BACKEND, backendKind(&env));
 }
 
 test "KNAP_TEMPLATES_DIR is an explicit override" {
