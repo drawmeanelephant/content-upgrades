@@ -74,7 +74,7 @@ const commands = [_]Command{
     .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
     .{ .name = "boris-ask", .usage = "boris-ask <query> [--limit n]", .summary = "ranked snippets from the boris artifact", .run = .{ .tool = .{ .tool = "boris_ask", .key = "query", .exactly_one = "query" } } },
     .{ .name = "boris-check", .usage = "boris-check <claim>", .summary = "yes/no/unknown from boris claim pages", .run = .{ .tool = .{ .tool = "boris_check", .key = "claim", .exactly_one = "claim" } } },
-    .{ .name = "publish-check", .usage = "publish-check <doc_id>", .summary = "stage md doc in boris site; exit 1 unless ok", .run = .{ .custom = @import("tools/publish_check.zig").cli } },
+    .{ .name = "publish-check", .usage = "publish-check <doc_id> [--as <path>]", .summary = "stage md doc in boris site; exit 1 unless ok", .run = .{ .tool = .{ .tool = "knap_publish_check", .key = "doc_id", .exactly_one = "doc_id" } } },
     .{ .name = "density", .usage = "density <doc_id|file>", .summary = "formatting-density score (markdown)", .run = .{ .custom = @import("tools/density.zig").cmd } },
     .{ .name = "ratchet", .usage = "ratchet <id> [options]", .summary = "values-only density ratchet", .run = .{ .tool = .{ .tool = "knap_ratchet", .key = "template_id" } } },
     .{ .name = "ratchet-eval", .usage = "ratchet-eval [--corpus f]", .summary = "ratchet climb table (eval/ratchet.json)", .run = .{ .custom = @import("ratchet.zig").cmdEval } },
@@ -90,7 +90,7 @@ const commands = [_]Command{
 
 /// `--<name> <v>` / `--<name>=<v>` options passed to tools as same-named
 /// string arguments.
-const tool_flags = [_][]const u8{ "target", "backend", "tone", "evidence", "verifier", "limit", "max-iters" };
+const tool_flags = [_][]const u8{ "target", "backend", "tone", "evidence", "verifier", "limit", "max-iters", "as" };
 
 const usage_head =
     \\knap-mcp — AI can't do layout. So we don't let it.
@@ -113,6 +113,7 @@ const usage_tail =
     \\  --verifier <v>          heuristic (default) | none | decision
     \\  --limit <n>             boris-ask hits (default 5)
     \\  --max-iters <n>         ratchet iteration cap (default 6)
+    \\  --as <path>             publish-check: staged source path (raw profile)
     \\  --probe                 backends: GET /models per live backend, acp handshake
     \\  -h, --help              this text; <command> -h shows that command's usage
     \\
@@ -134,6 +135,8 @@ const usage_tail =
     \\  KNAP_ACP_CWD                       acp session cwd (default: process cwd)
     \\  KNAP_BORIS_SITE                    boris site dir (default <templates>/../../boris-site)
     \\  KNAP_BORIS_PATH                    boris binary for publish-check (default: PATH)
+    \\  KNAP_BORIS_STAGING                 publish-check staging profile (frozen|raw); overrides <site>/knap-site.json
+    \\  KNAP_BORIS_THEME                   publish-check theme root for boris validate (default: knap-site.json or themes/boris)
     \\  KNAP_ENGINE_TIMEOUT                engine subprocess cap, seconds (default 60, 0 off)
     \\  KNAP_CURL_TIMEOUT                  live-backend curl cap, seconds (default 60)
     \\  KNAP_CURL_CONNECT_TIMEOUT          live-backend connect cap, seconds (default 10)
@@ -539,6 +542,12 @@ test "tool_flags checked against tool input_schema" {
     try std.testing.expect(schemaHasProp(ratchet, flagProp("verifier")));
     try std.testing.expect(!schemaHasProp(ratchet, flagProp("limit")));
     try std.testing.expect(!schemaHasProp(ratchet, flagProp("target")));
+
+    const publish_check = for (&tools.all) |*t| {
+        if (std.mem.eql(u8, t.name, "knap_publish_check")) break t.input_schema;
+    } else unreachable;
+    try std.testing.expect(schemaHasProp(publish_check, flagProp("as")));
+    try std.testing.expect(!schemaHasProp(publish_check, flagProp("target")));
 }
 
 // Test discovery: `zig build test` only runs tests in files listed here,
