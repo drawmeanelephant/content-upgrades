@@ -1,0 +1,136 @@
+{
+  "schema": "knap-policy/1",
+  "note": "Worked example for filed.fyi (#250, #255). Globs are relative to content/; copy to the filed repo root as knap-policy.json, or pass --policy. Bands and floors were set from `knap-mcp audit` over filed@ce44821f (density/3): verse maxima sit just above today's maxima, prose floors ~2 points under today's means. Genre beats score: verse is never pushed toward block apparatus and never voice-rewritten line by line.",
+  "collections": [
+    {
+      "name": "haikus",
+      "glob": "haikus/**",
+      "note": "Three lines. A low score is correct. Block apparatus is damage; links and lists neither earn nor cost.",
+      "signals": {
+        "callouts": "forbid",
+        "footnotes": "forbid",
+        "tables": "forbid",
+        "embeds": "forbid",
+        "code_fences": "forbid",
+        "blockquotes": "forbid",
+        "lists": "exempt",
+        "wikilinks": "exempt",
+        "links": "exempt",
+        "fragment_links": "exempt"
+      },
+      "score": { "min": 0, "max": 20, "mean_min": 6 },
+      "voice": { "tones": [], "regions": [] }
+    },
+    {
+      "name": "limericks",
+      "glob": "limericks/**",
+      "note": "Five-line stanzas; existing emphasis is the author's. Verse lines are never voice-eligible.",
+      "signals": {
+        "callouts": "forbid",
+        "footnotes": "forbid",
+        "tables": "forbid",
+        "embeds": "forbid",
+        "code_fences": "forbid",
+        "blockquotes": "forbid",
+        "lists": "exempt",
+        "wikilinks": "exempt",
+        "links": "exempt",
+        "fragment_links": "exempt"
+      },
+      "score": { "min": 0, "max": 35, "mean_min": 19 },
+      "voice": { "tones": [], "regions": [] }
+    },
+    {
+      "name": "aphorisms",
+      "glob": "aphorisms/**",
+      "note": "One-paragraph sayings. No block pushes; a mild inline pass over the prose paragraphs is allowed.",
+      "signals": {
+        "callouts": "forbid",
+        "footnotes": "forbid",
+        "tables": "forbid",
+        "embeds": "forbid",
+        "code_fences": "forbid",
+        "blockquotes": "forbid",
+        "lists": "exempt",
+        "wikilinks": "exempt",
+        "links": "exempt",
+        "fragment_links": "exempt"
+      },
+      "score": { "min": 0, "max": 35, "mean_min": 15 },
+      "voice": { "tones": ["mild"], "regions": ["paragraphs"] }
+    },
+    {
+      "name": "mascots",
+      "glob": "mascots/**",
+      "note": "Upgrade target. Under 25 is the upgrade queue; caps stop a runaway ratchet.",
+      "signals": {
+        "callouts": { "cap": 6 },
+        "footnotes": { "cap": 12 },
+        "tables": { "cap": 4 }
+      },
+      "score": { "min": 25, "max": 75, "mean_min": 27 },
+      "voice": { "tones": ["mild", "spicy", "feral"], "regions": ["paragraphs", "list_items"] }
+    },
+    {
+      "name": "lorelog",
+      "glob": "lorelog/**",
+      "note": "Upgrade target.",
+      "signals": {
+        "callouts": { "cap": 6 },
+        "footnotes": { "cap": 12 },
+        "tables": { "cap": 4 }
+      },
+      "score": { "min": 25, "max": 75, "mean_min": 29 },
+      "voice": { "tones": ["mild", "spicy", "feral"], "regions": ["paragraphs", "list_items"] }
+    },
+    {
+      "name": "reference",
+      "glob": "reference/**",
+      "note": "Upgrade target. The ~33-word stubs land in the upgrade queue, which is where they belong.",
+      "signals": {
+        "callouts": { "cap": 6 },
+        "footnotes": { "cap": 12 },
+        "tables": { "cap": 4 }
+      },
+      "score": { "min": 25, "max": 75, "mean_min": 28 },
+      "voice": { "tones": ["mild", "spicy", "feral"], "regions": ["paragraphs", "list_items"] }
+    },
+    {
+      "name": "changelog",
+      "glob": "changelog/**",
+      "note": "Archival residue: watched for regression and over-upgrade, never queued for upgrade.",
+      "signals": {
+        "callouts": { "cap": 4 },
+        "footnotes": { "cap": 8 },
+        "tables": { "cap": 2 }
+      },
+      "score": { "max": 50, "mean_min": 23 },
+      "voice": { "tones": ["mild"], "regions": ["paragraphs", "list_items"] }
+    },
+    {
+      "name": "releases",
+      "glob": "releases/**",
+      "note": "Archival residue, as changelog. Too few records for a floor.",
+      "signals": {
+        "callouts": { "cap": 4 },
+        "footnotes": { "cap": 8 },
+        "tables": { "cap": 2 }
+      },
+      "score": { "max": 50 },
+      "voice": { "tones": ["mild"], "regions": ["paragraphs", "list_items"] }
+    },
+    {
+      "name": "posts",
+      "glob": ["posts/**", "guides/**"],
+      "note": "Editorial prose. Too few records for a floor or an upgrade queue yet.",
+      "score": { "max": 75 },
+      "voice": { "tones": ["mild", "spicy"], "regions": ["paragraphs", "list_items"] }
+    },
+    {
+      "name": "indexes",
+      "glob": "*.md",
+      "note": "Trunk index pages (haikus.md, ...) and index.md: listings, not records. Judged by nothing, voiced by nothing.",
+      "voice": { "tones": [], "regions": [] }
+    }
+  ]
+}
