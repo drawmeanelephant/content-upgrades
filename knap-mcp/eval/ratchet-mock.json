@@ -176,6 +176,20 @@
         "Open: how wal_dir data migrates when the WAL lives on a separate volume.",
         "Open: whether the roadmap dates in the tracker still hold."
       ]
+    },
+    "palette": {
+      "sections[+]:steps": [
+        {"kind": "steps", "title": "Restore in order", "items": ["List the newest snapshots", "Pick a point before the damage", "Restore into a scratch instance", "Check row counts, then promote"]}
+      ],
+      "sections[+]:checklist": [
+        {"kind": "checklist", "title": "Before you restore", "items": ["Confirm the incident start time", "Check free disk on the scratch host", "Tell the on-call channel"]}
+      ],
+      "sections[+]:code": [
+        {"kind": "code", "title": "List snapshots", "command": "acmedb snapshot list | head -5"}
+      ],
+      "sections[+]:quote": [
+        {"kind": "quote", "text": "Snapshots are online, incremental, and restorable to any point in the last seven days."}
+      ]
     }
   }
 }

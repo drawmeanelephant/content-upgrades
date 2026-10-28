@@ -241,6 +241,32 @@
         "items[+]": ["Snapshots of databases over two terabytes take hours."]
       },
       "expect": {"stop": "plateau"}
+    },
+    {
+      "id": "fixture-palette",
+      "template_path": "ratchet/palette.knap",
+      "shape_path": "ratchet/palette.shape.json",
+      "data": "@ratchet/palette.data.json",
+      "expect": {"min_accepted": 2, "min_gain": 1}
+    },
+    {
+      "id": "adv-palette-kind-swap",
+      "template_path": "ratchet/palette.knap",
+      "shape_path": "ratchet/palette.shape.json",
+      "data": "@ratchet/palette.data.json",
+      "mock": {"sections[+]:steps": [
+        {"kind": "checklist", "title": "Restore in order", "items": ["List the newest snapshots", "Pick a point before the damage"]}
+      ]},
+      "expect": {"reject": {"schema": 1}, "min_accepted": 1}
+    },
+    {
+      "id": "adv-palette-budget",
+      "template_path": "ratchet/palette.knap",
+      "shape_path": "ratchet/palette.shape.json",
+      "data": "@ratchet/palette.data.json",
+      "max_calls": 1,
+      "mock": {"sections[+]:steps": []},
+      "expect": {"stop": "budget", "reject": {"declined": 1}}
     }
   ]
 }

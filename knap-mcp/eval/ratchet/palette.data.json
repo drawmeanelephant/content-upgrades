@@ -1,0 +1,9 @@
+{
+  "title": "Restoring an AcmeDB snapshot",
+  "intro": "Restoring a snapshot is the half of the AcmeDB 2.0 snapshot story that\nnobody rehearses until the night it matters. Taking snapshots is\nautomatic once the hourly schedule is on; getting one back is a\ndeliberate act, and it is worth doing calmly and in the same order every\ntime. A restore never touches the live primary. It lands in a scratch\ninstance first, where you can check row counts, run the queries that\nprompted the restore in the first place, and decide whether the point\nyou picked is actually before the damage. Only then do you promote the\nscratch copy or copy the rows you need back across. The catalog keeps\nevery snapshot inside the retention window, so the first move is always\nto list what exists and how fresh it is, and the second is to pick a\nrestore point with some margin before the incident started. Teams that\nskip the scratch step tend to restore the wrong second and have to do it\ntwice, under more pressure, with the same people. This page collects the\nblocks a restore needs: the order of operations, the checks to tick off\nbefore you start, the one command that opens every restore, and the line\nfrom the docs that says how far back you can go.",
+  "sections": [],
+  "sources": [
+    {"id": "runbook", "quote": "Run acmedb snapshot list | head -5 to see the newest snapshots."},
+    {"id": "changelog", "quote": "Snapshots are online, incremental, and restorable to any point in the last seven days."}
+  ]
+}
