@@ -150,12 +150,48 @@ pub fn sweepScratch(ctx: *Ctx) void {
     }
 }
 
+/// The pid segment of a `scratch-<pid>-<ns>-<counter>.<ext>` name; null
+/// when it doesn't parse, which sends the caller back to the age-only
+/// rule.
+fn scratchPid(name: []const u8) ?i32 {
+    const rest = name["scratch-".len..];
+    const dash = std.mem.indexOfScalar(u8, rest, '-') orelse return null;
+    return std.fmt.parseInt(i32, rest[0..dash], 10) catch null;
+}
+
+/// True while `pid` belongs to a live process. kill(pid, 0) reports ESRCH
+/// only when nothing owns the pid — EPERM still means alive. Windows has
+/// no kill(2); an OpenProcess handle is the equivalent check.
+fn pidAlive(pid: i32) bool {
+    return switch (builtin.os.tag) {
+        .linux => std.os.linux.errno(std.os.linux.kill(pid, @fromBackingInt(@intCast(0)))) != .SRCH,
+        .windows => blk: {
+            const h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, .FALSE, @intCast(pid)) orelse
+                break :blk false;
+            std.os.windows.CloseHandle(h);
+            break :blk true;
+        },
+        else => std.c.errno(std.c.kill(pid, @fromBackingInt(@intCast(0)))) != .SRCH,
+    };
+}
+
+const PROCESS_QUERY_LIMITED_INFORMATION: std.os.windows.DWORD = 0x1000;
+
+extern "kernel32" fn OpenProcess(
+    dwDesiredAccess: std.os.windows.DWORD,
+    bInheritHandle: std.os.windows.BOOL,
+    dwProcessId: std.os.windows.DWORD,
+) callconv(.winapi) ?std.os.windows.HANDLE;
+
 /// Delete any process's `scratch-*` files older than an hour. main calls
 /// this once at startup so leftovers of a SIGKILLed or crashed run —
 /// request bodies holding full prompts, staged data, working templates —
 /// don't linger forever; everything in tmp/ is written 0600 owner-only
 /// via writePrivate. sweepScratch still handles the live pid's files per
-/// request. Non-`scratch-` names are never touched.
+/// request. A `scratch-<pid>-…` file whose pid is still alive is skipped:
+/// a long-lived server or CLI can hold a scratch file past the cutoff.
+/// Names that don't parse to a pid get the age-only rule. Non-`scratch-`
+/// names are never touched.
 pub fn sweepStale(ctx: *Ctx) void {
     const dir_path = std.fmt.allocPrint(ctx.arena, "{s}/tmp", .{ctx.store_dir}) catch return;
     var d = std.Io.Dir.openDir(.cwd(), ctx.io, dir_path, .{ .iterate = true }) catch return;
@@ -165,6 +201,11 @@ pub fn sweepStale(ctx: *Ctx) void {
     while (it.next(ctx.io) catch null) |entry| {
         if (entry.kind != .file) continue;
         if (!std.mem.startsWith(u8, entry.name, "scratch-")) continue;
+        // A live pid may still be staging the file — its age means
+        // nothing while the process is up.
+        if (scratchPid(entry.name)) |pid| {
+            if (pidAlive(pid)) continue;
+        }
         const stat = d.statFile(ctx.io, entry.name, .{}) catch continue;
         if (stat.mtime.nanoseconds >= cutoff) continue;
         const rel = std.fmt.allocPrint(ctx.arena, "{s}/{s}", .{ dir_path, entry.name }) catch continue;
@@ -334,21 +375,30 @@ test "sweepStale removes only aged scratch files" {
     var ctx = try testCtx(a, &env, &tmp);
 
     const dir = try scratchDir(&ctx);
-    const stale = try std.fmt.allocPrint(a, "{s}/scratch-1-1-1.json", .{dir}); // foreign pid
-    const fresh = try std.fmt.allocPrint(a, "{s}/scratch-1-2-2.json", .{dir});
+    // Above every supported OS's max pid (Linux pid_max tops out at
+    // 2^22), so guaranteed dead.
+    const dead_pid: i32 = 1 << 24;
+    const stale = try std.fmt.allocPrint(a, "{s}/scratch-{d}-1-1.json", .{ dir, dead_pid });
+    const live = try std.fmt.allocPrint(a, "{s}/scratch-{d}-2-2.json", .{ dir, processId() });
+    const unparsed = try std.fmt.allocPrint(a, "{s}/scratch-nopid-3-3.json", .{dir});
+    const fresh = try std.fmt.allocPrint(a, "{s}/scratch-{d}-4-4.json", .{ dir, dead_pid });
     const keeper = try std.fmt.allocPrint(a, "{s}/keep.txt", .{dir});
-    for ([_][]const u8{ stale, fresh, keeper }) |p|
+    for ([_][]const u8{ stale, live, unparsed, fresh, keeper }) |p|
         try std.Io.Dir.writeFile(.cwd(), std.testing.io, .{ .sub_path = p, .data = "{}" });
     // Two hours old — past the sweep cutoff.
     const old: std.Io.Timestamp = .{
         .nanoseconds = std.Io.Timestamp.now(std.testing.io, .real).nanoseconds - 2 * std.time.ns_per_hour,
     };
-    for ([_][]const u8{ stale, keeper }) |p|
+    for ([_][]const u8{ stale, live, unparsed, keeper }) |p|
         try std.Io.Dir.setTimestamps(.cwd(), std.testing.io, p, .{ .modify_timestamp = .{ .new = old } });
 
     sweepStale(&ctx);
 
+    // Dead pid or unparseable name: the age-only rule applies.
     try std.testing.expectError(error.FileNotFound, std.Io.Dir.statFile(.cwd(), std.testing.io, stale, .{}));
+    try std.testing.expectError(error.FileNotFound, std.Io.Dir.statFile(.cwd(), std.testing.io, unparsed, .{}));
+    // A scratch file whose pid is still alive is kept despite its age.
+    _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, live, .{});
     _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, fresh, .{});
     // Stale files that aren't scratch-* are left alone.
     _ = try std.Io.Dir.statFile(.cwd(), std.testing.io, keeper, .{});
