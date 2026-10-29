@@ -29,7 +29,7 @@
 # change. Keep the version at least 7 days published (npm view <pkg> time).
 CODEX_ACP_VERSION=0.16.0
 
-KNAP_PROFILES="fake spark wonder baseten compat ollama opencode-spark-1.3 opencode-spark-1.2 opencode-wonder-1.0 devin-wonder devin-swe-2 devin-nemotron devin-summarizer droid-nemotron droid-glm droid-deepseek droid-mistral gemini codex"
+KNAP_PROFILES="fake spark wonder baseten compat ollama opencode-spark-1.3 opencode-spark-1.2 opencode-wonder-1.0 devin-wonder devin-swe-2 devin-nemotron devin-summarizer droid-nemotron droid-glm droid-deepseek droid-mistral droid-spark-1.3 gemini codex"
 
 # opencode acp has no --model flag and defaults to opencode/flint-40b-free,
 # so the model always goes through OPENCODE_CONFIG_CONTENT. The single quotes
@@ -105,6 +105,7 @@ knap_profile() {
     droid-glm) knap_droid glm-5.3-flash 'GLM 5.3 Flash' none ;;
     droid-deepseek) knap_droid deepseek-v4.1-flash 'DeepSeek V4.1 Flash' none ;;
     droid-mistral) knap_droid mistral-medium-3.5 'Mistral Medium 3.5' none ;;
+    droid-spark-1.3) knap_droid muse-spark-1.3 'Muse Spark 1.3' low ;;
     gemini)
         backend=acp cmds=gemini expect='gemini-*'
         label='Gemini via ACP (gemini-cli, Google account)'
