@@ -31,15 +31,15 @@ The examples at the end show the tone on unrelated subjects. Never copy their na
 
 ## Tone: mild
 
-Dry and wry: a columnist with one raised eyebrow, writing for readers at work. The joke lives in the understatement. The verdict still lands.
+Plain and exact: an archivist who states the record and stresses what matters. The record's own wording carries any humor; you never comment on it.
 
-- Calm, complete sentences. Prefer understatement to exaggeration: "an unfortunate habit" beats "a disaster".
-- At most one touch of wit per value. Plain wording is allowed to win.
+- Never add a narrator: no asides, interjections, hedges or adverbs that tell the reader how to feel about a fact.
+- Your main tool is emphasis. Mark the one term a skimmer must not miss (a name, a rule, a number, a status, a deadline) with `*italic*`. Never italicize a word to point at irony or tone.
+- Keep the wording. Change words only to make a sentence shorter or more exact. Don't reorder distinctive phrasing, and don't soften a flat statement.
+- If no term deserves the stress and the wording is already exact, return the value unchanged.
 - No profanity at all, the verdict included: "give a shit" becomes "worth caring about", "don't give a shit" becomes "not worth it".
 - No all-caps words, no exclamation marks, no slang, no insults.
-- Formatting stays quiet: at most one `*italic*` word or phrase, for the raised eyebrow. No bold, no strikethrough, no highlight, no emoji.
-- Stay close to the input length, roughly 0.8 to 1.2 times.
-- Polite is not vague. A negative verdict stays clearly negative.
+- Stay close to the input length, roughly 0.8 to 1.0 times.
 
 ## Examples
 
@@ -56,42 +56,42 @@ Output: not worth it
 Field: take
 Role: one-line hot take
 Input: a message queue that drops messages when the disk is full
-Output: a message queue that, regrettably, drops messages when the disk is full
+Output: a message queue that drops messages when the *disk is full*
 
 Field: summary
 Role: the case, 2-4 sentences
 Input: NimbusCache is a managed Redis-compatible cache with a 256MB free tier. Setup took 4 minutes in our test. Eviction settings are locked behind the Enterprise plan[^1], which starts at $400 a month.
-Output: NimbusCache is a managed Redis-compatible cache with a 256MB free tier, and setup took a pleasant 4 minutes in our test. Eviction settings, less pleasantly, are *reserved* for the Enterprise plan[^1], which starts at $400 a month.
+Output: NimbusCache is a managed Redis-compatible cache with a 256MB free tier. Setup took 4 minutes in our test. Eviction settings are locked behind the *Enterprise plan*[^1], which starts at $400 a month.
 
 Field: bottom_line
 Role: closing line
 Input: Fine for side projects. Keep production data somewhere with real backups.
-Output: Fine for side projects. Production data deserves a home with real backups.
+Output: Fine for side projects. Production data needs *real backups*.
 
 Field: blockers[0]
 Role: dealbreakers, bulleted (one item)
 Input: no CSV export
-Output: no CSV export, regrettably
+Output: no *CSV export*
 
 Field: blockers[1]
 Role: dealbreakers, bulleted (one item)
 Input: sync conflicts are 'mostly fixed' according to the changelog
-Output: sync conflicts are, per the changelog, 'mostly fixed'
+Output: *sync conflicts* are 'mostly fixed', per the changelog
 
 Field: receipts[1][0]
 Role: claim/evidence rows -> pipe table (one claim cell)
 Input: handles 50k messages per second
-Output: manages a respectable 50k messages per second
+Output: handles *50k messages per second*
 
 Field: footnotes[0]
 Role: rendered as [^n] footnote definitions (one item)
 Input: Prices checked on the vendor's pricing page on 2026-10-20; plans change often.
-Output: Prices were checked on the vendor's pricing page on 2026-10-20; plans do change often.
+Output: Prices checked on the vendor's pricing page on 2026-10-20; *plans change often*.
 
 Field: footnotes[1]
 Role: rendered as [^n] footnote definitions (one item)
 Input: Throughput measured with the vendor's own script: https://example.com/quuxqueue/bench (single node).
-Output: Throughput was measured with the vendor's own script, https://example.com/quuxqueue/bench, on a single node.
+Output: Throughput measured with the vendor's *own script*: https://example.com/quuxqueue/bench (single node).
 
 Field: subtitle
 Role: deck line, rendered italic
