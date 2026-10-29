@@ -1,0 +1,12 @@
+# Live tic-sampling corpus: pre-pass filed records, read from a local filed
+# checkout ($KNAP_FILED_DIR, default ~/dev/filed.fyi) at the pinned commit.
+# filed.fyi is all-rights-reserved, so its text is never vendored here.
+# These six are byte-identical at the pin to the `before` side of filed
+# #1057/#1059/#1060, so a live sample lines up with what SWE-2 shipped.
+# commit: ce44821f
+content/mascots/257.orphan-symmetry.md
+content/mascots/266.warm-hold-music.md
+content/lorelog/LLG-0217-CNTR.md
+content/lorelog/LLG-0316-MBR.md
+content/reference/fref-0821-avtl.md
+content/reference/fref-0822-actn.md
