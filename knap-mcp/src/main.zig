@@ -73,6 +73,7 @@ const commands = [_]Command{
     .{ .name = "format-check", .usage = "format-check <doc_id|file>", .summary = "advisory structure lint (warnings only)", .run = .{ .custom = @import("tools/format_check.zig").cli } },
     .{ .name = "voice", .usage = "voice <id> --tone <t>", .summary = "rewrite voice: true values in a tone", .run = .{ .tool = .{ .tool = "knap_voice", .key = "template_id" } } },
     .{ .name = "doc-voice", .usage = "doc-voice <doc> --tone <t>", .summary = "guarded voice pass over a record (dry-run)", .run = .{ .custom = @import("tools/doc_voice.zig").cli } },
+    .{ .name = "voice-tics", .usage = "voice-tics <before> <after>...", .summary = "profile a voice pass for repeated editorial tics", .run = .{ .custom = @import("voicetics.zig").cli } },
     .{ .name = "extract", .usage = "extract <doc_id|file> --template <id>", .summary = "filed record -> template data (+insert fragments)", .run = .{ .custom = @import("tools/extract.zig").cli } },
     .{ .name = "structhash", .usage = "structhash <doc_id|file>...", .summary = "layout skeleton hash, text dropped", .run = .{ .custom = @import("tools/structure_hash.zig").cli } },
     .{ .name = "verify-citation", .usage = "verify-citation <claim>", .summary = "advisory claim vs --evidence check", .run = .{ .tool = .{ .tool = "knap_verify_citation", .key = "claim", .exactly_one = "claim" } } },
@@ -128,6 +129,7 @@ const usage_tail =
     \\  --dry-run | --apply --out <file>   doc-voice: dry-run (default) or write the patched doc to --out (never into content/)
     \\  --report <file>         doc-voice: report JSON to file; stdout then carries the patched doc
     \\  --replies <jsonl>       doc-voice: canned {"input","output"} replies, tried before the backend
+    \\  --label, --min-runs <n>, --top <n>, --lexicon <file>   voice-tics: profile label; repeat threshold (default 3); list length; phrase list
     \\  --probe                 backends: GET /models per live backend, acp handshake
     \\  -h, --help              this text; <command> -h shows that command's usage
     \\
@@ -673,4 +675,5 @@ test {
     _ = @import("tools/voice.zig");
     _ = @import("verifier.zig");
     _ = @import("voice.zig");
+    _ = @import("voicetics.zig");
 }
