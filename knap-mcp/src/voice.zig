@@ -1345,6 +1345,7 @@ pub fn guard(a: Allocator, tone: Tone, role: []const u8, footnote_abutting: bool
 
 const frontmatter = @import("frontmatter.zig");
 const density = @import("density.zig");
+const voicetics = @import("voicetics.zig");
 
 pub const RunKind = enum {
     paragraph,
@@ -1617,12 +1618,22 @@ fn sameList(x: []const []const u8, y: []const []const u8) bool {
     return true;
 }
 
-/// The field guard plus the doc pass's own rule: protected atoms keep
-/// their exact order (the field guard checks presence, not order).
+/// The field guard plus the doc pass's own rules: protected atoms keep
+/// their exact order (the field guard checks presence, not order), and a
+/// mild reply may not add a stock narrator phrase (#385).
 pub fn docGuard(a: Allocator, tone: Tone, role: []const u8, in_: []const u8, out: []const u8) Allocator.Error!Check {
     var c = try guard(a, tone, role, false, in_, out);
     if (!sameList(try atomList(a, in_), try atomList(a, out)))
         try c.hard.append(a, "moves or edits a protected atom");
+    if (tone == .mild) {
+        const wi = try voicetics.words(a, in_);
+        const wo = try voicetics.words(a, out);
+        for (voicetics.default_lexicon) |phrase| {
+            const pw = try voicetics.words(a, phrase);
+            if (voicetics.phraseCount(wo, pw) > voicetics.phraseCount(wi, pw))
+                try c.hard.append(a, try std.fmt.allocPrint(a, "adds narrator phrase '{s}'", .{phrase}));
+        }
+    }
     return c;
 }
 
@@ -2591,6 +2602,22 @@ test "docGuard: block markers, edited link targets and dropped markup are reject
     const two = "See [[a/A-1]] then [[b/B-2]] for more context today.";
     const swapped = try docGuard(a, .feral, paragraph_role, two, "See [[b/B-2]] then [[a/A-1]] for **more** context today.");
     try testing.expect(std.mem.indexOf(u8, try joined(a, swapped.hard.items), "moves or edits a protected atom") != null);
+}
+
+test "docGuard: a mild reply may not add a stock narrator phrase" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const added = try docGuard(a, .mild, paragraph_role, "The form was lost.", "The form was, regrettably, lost.");
+    const why = try joined(a, added.hard.items);
+    if (std.mem.indexOf(u8, why, "adds narrator phrase 'regrettably'") == null) {
+        std.debug.print("want \"adds narrator phrase 'regrettably'\", got '{s}'\n", .{why});
+        return error.TestUnexpectedResult;
+    }
+    // A phrase the input already had isn't an addition.
+    try testing.expect((try docGuard(a, .mild, paragraph_role, "The form was, regrettably, lost.", "The form was, regrettably, *lost*.")).passes());
+    // The narrator check is mild-only.
+    try testing.expect((try docGuard(a, .feral, paragraph_role, "The form was lost.", "The form was, regrettably, lost.")).passes());
 }
 
 test "mockEmphasis: longest free lowercase word, never inside markup" {

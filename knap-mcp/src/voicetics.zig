@@ -160,7 +160,7 @@ fn countOf(m: *const Counts, k: []const u8) usize {
 }
 
 /// Occurrences of the word sequence `phrase` in `ws`.
-fn phraseCount(ws: []const []const u8, phrase: []const []const u8) usize {
+pub fn phraseCount(ws: []const []const u8, phrase: []const []const u8) usize {
     if (phrase.len == 0 or ws.len < phrase.len) return 0;
     var n: usize = 0;
     var i: usize = 0;
