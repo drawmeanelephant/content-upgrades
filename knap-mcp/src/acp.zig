@@ -7,7 +7,12 @@
 //! Lifecycle: one agent subprocess per knap-mcp process, spawned lazily
 //! on the first call and respawned only if it dies or `KNAP_ACP_AGENT`
 //! changes; one `session/new` per prompt, so repair iterations and voice
-//! slots never see each other's turns. The contract is prompt in, text
+//! slots never see each other's turns. Each turn's session is closed
+//! with `session/close` once it settles: droid caps an agent at ~49 open
+//! sessions and a session it never hears about again stays open forever.
+//! Agents that predate the method answer -32601, which the next call
+//! discards as a stale reply; a `session/new` refused anyway gets one
+//! retry on a respawned agent. The contract is prompt in, text
 //! out: the client advertises no fs/terminal capabilities, cancels every
 //! `session/request_permission`, refuses every other agent→client request,
 //! and keeps only `agent_message_chunk` text for its own session.
@@ -122,16 +127,20 @@ pub const Selection = struct {
 /// (`opencode acp` uses `flint-40b-free` unless configured), so a live
 /// run checks this before it starts.
 pub fn probe(ctx: *Ctx) Error!Selection {
-    try ensure(ctx, try requireAgent(ctx));
-    _, const sel = try newSession(ctx, ctx.deadline(ctx.envSecs("KNAP_ACP_TIMEOUT", 180)));
+    const line = try requireAgent(ctx);
+    try ensure(ctx, line);
+    const sid, const sel = try freshSession(ctx, line, ctx.deadline(ctx.envSecs("KNAP_ACP_TIMEOUT", 180)));
+    closeSession(ctx, sid);
     return sel;
 }
 
 /// Run one prompt turn in a fresh session on the (lazily started) agent.
 pub fn prompt(ctx: *Ctx, text: []const u8) Error!Turn {
-    try ensure(ctx, try requireAgent(ctx));
+    const line = try requireAgent(ctx);
+    try ensure(ctx, line);
     const deadline = ctx.deadline(ctx.envSecs("KNAP_ACP_TIMEOUT", 180));
-    const sid, _ = try newSession(ctx, deadline);
+    const sid, _ = try freshSession(ctx, line, deadline);
+    defer closeSession(ctx, sid);
 
     var params: std.Io.Writer.Allocating = .init(ctx.arena);
     try params.writer.writeAll("{\"sessionId\":");
@@ -144,6 +153,20 @@ pub fn prompt(ctx: *Ctx, text: []const u8) Error!Turn {
     const stop = str(get(result, "stopReason")) orelse "";
     if (std.mem.eql(u8, stop, "cancelled")) return ctx.fail("acp agent '{s}' cancelled the turn", .{agent.name});
     return .{ .text = reply.written(), .stop_reason = stop, .usage = get(result, "usage") };
+}
+
+/// `session/new` with one respawned retry when the live agent refuses:
+/// droid answers a bare "Internal error" once its ~49-session cap is
+/// reached, and a fresh process holds no sessions at all. A failure that
+/// already killed the agent (`!live`) is a broken pipe or bad JSON, not
+/// a session count, and would only fail the same way again.
+fn freshSession(ctx: *Ctx, line: []const u8, deadline: std.Io.Timeout) Error!struct { []const u8, Selection } {
+    return newSession(ctx, deadline) catch |e| {
+        if (!live) return e;
+        shutdown(ctx.io);
+        try ensure(ctx, line);
+        return newSession(ctx, deadline);
+    };
 }
 
 /// `session/new` on the running agent: the session id, and the selection
@@ -329,6 +352,24 @@ fn collect(msg: std.json.Value, sink: Sink) Error!void {
     const content = get(update, "content") orelse return;
     if (!std.mem.eql(u8, str(get(content, "type")) orelse "", "text")) return;
     try sink.out.writeAll(str(get(content, "text")) orelse "");
+}
+
+/// Tell the agent a turn's session is over. It has to be a request —
+/// droid honors `session/close` as a method but drops it as a
+/// notification — and its reply is never awaited: the next `call` skips
+/// it as a stale id, whether it is `{}` or -32601 from an agent that
+/// never heard of the method. Best-effort: a failed send means a dead
+/// pipe, which the prompt path already accounts for.
+fn closeSession(ctx: *Ctx, sid: []const u8) void {
+    if (!live) return;
+    agent.next_id += 1;
+    var out: std.Io.Writer.Allocating = .init(ctx.arena);
+    out.writer.writeAll("{\"jsonrpc\":\"2.0\",\"id\":") catch return;
+    std.json.Stringify.value(agent.next_id, .{}, &out.writer) catch return;
+    out.writer.writeAll(",\"method\":\"session/close\",\"params\":{\"sessionId\":") catch return;
+    std.json.Stringify.value(sid, .{}, &out.writer) catch return;
+    out.writer.writeAll("}}\n") catch return;
+    send(ctx, ctx.deadline(cancel_grace_secs), out.written()) catch {};
 }
 
 fn notifyCancel(ctx: *Ctx, deadline: std.Io.Timeout, sid: []const u8) Error!void {
@@ -538,6 +579,31 @@ test "a changed KNAP_ACP_AGENT respawns the agent" {
     const t = try prompt(&ctx, "x");
     try testing.expectEqualStrings("{% if a", t.text);
     try testing.expectEqualStrings("max_tokens", t.stop_reason);
+}
+
+test "a finished turn closes its session, so a capped agent keeps answering" {
+    var f: FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    var ctx = try f.ctx("cap1");
+    const t1 = try prompt(&ctx, "x");
+    try testing.expectEqualStrings("reply from s1", t1.text);
+    // cap1 refuses a second session/new while one is open: the same
+    // process answering again means session/close freed the slot, not a
+    // respawned agent.
+    const pid = agent.child.id;
+    const t2 = try prompt(&ctx, "x");
+    try testing.expectEqualStrings("reply from s2", t2.text);
+    try testing.expectEqual(pid, agent.child.id);
+}
+
+test "a refused session/new gets one respawned retry" {
+    var f: FakeAgent = undefined;
+    try f.init();
+    defer f.deinit();
+    var ctx = try f.ctx("flake");
+    const t = try prompt(&ctx, "x");
+    try testing.expectEqualStrings("reply from s1", t.text);
 }
 
 test "a hung turn is cancelled at the deadline and the agent survives" {
