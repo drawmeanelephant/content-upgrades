@@ -17,6 +17,11 @@
 #   crash   exit mid-turn
 #   auth    session/new fails with an auth error
 #   v2      initialize answers protocolVersion 2
+#   cap1    session/new fails once one session is already open — droid's
+#           ~49-session cap scaled down to 1; session/close frees the slot
+#   flake   the first session/new of the first process fails with a bare
+#           "Internal error" (droid's cap reply); a respawned process
+#           finds the state file and answers
 #   echo    replies with the prompt's last `knap-smoke-<task>` token, or
 #           with a closed `{% if %}` region when there is none
 #
@@ -24,6 +29,7 @@
 # configOptions (mode `legacy`: only the older models.currentModelId).
 mode=$1
 sessions=0
+open=0
 pending=
 while IFS= read -r line; do
   id=$(printf '%s\n' "$line" | sed -n 's/^{"jsonrpc":"2.0","id":\([0-9]*\),.*/\1/p')
@@ -38,7 +44,17 @@ while IFS= read -r line; do
       printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32000,"message":"Authentication required"}}\n' "$id"
       continue
     fi
+    if [ "$mode" = cap1 ] && [ "$open" -ge 1 ]; then
+      printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message":"Internal error"}}\n' "$id"
+      continue
+    fi
+    if [ "$mode" = flake ] && [ ! -f "$(dirname "$0")/flake.seen" ]; then
+      : >"$(dirname "$0")/flake.seen"
+      printf '{"jsonrpc":"2.0","id":%s,"error":{"code":-32603,"message":"Internal error"}}\n' "$id"
+      continue
+    fi
     sessions=$((sessions + 1))
+    open=$((open + 1))
     printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s%s","update":{"sessionUpdate":"available_commands_update","availableCommands":[]}}}\n' "$sessions"
     if [ "$mode" = legacy ]; then
       printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"s%s","models":{"currentModelId":"fake-legacy","availableModels":[]}}}\n' "$id" "$sessions"
@@ -52,7 +68,7 @@ while IFS= read -r line; do
   *'"method":"session/prompt"'*)
     s="s$sessions"
     case $mode in
-    ok | deaf)
+    ok | deaf | cap1 | flake)
       printf '{"jsonrpc":"2.0","method":"_vendor/noise","params":{}}\n'
       printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"%s","update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"thinking"}}}}\n' "$s"
       printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"other","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"WRONG"}}}}\n'
@@ -90,6 +106,10 @@ while IFS= read -r line; do
     hang | mute) pending=$id ;;
     crash) exit 3 ;;
     esac
+    ;;
+  *'"method":"session/close"'*)
+    open=$((open - 1)); [ "$open" -lt 0 ] && open=0
+    printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id"
     ;;
   *'"method":"session/cancel"'*)
     [ "$mode" = hang ] && printf '{"jsonrpc":"2.0","id":%s,"result":{"stopReason":"cancelled"}}\n' "$pending"
