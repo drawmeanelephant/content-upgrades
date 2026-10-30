@@ -103,7 +103,12 @@ knap_profile() {
         ;;
     droid-nemotron) knap_droid nemotron-3.5-super 'Nemotron 3.5 Super' none ;;
     droid-glm) knap_droid glm-5.3-flash 'GLM 5.3 Flash' none ;;
-    droid-deepseek) knap_droid deepseek-v4.1-flash 'DeepSeek V4.1 Flash' none ;;
+    # deepseek-v4.1-flash now resolves to the dated snapshot
+    # deepseek-v4.1-flash-1017, so the expect glob trails a `*`.
+    droid-deepseek)
+        knap_droid deepseek-v4.1-flash 'DeepSeek V4.1 Flash' none
+        expect='deepseek-v4.1-flash*'
+        ;;
     droid-mistral) knap_droid mistral-medium-3.5 'Mistral Medium 3.5' none ;;
     droid-spark-1.3) knap_droid muse-spark-1.3 'Muse Spark 1.3' low ;;
     gemini)
