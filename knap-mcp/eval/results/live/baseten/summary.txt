@@ -2,8 +2,8 @@ profile: baseten
 label:   Muse Spark open (Baseten)
 backend: baseten   model: meta-models/muse-spark-open-1026   effort: -
 smoke:   6/6 ok
-repair:  22/22 conv, 1.05 iters, 8/22 exact
-repair (2nap): -
+repair:  22/22 conv, 1.05 iters, 9/22 exact
+repair (2nap): 165/167 conv, 1.02 iters, 107/157 exact
 ratchet: 8/9 cases ok, inert 0
 voice:   2/2 layout-identical
 
