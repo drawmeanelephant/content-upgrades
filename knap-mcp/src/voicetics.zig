@@ -148,7 +148,7 @@ fn dashes(s: []const u8) usize {
     return std.mem.count(u8, s, "\u{2014}") + std.mem.count(u8, s, "\u{2013}") + std.mem.count(u8, s, " -- ");
 }
 
-const Counts = std.StringHashMapUnmanaged(usize);
+pub const Counts = std.StringHashMapUnmanaged(usize);
 
 fn bump(a: Allocator, m: *Counts, k: []const u8, n: usize) Allocator.Error!void {
     const gop = try m.getOrPut(a, k);
@@ -157,6 +157,45 @@ fn bump(a: Allocator, m: *Counts, k: []const u8, n: usize) Allocator.Error!void 
 
 fn countOf(m: *const Counts, k: []const u8) usize {
     return m.get(k) orelse 0;
+}
+
+pub fn isStop(w: []const u8) bool {
+    return listed(&stopwords, w);
+}
+
+pub fn strLess(_: void, x: []const u8, y: []const u8) bool {
+    return std.mem.lessThan(u8, x, y);
+}
+
+/// Multiset of the word occurrences `after` carries beyond `before`.
+pub fn addedCounts(a: Allocator, before: []const []const u8, after: []const []const u8) Allocator.Error!Counts {
+    var left: Counts = .empty;
+    for (before) |w| try bump(a, &left, w, 1);
+    var added: Counts = .empty;
+    for (after) |w| {
+        const n = countOf(&left, w);
+        if (n > 0) {
+            left.putAssumeCapacity(w, n - 1);
+            continue;
+        }
+        try bump(a, &added, w, 1);
+    }
+    return added;
+}
+
+/// Sorted, de-duplicated content words (non-stopwords) `after` adds over
+/// `before` — the per-run "what the pass introduced" set the doc-level
+/// seen-check and the ledger share (#390).
+pub fn addedContent(a: Allocator, before: []const u8, after: []const u8) Allocator.Error![]const []const u8 {
+    const m = try addedCounts(a, try words(a, before), try words(a, after));
+    var out: std.ArrayList([]const u8) = .empty;
+    var it = m.iterator();
+    while (it.next()) |e| {
+        if (isStop(e.key_ptr.*)) continue;
+        try out.append(a, e.key_ptr.*);
+    }
+    std.mem.sort([]const u8, out.items, {}, strLess);
+    return out.items;
 }
 
 /// Occurrences of the word sequence `phrase` in `ws`.
@@ -280,20 +319,14 @@ pub fn score(a: Allocator, pairs: []const Pair, o: Options) Allocator.Error!Prof
 
         var before_counts: Counts = .empty;
         for (wb) |w| try bump(a, &before_counts, w, 1);
-        var added_set: Counts = .empty;
+        const added_set = try addedCounts(a, wb, wa);
         var local_uni: Counts = .empty;
-        var left = try before_counts.clone(a);
-        for (wa) |w| {
-            const n = countOf(&left, w);
-            if (n > 0) {
-                left.putAssumeCapacity(w, n - 1);
-                continue;
-            }
-            p.added_words += 1;
-            try bump(a, &added_set, w, 1);
-            if (listed(&stopwords, w)) continue;
-            p.added_content_words += 1;
-            try bump(a, &local_uni, w, 1);
+        var it = added_set.iterator();
+        while (it.next()) |e| {
+            p.added_words += e.value_ptr.*;
+            if (isStop(e.key_ptr.*)) continue;
+            p.added_content_words += e.value_ptr.*;
+            try bump(a, &local_uni, e.key_ptr.*, e.value_ptr.*);
         }
         try tallyRun(a, &uni, &local_uni);
 

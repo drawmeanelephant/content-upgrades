@@ -20,6 +20,9 @@
 #                         Repeat for an A/B.
 #   --tone <t>            mild (default) | spicy | feral
 #   --min-runs <n>        repeat threshold for voice-tics (default 3)
+#   --ledger              share one doc-voice --ledger per profile@variant
+#                         dir: a term a record adds is closed to the rest
+#                         of the corpus, so repeats should collapse to ~0
 #   --out <dir>           results root (default ~/.cache/knap-voice-tics)
 #
 # Read the table with docs/tracks/VOICE-TICS.md: "tic runs" is the share of
@@ -41,7 +44,7 @@ root=$(cd "$knap/.." && pwd)
 
 die() { echo "voice-tics: $*" >&2; exit 1; }
 
-corpus=filed tone=mild min_runs=3 variants='' profiles=''
+corpus=filed tone=mild min_runs=3 variants='' profiles='' ledger=''
 out=${XDG_CACHE_HOME:-$HOME/.cache}/knap-voice-tics
 while [ $# -gt 0 ]; do
     case $1 in
@@ -49,6 +52,7 @@ while [ $# -gt 0 ]; do
     --variant) variants="$variants ${2:?}"; shift ;;
     --tone) tone=${2:?}; shift ;;
     --min-runs) min_runs=${2:?}; shift ;;
+    --ledger) ledger=1 ;;
     --out) out=${2:?}; shift ;;
     -h | --help) sed -n '2,/^set -eu/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     -*) die "unknown option '$1' (see --help)" ;;
@@ -173,8 +177,10 @@ for p in $profiles; do
             t0=$(date +%s)
             pairs=
             while read -r slug as; do
-                "$bin" doc-voice "$dir/sources/$slug.md" --as "$as" --tone "$tone" --policy "$policy" \
-                    --backend "$backend" --report "$dir/$slug.report.json" </dev/null >/dev/null 2>>"$dir/doc-voice.err" || :
+                set -- --as "$as" --tone "$tone" --policy "$policy" \
+                    --backend "$backend" --report "$dir/$slug.report.json"
+                [ -z "$ledger" ] || set -- "$@" --ledger "$dir/ledger.txt"
+                "$bin" doc-voice "$dir/sources/$slug.md" "$@" </dev/null >/dev/null 2>>"$dir/doc-voice.err" || :
                 if [ -s "$dir/$slug.report.json" ]; then
                     pairs="$pairs $dir/sources/$slug.md $dir/$slug.report.json"
                 else
