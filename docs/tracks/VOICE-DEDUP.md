@@ -22,8 +22,8 @@ over 2441 changed runs). This lane makes repetition enforceable.
   adds occurrence-wise over its input. Emphasis on an existing word adds
   nothing, so mock's `*x*` runs are untouched and the offline gate is
   unchanged. Emphasis-term dedup (the "all six models italicize
-  `*admired*`" convergence) is deliberately out of scope — watch the
-  `emphasis` tally in the live table.
+  `*admired*`" convergence) landed later in #401: those spans are
+  ledgered as `*x*` keys, kept distinct from words added as text.
 - Matching is case-insensitive at the seen boundary; the ledger stores
   lowercase.
 - Two strikes, then out: first reuse retries with "Your previous reply
