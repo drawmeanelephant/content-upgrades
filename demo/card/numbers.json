@@ -1,8 +1,8 @@
 {
   "card": "knap-mcp: the numbers, measured",
   "generated": {
-    "date_utc": "2026-10-27",
-    "git": "6a1ddc1",
+    "date_utc": "2026-10-30",
+    "git": "6f0433c",
     "by": "demo/card/build.sh"
   },
   "engines": {
@@ -139,7 +139,7 @@
     },
     {
       "label": "server",
-      "value": "14494 lines of Zig",
+      "value": "24819 lines of Zig",
       "detail": "knap-mcp/src/*.zig",
       "source": "cat $(find knap-mcp/src -name '*.zig') | wc -l"
     }
