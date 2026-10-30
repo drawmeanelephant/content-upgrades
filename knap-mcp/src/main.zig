@@ -129,6 +129,7 @@ const usage_tail =
     \\  --dry-run | --apply --out <file>   doc-voice: dry-run (default) or write the patched doc to --out (never into content/)
     \\  --report <file>         doc-voice: report JSON to file; stdout then carries the patched doc
     \\  --replies <jsonl>       doc-voice: canned {"input","output"} replies, tried before the backend
+    \\  --ledger <file>         doc-voice: terms already added this batch; a reply re-adding one is rejected
     \\  --label, --min-runs <n>, --top <n>, --lexicon <file>   voice-tics: profile label; repeat threshold (default 3); list length; phrase list
     \\  --probe                 backends: GET /models per live backend, acp handshake
     \\  -h, --help              this text; <command> -h shows that command's usage

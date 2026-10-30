@@ -1753,11 +1753,37 @@ pub const DocField = struct {
     reasons: []const []const u8,
 };
 
+/// Content words a pass has already added: lowercased word -> the run
+/// that first added it (0 for terms loaded from a ledger). Repeats are a
+/// cross-run property the per-reply guard cannot see (#390).
+pub const Seen = std.StringHashMapUnmanaged(u32);
+
+/// The first word of `added` already in `seen`, or null.
+fn seenHit(a: Allocator, s: *const Seen, added: []const []const u8) Allocator.Error!?struct { term: []const u8, run: u32 } {
+    for (added) |w| {
+        const key = try std.ascii.allocLowerString(a, w);
+        if (s.get(key)) |run| return .{ .term = key, .run = run };
+    }
+    return null;
+}
+
+/// Sorted seen keys, comma-joined, for the user-message list.
+fn seenList(a: Allocator, s: *const Seen) Allocator.Error![]const u8 {
+    var list: std.ArrayList([]const u8) = .empty;
+    var it = s.iterator();
+    while (it.next()) |e| try list.append(a, e.key_ptr.*);
+    std.mem.sort([]const u8, list.items, {}, voicetics.strLess);
+    return std.mem.join(a, ", ", list.items);
+}
+
 pub const DocOptions = struct {
     tone: Tone,
     kind: backend.Kind,
     gate: Gate,
     canned: []const Canned = &.{},
+    /// When set, a reply re-adding a term `seen` holds is retried once
+    /// then rejected, and accepted replies register their additions.
+    seen: ?*Seen = null,
 };
 
 pub const DocResult = struct {
@@ -1791,39 +1817,68 @@ fn voiceRun(ctx: *Ctx, o: DocOptions, system: []const u8, r: Run, para: usize, b
         return f;
     }
     const role = if (r.kind == .paragraph) paragraph_role else list_item_role;
-    const user = try userMessage(a, try std.fmt.allocPrint(a, "{s} {d}", .{ @tagName(r.kind), para }), role, before);
-    const raw: []const u8 = if (cannedReply(o.canned, before)) |c| blk: {
-        ctx.countCall(system, user);
-        break :blk c;
-    } else if (o.kind == .mock) blk: {
-        ctx.countCall(system, user);
-        break :blk try mockEmphasis(a, o.tone, before);
-    } else backend.complete(ctx, o.kind, .voice, system, user) catch |e| switch (e) {
-        error.ToolFailed => {
-            f.status = .rejected;
-            f.reasons = try a.dupe([]const u8, &.{try std.fmt.allocPrint(a, "backend error: {s}", .{ctx.err_msg})});
-            return f;
-        },
-        else => return e,
+    var user = try userMessage(a, try std.fmt.allocPrint(a, "{s} {d}", .{ @tagName(r.kind), para }), role, before);
+    if (o.seen) |s| if (s.count() > 0) {
+        user = try std.fmt.allocPrint(a, "{s}\nAlready added earlier in this pass — do not use any of these again: {s}", .{ user, try seenList(a, s) });
     };
-    const reply = cleanReply(raw, before);
-    if (std.mem.eql(u8, reply, before)) {
-        f.status = .unchanged;
+    var reused: []const u8 = "";
+    while (true) {
+        const msg = if (reused.len == 0) user else try std.fmt.allocPrint(a, "{s}\nYour previous reply re-used '{s}' — rewrite without it.", .{ user, reused });
+        const raw: []const u8 = if (cannedReply(o.canned, before)) |c| blk: {
+            ctx.countCall(system, msg);
+            break :blk c;
+        } else if (o.kind == .mock) blk: {
+            ctx.countCall(system, msg);
+            break :blk try mockEmphasis(a, o.tone, before);
+        } else backend.complete(ctx, o.kind, .voice, system, msg) catch |e| switch (e) {
+            error.ToolFailed => {
+                f.status = .rejected;
+                f.reasons = try a.dupe([]const u8, &.{try std.fmt.allocPrint(a, "backend error: {s}", .{ctx.err_msg})});
+                return f;
+            },
+            else => return e,
+        };
+        const reply = cleanReply(raw, before);
+        if (std.mem.eql(u8, reply, before)) {
+            f.status = .unchanged;
+            return f;
+        }
+        const check = try docGuard(a, o.tone, role, before, reply);
+        var reasons: std.ArrayList([]const u8) = .empty;
+        try reasons.appendSlice(a, check.hard.items);
+        for (check.budget.items) |b| try reasons.append(a, try std.fmt.allocPrint(a, "warning: {s}", .{b}));
+        f.reasons = reasons.items;
+        if (!check.passes()) {
+            f.status = .rejected;
+            return f;
+        }
+        if (o.seen) |s| {
+            const added = try voicetics.addedContent(a, before, reply);
+            if (try seenHit(a, s, added)) |hit| {
+                if (reused.len == 0) {
+                    reused = hit.term;
+                    continue;
+                }
+                try reasons.append(a, if (hit.run == 0)
+                    try std.fmt.allocPrint(a, "repeats '{s}' from an earlier record", .{hit.term})
+                else
+                    try std.fmt.allocPrint(a, "repeats '{s}' added at run {d}", .{ hit.term, hit.run }));
+                f.reasons = reasons.items;
+                f.status = .rejected;
+                return f;
+            }
+            for (added) |w| try s.put(a, try std.ascii.allocLowerString(a, w), @intCast(para));
+        }
+        f.status = .rewritten;
+        f.after = reply;
         return f;
     }
-    const check = try docGuard(a, o.tone, role, before, reply);
-    var reasons: std.ArrayList([]const u8) = .empty;
-    try reasons.appendSlice(a, check.hard.items);
-    for (check.budget.items) |b| try reasons.append(a, try std.fmt.allocPrint(a, "warning: {s}", .{b}));
-    f.reasons = reasons.items;
-    f.status = if (check.passes()) .rewritten else .rejected;
-    if (check.passes()) f.after = reply;
-    return f;
 }
 
 /// Voice every policy-granted run of `doc`: one call per run (canned
 /// reply, mock emphasis, or `backend.complete(.voice)`), one guard per
-/// reply, no retries. A rejected or failed run keeps its original text.
+/// reply, one retry only when the reply re-adds a term `seen` holds.
+/// A rejected or failed run keeps its original text.
 /// The proof is computed but not enforced here: callers write nothing
 /// unless `proof.holds()`.
 pub fn voiceDoc(ctx: *Ctx, doc: []const u8, o: DocOptions) backend.Error!DocResult {
@@ -2630,6 +2685,40 @@ test "mockEmphasis: longest free lowercase word, never inside markup" {
     // `someone` is cut by an apostrophe, not a word boundary.
     try testing.expectEqualStrings("someone's **widgets**", try mockEmphasis(a, .feral, "someone's widgets"));
     try testing.expectEqualStrings("tiny bits only", try mockEmphasis(a, .feral, "tiny bits only"));
+}
+
+test "voiceDoc: a run may not re-add a term an earlier run added" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx: Ctx = .{
+        .arena = a,
+        .gpa = testing.allocator,
+        .io = testing.io,
+        .environ = &env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = try std.fmt.allocPrint(a, "{s}templates", .{testRoot()}),
+        .store_dir = "",
+        .project_root = "",
+    };
+    const doc = "First plain paragraph stays mostly intact.\n\nSecond plain paragraph stays mostly intact.\n";
+    const canned = [_]Canned{
+        .{ .input = "First plain paragraph stays mostly intact.", .output = "First plain paragraph stays mostly intact, gossamer edition." },
+        .{ .input = "Second plain paragraph stays mostly intact.", .output = "Second plain paragraph stays mostly intact, gossamer edition." },
+    };
+    var seen: Seen = .empty;
+    const r = try voiceDoc(&ctx, doc, .{ .tone = .mild, .kind = .mock, .gate = .{ .paragraphs = true, .list_items = true }, .canned = &canned, .seen = &seen });
+    try testing.expectEqual(DocStatus.rewritten, r.fields[0].status);
+    try testing.expectEqual(DocStatus.rejected, r.fields[1].status);
+    const why = try joined(a, r.fields[1].reasons);
+    if (std.mem.indexOf(u8, why, "repeats '") == null or std.mem.indexOf(u8, why, "added at run 1") == null) {
+        std.debug.print("want a repeats reason naming run 1, got '{s}'\n", .{why});
+        return error.TestUnexpectedResult;
+    }
+    try testing.expectEqual(@as(u32, 1), seen.get("gossamer").?);
+    try testing.expectEqual(@as(u32, 1), seen.get("edition").?);
 }
 
 test "prove: frontmatter, link and atom drift each fail; formatting-only passes" {
