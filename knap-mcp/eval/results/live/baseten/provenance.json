@@ -1,0 +1,59 @@
+{
+  "profile": "baseten",
+  "profile_source": "scripts/providers.sh",
+  "label": "Muse Spark open (Baseten)",
+  "backend": "baseten",
+  "model": "meta-models/muse-spark-open-1026",
+  "effort": null,
+  "expect": "*",
+  "note": null,
+  "started": "2026-10-30T19:06:16Z",
+  "finished": "2026-10-30T19:14:36Z",
+  "knap_mcp": {
+    "version": "0.1.0",
+    "git": "8b5c0c8+dirty"
+  },
+  "engines": {
+    "k4o": "k4o-aeba163",
+    "dogbed": "dogbed-d96b125"
+  },
+  "host": "Darwin arm64",
+  "runs": [
+    {
+      "suite": "smoke",
+      "command": "knap-mcp smoke --backend baseten",
+      "exit": 0,
+      "seconds": 10,
+      "at": "2026-10-30T19:06:26Z",
+      "out": "smoke.out",
+      "err": "smoke.err"
+    },
+    {
+      "suite": "repair",
+      "command": "knap-mcp eval --corpus eval/seeds.json --backend baseten",
+      "exit": 0,
+      "seconds": 127,
+      "at": "2026-10-30T19:08:33Z",
+      "out": "repair-seeds.out",
+      "err": "repair-seeds.err"
+    },
+    {
+      "suite": "ratchet",
+      "command": "knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend baseten",
+      "exit": 1,
+      "seconds": 253,
+      "at": "2026-10-30T19:12:46Z",
+      "out": "ratchet.out",
+      "err": "ratchet.err"
+    },
+    {
+      "suite": "voice",
+      "command": "voice_suite (shell function in scripts/live.sh)",
+      "exit": 0,
+      "seconds": 110,
+      "at": "2026-10-30T19:14:36Z",
+      "out": "voice.out",
+      "err": "voice.err"
+    }
+  ]
+}
