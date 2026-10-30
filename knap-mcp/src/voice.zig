@@ -1753,8 +1753,9 @@ pub const DocField = struct {
     reasons: []const []const u8,
 };
 
-/// Content words a pass has already added: lowercased word -> the run
-/// that first added it (0 for terms loaded from a ledger). Repeats are a
+/// Content words a pass has already added, plus `*x*` terms it already
+/// italicized over existing words (#401): lowercased key -> the run
+/// that first used it (0 for terms loaded from a ledger). Repeats are a
 /// cross-run property the per-reply guard cannot see (#390).
 pub const Seen = std.StringHashMapUnmanaged(u32);
 
@@ -1781,7 +1782,8 @@ pub const DocOptions = struct {
     kind: backend.Kind,
     gate: Gate,
     canned: []const Canned = &.{},
-    /// When set, a reply re-adding a term `seen` holds is retried once
+    /// When set, a reply re-adding a term `seen` holds — an added word,
+    /// or an existing word it italicizes again (`*x*`) — is retried once
     /// then rejected, and accepted replies register their additions.
     seen: ?*Seen = null,
 };
@@ -1853,8 +1855,10 @@ fn voiceRun(ctx: *Ctx, o: DocOptions, system: []const u8, r: Run, para: usize, b
             return f;
         }
         if (o.seen) |s| {
-            const added = try voicetics.addedContent(a, before, reply);
-            if (try seenHit(a, s, added)) |hit| {
+            var added: std.ArrayList([]const u8) = .empty;
+            try added.appendSlice(a, try voicetics.addedContent(a, before, reply));
+            try added.appendSlice(a, try voicetics.addedEmphasis(a, before, reply));
+            if (try seenHit(a, s, added.items)) |hit| {
                 if (reused.len == 0) {
                     reused = hit.term;
                     continue;
@@ -1867,7 +1871,7 @@ fn voiceRun(ctx: *Ctx, o: DocOptions, system: []const u8, r: Run, para: usize, b
                 f.status = .rejected;
                 return f;
             }
-            for (added) |w| try s.put(a, try std.ascii.allocLowerString(a, w), @intCast(para));
+            for (added.items) |w| try s.put(a, try std.ascii.allocLowerString(a, w), @intCast(para));
         }
         f.status = .rewritten;
         f.after = reply;
@@ -2719,6 +2723,45 @@ test "voiceDoc: a run may not re-add a term an earlier run added" {
     }
     try testing.expectEqual(@as(u32, 1), seen.get("gossamer").?);
     try testing.expectEqual(@as(u32, 1), seen.get("edition").?);
+}
+
+test "voiceDoc: a run may not re-italicize a term an earlier run italicized" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var ctx: Ctx = .{
+        .arena = a,
+        .gpa = testing.allocator,
+        .io = testing.io,
+        .environ = &env,
+        .engines = .{ .k4o = "k4o", .dogbed = "dogbed" },
+        .backend_kind = .mock,
+        .templates_dir = try std.fmt.allocPrint(a, "{s}templates", .{testRoot()}),
+        .store_dir = "",
+        .project_root = "",
+    };
+    const doc = "First plain paragraph stays mostly intact.\n\nSecond plain paragraph stays mostly intact.\n\nThird plain paragraph stays mostly intact.\n";
+    const canned = [_]Canned{
+        .{ .input = "First plain paragraph stays mostly intact.", .output = "First *plain* paragraph stays mostly intact." },
+        .{ .input = "Second plain paragraph stays mostly intact.", .output = "Second *plain* paragraph stays mostly intact." },
+        .{ .input = "Third plain paragraph stays mostly intact.", .output = "Third plain paragraph stays *mostly* intact." },
+    };
+    var seen: Seen = .empty;
+    const r = try voiceDoc(&ctx, doc, .{ .tone = .mild, .kind = .mock, .gate = .{ .paragraphs = true, .list_items = true }, .canned = &canned, .seen = &seen });
+    try testing.expectEqual(DocStatus.rewritten, r.fields[0].status);
+    try testing.expectEqual(DocStatus.rejected, r.fields[1].status);
+    try testing.expectEqual(DocStatus.rewritten, r.fields[2].status);
+    const why = try joined(a, r.fields[1].reasons);
+    if (std.mem.indexOf(u8, why, "repeats '*plain*'") == null or std.mem.indexOf(u8, why, "added at run 1") == null) {
+        std.debug.print("want a repeats reason naming '*plain*' at run 1, got '{s}'\n", .{why});
+        return error.TestUnexpectedResult;
+    }
+    // Italicized terms are keyed *x*: 'plain' itself was never added, so
+    // no bare 'plain' lands in the ledger.
+    try testing.expectEqual(@as(u32, 1), seen.get("*plain*").?);
+    try testing.expectEqual(@as(u32, 3), seen.get("*mostly*").?);
+    try testing.expect(seen.get("plain") == null);
 }
 
 test "prove: frontmatter, link and atom drift each fail; formatting-only passes" {

@@ -24,7 +24,7 @@ const ObjectMap = std.json.ObjectMap;
 
 pub const tool: tools.Tool = .{
     .name = "knap_doc_voice",
-    .description = "Guarded voice pass over an existing markdown record (doc_id from knap_ingest) in one tone (mild|spicy|feral). Only prose paragraphs and single-line list items the collection policy grants are sent, one model call each; every other byte (frontmatter, headings, verse line groups, fences, quotes, tables, includes, Aside/Details blocks, links, URLs) is copied verbatim. Each reply must pass the voice guard (insert-only **, *, ~~, ==, code spans quoting the input, allowlisted emoji; protected atoms kept in order); a rejected reply keeps the original. The patched doc must keep structhash --ignore-formatting, frontmatter bytes, wiki-link targets and protected atoms identical, must not lose density, and must pass publish-check under the raw staging profile; only then is it stored (out_doc_id). Within a pass a content word may be added once: a reply re-adding a term an earlier run (or the optional 'ledger' file's earlier records) already added is retried once, then rejected. 'as' is the record's content path (content/mascots/x.md): it picks the policy collection and the staged position. Never writes into the source tree.",
+    .description = "Guarded voice pass over an existing markdown record (doc_id from knap_ingest) in one tone (mild|spicy|feral). Only prose paragraphs and single-line list items the collection policy grants are sent, one model call each; every other byte (frontmatter, headings, verse line groups, fences, quotes, tables, includes, Aside/Details blocks, links, URLs) is copied verbatim. Each reply must pass the voice guard (insert-only **, *, ~~, ==, code spans quoting the input, allowlisted emoji; protected atoms kept in order); a rejected reply keeps the original. The patched doc must keep structhash --ignore-formatting, frontmatter bytes, wiki-link targets and protected atoms identical, must not lose density, and must pass publish-check under the raw staging profile; only then is it stored (out_doc_id). Within a pass a content word may be added once and an existing word italicized once: a reply re-adding a term an earlier run (or the optional 'ledger' file's earlier records) already used is retried once, then rejected. 'as' is the record's content path (content/mascots/x.md): it picks the policy collection and the staged position. Never writes into the source tree.",
     .input_schema =
     \\{"type":"object","properties":{"doc_id":{"type":"string"},"tone":{"type":"string","enum":["mild","spicy","feral"]},"as":{"type":"string"},"policy":{"type":"string"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten","acp","compat"]},"replies":{"type":"string"},"ledger":{"type":"string"}},"required":["doc_id","tone","as"]}
     ,
@@ -42,7 +42,8 @@ pub const Input = struct {
     policy_path: ?[]const u8 = null,
     /// Canned replies (voice.Canned JSONL), consulted before any backend.
     replies_path: ?[]const u8 = null,
-    /// Batch ledger: terms added by earlier records, one per line. When
+    /// Batch ledger: terms added by earlier records, one per line —
+    /// added words bare, italicized existing words as `*x*` (#401). When
     /// set the file seeds the pass's seen-set and is rewritten with this
     /// pass's additions whenever a rewrite was accepted — terms the pass
     /// used are spent even if the doc later fails its checks (#390).
