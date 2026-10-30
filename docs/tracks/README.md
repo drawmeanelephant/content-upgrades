@@ -8,7 +8,8 @@ Distilled results — the files to read first:
 - [LIVE.md](LIVE.md) — measured numbers, current state
 - FILED summaries: [AUDIT](FILED-AUDIT.md) · [BORIS](FILED-BORIS.md) ·
   [ING](FILED-ING.md) · [POL](FILED-POL.md) · [PUB](FILED-PUB.md) ·
-  [RAG](FILED-RAG.md) · [TPL](FILED-TPL.md) · [VOICE](FILED-VOICE.md)
+  [RAG](FILED-RAG.md) · [TPL](FILED-TPL.md) · [VOICE](FILED-VOICE.md) ·
+  [LIVE](FILED-LIVE.md)
 - [CAPTAIN.md](CAPTAIN.md) — merge-captain log
 - [ideas.md](ideas.md) — follow-up ideas
 
