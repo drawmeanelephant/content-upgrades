@@ -1,12 +1,39 @@
 # Live tic-sampling corpus: pre-pass filed records, read from a local filed
 # checkout ($KNAP_FILED_DIR, default ~/dev/filed.fyi) at the pinned commit.
 # filed.fyi is all-rights-reserved, so its text is never vendored here.
-# These six are byte-identical at the pin to the `before` side of filed
-# #1057/#1059/#1060, so a live sample lines up with what SWE-2 shipped.
-# commit: ce44821f
+#
+# The pin sits after the #1057/#1058 doc-voice batches were reverted (#1062/
+# #1063) and while #1059/#1060 were never merged, so every record below is
+# pre-pass on main. 26 records: 7 mascots, 7 lorelog, 6 reference, 6 posts/
+# guides. Fourteen were touched by the reverted/unmerged batches (the same
+# pre-pass text pr.sh scored as shipped); the rest are fresh — the below-25
+# mascot/lorelog queue is exhausted, so fresh picks are in-band records just
+# over the floor, plus two 33-word reference stubs and one audit record from
+# the remaining queue.
+# commit: 3b668c16
+content/mascots/236.pending-jurisdiction.md
+content/mascots/256.minute-velvet.md
 content/mascots/257.orphan-symmetry.md
 content/mascots/266.warm-hold-music.md
+content/mascots/306.scopekeeper-emeritus.md
+content/mascots/308.sister-casserole-of-relief.md
+content/mascots/320.quiet-surplus.md
+content/lorelog/LLG-0012-A.md
 content/lorelog/LLG-0217-CNTR.md
 content/lorelog/LLG-0316-MBR.md
+content/lorelog/LLG-0320-FRK.md
+content/lorelog/LLG-0323-ASD.md
+content/lorelog/LLG-0446-OQF.md
+content/lorelog/LLG-0811-EG.md
+content/reference/audits/fref-audt-intg.md
+content/reference/fref-0220-ccmp.md
 content/reference/fref-0821-avtl.md
 content/reference/fref-0822-actn.md
+content/reference/fref-0901-apiv.md
+content/reference/fref-0903-rdad.md
+content/guides/managed-absence-and-forms.md
+content/posts/FFP-0382.md
+content/posts/FFP-0383.md
+content/posts/coma-observation-transcript.md
+content/posts/ffp-0385-progress-without-work.md
+content/posts/replacement-without-release.md
