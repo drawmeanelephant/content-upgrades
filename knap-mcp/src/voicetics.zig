@@ -198,6 +198,35 @@ pub fn addedContent(a: Allocator, before: []const u8, after: []const u8) Allocat
     return out.items;
 }
 
+/// Spans `after` adds over words `before` already had, keyed as
+/// `*inner words*` — the ledger's italicized-term set (#401), matching
+/// the scorer's emphasis_on_existing bucket (1-3 inner words, every one
+/// in `before`). The `*…*` marks keep an emphasized word distinct in the
+/// seen-set from a word added as plain text: `*wry*` means "a run
+/// italicized this", not "a run introduced this".
+pub fn addedEmphasis(a: Allocator, before: []const u8, after: []const u8) Allocator.Error![]const []const u8 {
+    var before_counts: Counts = .empty;
+    for (try words(a, before)) |w| try bump(a, &before_counts, w, 1);
+    var before_spans: Counts = .empty;
+    for (try spans(a, before)) |s| try bump(a, &before_spans, s, 1);
+    var out: std.ArrayList([]const u8) = .empty;
+    for (try spans(a, after)) |s| {
+        const n = countOf(&before_spans, s);
+        if (n > 0) {
+            before_spans.putAssumeCapacity(s, n - 1);
+            continue;
+        }
+        const inner = try words(a, spanInner(s));
+        if (inner.len == 0 or inner.len > 3) continue;
+        const existing = for (inner) |w| {
+            if (before_counts.get(w) == null) break false;
+        } else true;
+        if (!existing) continue;
+        try out.append(a, try std.fmt.allocPrint(a, "*{s}*", .{try std.mem.join(a, " ", inner)}));
+    }
+    return out.items;
+}
+
 /// Occurrences of the word sequence `phrase` in `ws`.
 pub fn phraseCount(ws: []const []const u8, phrase: []const []const u8) usize {
     if (phrase.len == 0 or ws.len < phrase.len) return 0;
@@ -596,6 +625,22 @@ test "fixture: the issue's representative diffs score as tics" {
     try testing.expect(hitFor(p.emphasis, "misplaced") != null);
     try testing.expectEqual(@as(usize, 1), p.repeats.len);
     try testing.expectEqualStrings("regrettably", p.repeats[0].term);
+}
+
+test "addedEmphasis: spans over existing words, keyed *inner*" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const got = try addedEmphasis(a, "Regrettably, the form was lost.", "Regrettably, the form was *lost*.");
+    try testing.expectEqual(@as(usize, 1), got.len);
+    try testing.expectEqualStrings("*lost*", got[0]);
+    // Multi-word spans join their inner words; emphasis over a word the
+    // run introduced (`*gossamer*`) is an added word, not an italicized
+    // existing one; a span `before` already had is not an addition.
+    const two = try addedEmphasis(a, "The freshness score was nine weeks old.", "The *freshness score* was nine weeks old, *gossamer*.");
+    try testing.expectEqual(@as(usize, 1), two.len);
+    try testing.expectEqualStrings("*freshness score*", two[0]);
+    try testing.expectEqual(@as(usize, 0), (try addedEmphasis(a, "The form was *lost*.", "The form was *lost*.")).len);
 }
 
 test "a flat pass-through scores zero" {
