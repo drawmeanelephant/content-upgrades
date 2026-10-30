@@ -15,6 +15,7 @@ const boris = @import("../boris.zig");
 const policy = @import("../policy.zig");
 const store = @import("../store.zig");
 const voice = @import("../voice.zig");
+const voicetics = @import("../voicetics.zig");
 const tools = @import("../tools.zig");
 const common = @import("common.zig");
 
@@ -23,9 +24,9 @@ const ObjectMap = std.json.ObjectMap;
 
 pub const tool: tools.Tool = .{
     .name = "knap_doc_voice",
-    .description = "Guarded voice pass over an existing markdown record (doc_id from knap_ingest) in one tone (mild|spicy|feral). Only prose paragraphs and single-line list items the collection policy grants are sent, one model call each; every other byte (frontmatter, headings, verse line groups, fences, quotes, tables, includes, Aside/Details blocks, links, URLs) is copied verbatim. Each reply must pass the voice guard (insert-only **, *, ~~, ==, code spans quoting the input, allowlisted emoji; protected atoms kept in order); a rejected reply keeps the original. The patched doc must keep structhash --ignore-formatting, frontmatter bytes, wiki-link targets and protected atoms identical, must not lose density, and must pass publish-check under the raw staging profile; only then is it stored (out_doc_id). 'as' is the record's content path (content/mascots/x.md): it picks the policy collection and the staged position. Never writes into the source tree.",
+    .description = "Guarded voice pass over an existing markdown record (doc_id from knap_ingest) in one tone (mild|spicy|feral). Only prose paragraphs and single-line list items the collection policy grants are sent, one model call each; every other byte (frontmatter, headings, verse line groups, fences, quotes, tables, includes, Aside/Details blocks, links, URLs) is copied verbatim. Each reply must pass the voice guard (insert-only **, *, ~~, ==, code spans quoting the input, allowlisted emoji; protected atoms kept in order); a rejected reply keeps the original. The patched doc must keep structhash --ignore-formatting, frontmatter bytes, wiki-link targets and protected atoms identical, must not lose density, and must pass publish-check under the raw staging profile; only then is it stored (out_doc_id). Within a pass a content word may be added once: a reply re-adding a term an earlier run (or the optional 'ledger' file's earlier records) already added is retried once, then rejected. 'as' is the record's content path (content/mascots/x.md): it picks the policy collection and the staged position. Never writes into the source tree.",
     .input_schema =
-    \\{"type":"object","properties":{"doc_id":{"type":"string"},"tone":{"type":"string","enum":["mild","spicy","feral"]},"as":{"type":"string"},"policy":{"type":"string"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten","acp","compat"]},"replies":{"type":"string"}},"required":["doc_id","tone","as"]}
+    \\{"type":"object","properties":{"doc_id":{"type":"string"},"tone":{"type":"string","enum":["mild","spicy","feral"]},"as":{"type":"string"},"policy":{"type":"string"},"backend":{"type":"string","enum":["mock","spark","wonder","baseten","acp","compat"]},"replies":{"type":"string"},"ledger":{"type":"string"}},"required":["doc_id","tone","as"]}
     ,
     .run = run,
 };
@@ -41,6 +42,11 @@ pub const Input = struct {
     policy_path: ?[]const u8 = null,
     /// Canned replies (voice.Canned JSONL), consulted before any backend.
     replies_path: ?[]const u8 = null,
+    /// Batch ledger: terms added by earlier records, one per line. When
+    /// set the file seeds the pass's seen-set and is rewritten with this
+    /// pass's additions whenever a rewrite was accepted — terms the pass
+    /// used are spent even if the doc later fails its checks (#390).
+    ledger_path: ?[]const u8 = null,
     /// Tests only: `zig build test` has no boris binary.
     publish: bool = true,
 };
@@ -60,6 +66,8 @@ pub const Outcome = struct {
     gate: voice.Gate,
     result: voice.DocResult,
     publish: PublishCheck,
+    /// Content words this pass registered in the seen-set, sorted.
+    added_terms: []const []const u8 = &.{},
     /// Every invariant proven and publish-check clean (or nothing changed).
     ok: bool,
     out_doc_id: ?[]const u8 = null,
@@ -121,7 +129,15 @@ pub fn execute(ctx: *Ctx, in: Input) tools.Error!Outcome {
             else => return ctx.fail("replies file {s} has a bad line ({s})", .{ p, @errorName(e) }),
         };
     }
-    const result = try voice.voiceDoc(ctx, in.doc, .{ .tone = in.tone, .kind = in.kind, .gate = gate, .canned = canned });
+    var seen: voice.Seen = .empty;
+    if (in.ledger_path) |p| try loadLedger(ctx, &seen, p);
+    const result = try voice.voiceDoc(ctx, in.doc, .{ .tone = in.tone, .kind = in.kind, .gate = gate, .canned = canned, .seen = &seen });
+    var added: std.ArrayList([]const u8) = .empty;
+    var it = seen.iterator();
+    while (it.next()) |e| {
+        if (e.value_ptr.* != 0) try added.append(a, e.key_ptr.*);
+    }
+    std.mem.sort([]const u8, added.items, {}, voicetics.strLess);
     var o: Outcome = .{
         .in = in,
         .source = source,
@@ -130,6 +146,7 @@ pub fn execute(ctx: *Ctx, in: Input) tools.Error!Outcome {
         .gate = gate,
         .result = result,
         .publish = .{ .not_run = "no changes" },
+        .added_terms = added.items,
         .ok = result.proof.holds(),
     };
     if (!gate.paragraphs and !gate.list_items) {
@@ -142,8 +159,38 @@ pub fn execute(ctx: *Ctx, in: Input) tools.Error!Outcome {
         o.publish = try publishCheck(ctx, result.doc, in);
         o.ok = o.publish == .ran and o.publish.ran.ok;
     }
-    if (o.ok and o.changed()) o.out_doc_id = try store.put(ctx, "md", result.doc);
+    if (o.changed()) {
+        if (in.ledger_path) |p| try writeLedger(ctx, p, &seen);
+        if (o.ok) o.out_doc_id = try store.put(ctx, "md", result.doc);
+    }
     return o;
+}
+
+/// Read one-term-per-line ledger `path` into `seen` (missing file is an
+/// empty ledger). Blank lines and `#` comments are skipped.
+fn loadLedger(ctx: *Ctx, seen: *voice.Seen, path: []const u8) tools.Error!void {
+    const bytes = std.Io.Dir.readFileAlloc(.cwd(), ctx.io, path, ctx.arena, .limited(16 << 20)) catch |e| switch (e) {
+        error.FileNotFound => return,
+        else => return ctx.fail("cannot read ledger {s}", .{path}),
+    };
+    var it = std.mem.splitScalar(u8, bytes, '\n');
+    while (it.next()) |line| {
+        const t = std.mem.trim(u8, line, " \t\r");
+        if (t.len == 0 or t[0] == '#') continue;
+        try seen.put(ctx.arena, try std.ascii.allocLowerString(ctx.arena, t), 0);
+    }
+}
+
+/// Rewrite `path` as every term `seen` holds, sorted, one per line.
+fn writeLedger(ctx: *Ctx, path: []const u8, seen: *const voice.Seen) tools.Error!void {
+    var list: std.ArrayList([]const u8) = .empty;
+    var it = seen.iterator();
+    while (it.next()) |e| try list.append(ctx.arena, e.key_ptr.*);
+    std.mem.sort([]const u8, list.items, {}, voicetics.strLess);
+    const body = try std.mem.join(ctx.arena, "\n", list.items);
+    const data = if (body.len == 0) body else try std.fmt.allocPrint(ctx.arena, "{s}\n", .{body});
+    std.Io.Dir.writeFile(.cwd(), ctx.io, .{ .sub_path = path, .data = data }) catch
+        return ctx.fail("cannot write ledger {s}", .{path});
 }
 
 /// boris validate on the patched doc at its source position. Only the
@@ -205,7 +252,9 @@ pub fn writeReport(o: Outcome, written: ?[]const u8, w: *std.Io.Writer) std.Io.W
         }
         try w.writeAll("\"}");
     }
-    try w.print("],\"density_before\":{d:.2},\"density_after\":{d:.2},\"structhash_equal\":{},\"frontmatter_equal\":{},\"links_equal\":{},\"atoms_equal\":{},\"publish_check\":", .{
+    try w.writeAll("],\"added_terms\":");
+    try S.value(o.added_terms, .{}, w);
+    try w.print(",\"density_before\":{d:.2},\"density_after\":{d:.2},\"structhash_equal\":{},\"frontmatter_equal\":{},\"links_equal\":{},\"atoms_equal\":{},\"publish_check\":", .{
         p.density_before, p.density_after, p.structhash_equal, p.frontmatter_equal, p.links_equal, p.atoms_equal,
     });
     switch (o.publish) {
@@ -276,13 +325,14 @@ fn run(ctx: *Ctx, args: ?ObjectMap, out: *Allocating) tools.Error!void {
         .as = try common.requireStr(ctx, args, "as"),
         .policy_path = common.getStr(args, "policy"),
         .replies_path = common.getStr(args, "replies"),
+        .ledger_path = common.getStr(args, "ledger"),
     });
     try writeReport(o, null, &out.writer);
 }
 
 // --- CLI -----------------------------------------------------------------------
 
-const usage_line = "usage: knap-mcp doc-voice <doc_id|file> --tone <t> [--dry-run | --apply --out <file>] [--report <file>] [--as <content path>] [--policy <file>] [--backend <b>] [--replies <jsonl>]";
+const usage_line = "usage: knap-mcp doc-voice <doc_id|file> --tone <t> [--dry-run | --apply --out <file>] [--report <file>] [--as <content path>] [--policy <file>] [--backend <b>] [--replies <jsonl>] [--ledger <file>]";
 
 fn usage(msg: []const u8) u8 {
     std.debug.print("knap-mcp: {s}\n{s}\n", .{ msg, usage_line });
@@ -365,7 +415,7 @@ fn sameFile(ctx: *Ctx, x: []const u8, y: []const u8) bool {
 /// `--out` only when every invariant holds and something changed.
 pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     const Opt = struct { name: []const u8, val: ?[]const u8 = null };
-    var opts = [_]Opt{ .{ .name = "--tone" }, .{ .name = "--as" }, .{ .name = "--policy" }, .{ .name = "--backend" }, .{ .name = "--replies" }, .{ .name = "--report" }, .{ .name = "--out" } };
+    var opts = [_]Opt{ .{ .name = "--tone" }, .{ .name = "--as" }, .{ .name = "--policy" }, .{ .name = "--backend" }, .{ .name = "--replies" }, .{ .name = "--report" }, .{ .name = "--out" }, .{ .name = "--ledger" } };
     var apply = false;
     var dry_run = false;
     var target: ?[]const u8 = null;
@@ -396,13 +446,13 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
         if (target != null) return usage(try std.fmt.allocPrint(ctx.arena, "doc-voice: unexpected argument '{s}'", .{arg}));
         target = arg;
     }
-    const tone_opt, const as_opt, const policy_opt, const backend_opt, const replies_opt, const report_opt, const out_opt =
-        .{ opts[0].val, opts[1].val, opts[2].val, opts[3].val, opts[4].val, opts[5].val, opts[6].val };
+    const tone_opt, const as_opt, const policy_opt, const backend_opt, const replies_opt, const report_opt, const out_opt, const ledger_opt =
+        .{ opts[0].val, opts[1].val, opts[2].val, opts[3].val, opts[4].val, opts[5].val, opts[6].val, opts[7].val };
     const arg = target orelse return usage("doc-voice needs exactly one doc_id or file");
     if (apply and dry_run) return usage("--apply and --dry-run are exclusive");
     if (apply and out_opt == null) return usage("--apply needs --out <file>: the patched doc is never written in place");
     if (!apply and out_opt != null) return usage("--out needs --apply (dry-run is the default)");
-    for ([_]?[]const u8{ out_opt, report_opt }) |maybe| if (maybe) |p| if (writeIntoContent(ctx, p))
+    for ([_]?[]const u8{ out_opt, report_opt, ledger_opt }) |maybe| if (maybe) |p| if (writeIntoContent(ctx, p))
         return usage(try std.fmt.allocPrint(ctx.arena, "refusing to write '{s}': doc-voice never writes into a content/ dir", .{p}));
     if (out_opt != null and report_opt != null and sameFile(ctx, out_opt.?, report_opt.?))
         return usage("refusing to write: --out and --report resolve to the same file");
@@ -420,7 +470,7 @@ pub fn cli(ctx: *Ctx, args: [][]const u8) anyerror!u8 {
     const as = as_opt orelse (if (r.file_path) |p| (if (inContentDir(p)) p else null) else null) orelse
         return usage("doc-voice needs --as <content/...> to find the record's collection and staged position");
 
-    const o = execute(ctx, .{ .doc_id = doc_id, .doc = r.bytes, .tone = tone, .kind = kind, .as = as, .policy_path = policy_opt, .replies_path = replies_opt }) catch {
+    const o = execute(ctx, .{ .doc_id = doc_id, .doc = r.bytes, .tone = tone, .kind = kind, .as = as, .policy_path = policy_opt, .replies_path = replies_opt, .ledger_path = ledger_opt }) catch {
         std.debug.print("knap-mcp: {s}\n", .{if (ctx.err_msg.len > 0) ctx.err_msg else "doc-voice failed"});
         return 1;
     };
@@ -604,6 +654,59 @@ test "policy denial: a verse collection keeps every byte and calls nothing" {
         .as = "content/mascots/990.doc-voice-fixture.md",
         .policy_path = try std.fmt.allocPrint(a, "{s}policy/filed.json", .{testRoot()}),
     }));
+}
+
+test "ledger: a term one record adds is closed to the next" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var env: std.process.Environ.Map = .init(a);
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var ctx = try testCtx(a, &env, &tmp);
+    try tmp.dir.writeFile(testing.io, .{ .sub_path = "replies.jsonl", .data =
+        \\{"input":"First fixture paragraph keeps calm.","output":"First fixture paragraph keeps preternaturally calm."}
+        \\{"input":"Second fixture paragraph keeps calm.","output":"Second fixture paragraph keeps preternaturally calm."}
+        \\
+    });
+    const replies = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/replies.jsonl", .{tmp.sub_path});
+    const ledger = try std.fmt.allocPrint(a, ".zig-cache/tmp/{s}/ledger.txt", .{tmp.sub_path});
+    const policy_path = try std.fmt.allocPrint(a, "{s}policy/filed.json", .{testRoot()});
+    const o1 = try execute(&ctx, .{
+        .doc_id = "d1",
+        .doc = "First fixture paragraph keeps calm.\n",
+        .tone = .mild,
+        .kind = .mock,
+        .as = "content/mascots/991.dedup.md",
+        .policy_path = policy_path,
+        .replies_path = replies,
+        .ledger_path = ledger,
+        .publish = false,
+    });
+    try testing.expect(o1.ok);
+    try testing.expectEqual(@as(usize, 1), o1.result.rewritten);
+    try testing.expectEqual(@as(usize, 1), o1.added_terms.len);
+    try testing.expectEqualStrings("preternaturally", o1.added_terms[0]);
+    const body = try std.Io.Dir.readFileAlloc(.cwd(), testing.io, ledger, a, .limited(1 << 20));
+    try testing.expectEqualStrings("preternaturally\n", body);
+    const o2 = try execute(&ctx, .{
+        .doc_id = "d2",
+        .doc = "Second fixture paragraph keeps calm.\n",
+        .tone = .mild,
+        .kind = .mock,
+        .as = "content/mascots/992.dedup.md",
+        .policy_path = policy_path,
+        .replies_path = replies,
+        .ledger_path = ledger,
+        .publish = false,
+    });
+    try testing.expect(o2.ok);
+    try testing.expectEqual(@as(usize, 0), o2.result.rewritten);
+    try testing.expectEqual(voice.DocStatus.rejected, o2.result.fields[0].status);
+    const why = try std.mem.join(a, "; ", o2.result.fields[0].reasons);
+    try testing.expect(std.mem.indexOf(u8, why, "repeats 'preternaturally' from an earlier record") != null);
+    // Nothing shipped, so the ledger keeps only the first record's term.
+    try testing.expectEqualStrings(body, try std.Io.Dir.readFileAlloc(.cwd(), testing.io, ledger, a, .limited(1 << 20)));
 }
 
 test "cli refuses --apply without --out and any write into content/" {
