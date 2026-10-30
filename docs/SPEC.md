@@ -140,7 +140,7 @@ Seventeen tools, in `tools/list` order:
   stats included in response.
 - `knap_lint(template_id | template_text)` — k4o education-grade lint on a
   shipped template or raw text, passthrough.
-- `knap_format_check(doc_id)` — advisory structure linter, 9 pinned rules,
+- `knap_format_check(doc_id)` — advisory structure linter, 10 pinned rules,
   warnings only, never blocks: skipped heading levels, wall-of-text where
   table-shaped data exists, unresolved footnotes, unused footnotes, empty
   callouts, raw-URL count, heading/length ratio, unclosed fences,
@@ -259,7 +259,8 @@ never rewrites the whole template.
   passes 187/188 (`knap-mcp/eval/conformance/`).
 - **Repair eval**: seeded-breakage corpora — `eval/seeds.json` (22 breaks
   over the shipped demo templates) and `eval/seeds.2nap.json` (167 breaks
-  derived from 2nap's 41 output triples + 16 error cases), each seed
+  derived from 2nap's 41 output triples + 8 usable error cases — 8 more
+  skipped, per the corpus's provenance block), each seed
   mutating a template through a pinned error class. Metric: convergence
   rate × mean iters. This produces the numbers-card figures.
 - **Voice eval**: same data × 3 tones → layout-invariance assertions:

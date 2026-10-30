@@ -92,7 +92,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   ```
   `frozen/` is a symlink to `demo/frozen` made in the hidden preamble, so on-screen
   paths name the frozen inputs. The shape prints `keys[]` one field per line — the
-  one-line `keys` array is 174 chars, over the 121-column frame.
+  one-line `keys` array is 208 chars, over the 121-column frame.
 - **Frozen inputs (I5):** `demo/frozen/02-verdict.drafted.json` is the model's
   drafted data (one take, no retakes); `demo/frozen/provenance.json` supplies the
   on-screen label. `boris_ask` reads the frozen site artifact offline.
@@ -288,7 +288,7 @@ result is a frozen file (I5), so even its `doc_id` handle no longer varies.
   (the misses are measured model shortfall against the mock-tuned bar, not
   harness breakage). Conformance 187/188 (the one accepted
   `diagnostics/unknown-filter` buffered-output diff, 0 unsupported). Server
-  23,932 lines of Zig.
+  24,819 lines of Zig.
 
 ## Not on tape
 

@@ -66,6 +66,7 @@ knap-mcp ingest <file>... [--force] [--anywhere] # copy existing markdown docs i
 knap-mcp format-check doc-<id>                  # advisory structure lint on a stored doc
 knap-mcp voice release-notes -d data/release-notes.sample.json --tone feral
 knap-mcp doc-voice <doc> --tone <t>             # guarded voice pass over a record (dry-run)
+knap-mcp voice-tics <before> <after>...         # score (before,after) pairs for repeated editorial tics
 knap-mcp extract <doc_id|file> --template <id>  # filed record -> template data (+insert fragments)
 knap-mcp structhash doc-<id>                    # layout skeleton hash (markdown|html)
 knap-mcp verify-citation "<claim>" --evidence "<quote>"
@@ -133,7 +134,7 @@ empty slot raises the density score most, ask the backend for one value,
 keep it only if schema, markup and evidence checks pass and the markdown
 score rises. A non-empty value and the template never change. Stops on
 ceiling, plateau, stalled, `--max-iters` (default 6) or the call budget.
-`ratchet-eval` runs the 31-case corpus in `eval/ratchet.json`.
+`ratchet-eval` runs the 35-case corpus in `eval/ratchet.json`.
 
 ## Threat model
 
@@ -235,7 +236,7 @@ with the pin.
 - `src/engine.zig` — subprocess dispatch + diagnostic parsing
 - `src/backend.zig` — backend interface: mock patches + `complete()` for live models
 - `src/repair.zig` — bounded repair loop
-- `src/formatcheck.zig` — advisory structure lint (9 pinned rules)
+- `src/formatcheck.zig` — advisory structure lint (10 pinned rules)
 - `src/density.zig` — formatting-density scorer (density/3)
 - `src/structhash.zig` — layout-skeleton tokenizer + hash (markdown, html)
 - `src/voice.zig` — voice rewrite logic (eligibility, guard, call assembly)
