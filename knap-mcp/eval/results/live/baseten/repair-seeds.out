@@ -3,8 +3,8 @@ backend: baseten   corpus: eval/seeds.json   max_iters: 4
 | seed | class | break | converged | iters | residual diags | exact |
 |---|---|---|---|---|---|---|
 | unclosed-if | unclosed-if | remove | yes | 1 | 0 | no |
-| unclosed-for | unclosed-for | remove | yes | 1 | 0 | no |
-| unclosed-var | unclosed-output | remove | yes | 1 | 0 | yes |
+| unclosed-for | unclosed-for | remove | yes | 1 | 0 | yes |
+| unclosed-var | unclosed-output | remove | yes | 1 | 0 | no |
 | unknown-filter | unknown-filter | replace | yes | 1 | 0 | no |
 | dangling-filter | dangling-pipe | replace | yes | 1 | 0 | no |
 | clean-control | control | none | clean | 0 | 0 | - |
@@ -15,7 +15,7 @@ backend: baseten   corpus: eval/seeds.json   max_iters: 4
 | apparatus-control | control | none | clean | 0 | 0 | - |
 | wikilink-typo | unknown-filter | replace | yes | 1 | 0 | no |
 | bare-dangling-pipe | dangling-pipe | replace | yes | 1 | 0 | no |
-| orphan-endfor | orphan-endfor | remove | yes | 1 | 0 | no |
+| orphan-endfor | orphan-endfor | remove | yes | 1 | 0 | yes |
 | mismatched-endif | mismatched-close | replace | yes | 1 | 0 | yes |
 | unclosed-endif-tag | unclosed-block-tag | replace | yes | 1 | 0 | yes |
 | endif-as-end | unknown-tag | replace | yes | 1 | 0 | yes |
@@ -31,12 +31,12 @@ backend: baseten   corpus: eval/seeds.json   max_iters: 4
 | class | breaks | converged | rate | mean iters | exact | no-op |
 |---|---|---|---|---|---|---|
 | unclosed-if | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
-| unclosed-for | 2 | 2 | 100% | 1.50 | 0/2 | 0 |
-| unclosed-output | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
+| unclosed-for | 2 | 2 | 100% | 1.50 | 1/2 | 0 |
+| unclosed-output | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
 | unknown-filter | 2 | 2 | 100% | 1.00 | 0/2 | 0 |
 | dangling-pipe | 2 | 2 | 100% | 1.00 | 0/2 | 0 |
 | orphan-endif | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
-| orphan-endfor | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
+| orphan-endfor | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
 | mismatched-close | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
 | unclosed-block-tag | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
 | unknown-tag | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
@@ -45,9 +45,9 @@ backend: baseten   corpus: eval/seeds.json   max_iters: 4
 | missing-filter-arg | 2 | 2 | 100% | 1.00 | 1/2 | 0 |
 | empty-filter-arg | 1 | 1 | 100% | 1.00 | 0/1 | 0 |
 | unclosed-tuple | 1 | 1 | 100% | 1.00 | 1/1 | 0 |
-| all | 22 | 22 | 100% | 1.05 | 8/22 | 0 |
+| all | 22 | 22 | 100% | 1.05 | 9/22 | 0 |
 
-converged 22/22 breaks   mean iters 1.05   exact 8/22   no-op seeds 0   controls 3/3 clean
+converged 22/22 breaks   mean iters 1.05   exact 9/22   no-op seeds 0   controls 3/3 clean
 calls: 23  mean slice: 422 B  max: 2058 B  prefix: 331 B
-report: knap://docs/doc-1793387313763173000-47131-96
-tokens: prompt 7935  completion 40318  total 48253  reasoning 38055
+report: knap://docs/doc-1793400686408729000-54351-96
+tokens: prompt 7935  completion 38404  total 46339  reasoning 36138
