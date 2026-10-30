@@ -1,0 +1,14 @@
+backend: baseten   model: meta-models/muse-spark-open-1026   effort: -   served: yes
+
+| row | ok | ms | finish | answer B | reasoning B | prompt tok | completion tok | total tok | reasoning tok | shape | error |
+|---|---|--:|---|--:|--:|--:|--:|--:|--:|---|---|
+| repair | yes | 1083 | stop | 17 | 959 | 186 | 233 | 419 | 217 | exact |  |
+| voice | yes | 1205 | stop | 16 | 1100 | 186 | 264 | 450 | 248 | exact |  |
+| verify | yes | 1025 | stop | 17 | 784 | 186 | 191 | 377 | 175 | exact |  |
+| judge | yes | 1662 | stop | 16 | 936 | 187 | 222 | 409 | 206 | exact |  |
+| enrich | yes | 1246 | stop | 17 | 1085 | 187 | 255 | 442 | 239 | exact |  |
+| repair-patch | yes | 2916 | - | 48 | - | 262 | 838 | 1100 | 815 | exact |  |
+
+smoke: 6/6 ok   wall 9137 ms   mean 1522 ms/call
+calls: 6  mean slice: 75 B  max: 130 B  prefix: 331 B
+tokens: prompt 1194  completion 2003  total 3197  reasoning 1900

@@ -496,7 +496,7 @@ fn defaultEndpoint(kind: Kind) struct { url: []const u8, model: []const u8 } {
     return switch (kind) {
         .spark => .{ .url = "https://api.meta.ai/v1/chat/completions", .model = "muse-spark-1.3" },
         .wonder => .{ .url = "https://api.meta.ai/v1/chat/completions", .model = "muse-wonder-1.0" },
-        .baseten => .{ .url = "https://api.baseten.co/v1/chat/completions", .model = "meta-models/muse-spark-open-1026" },
+        .baseten => .{ .url = "https://inference.baseten.co/v1/chat/completions", .model = "meta-models/muse-spark-open-1026" },
         .mock, .acp, .compat => .{ .url = "", .model = "" },
     };
 }
@@ -1397,7 +1397,10 @@ test "endpoint: defaults, per-kind overrides and derived models URL" {
     try testing.expectEqualStrings("https://api.meta.ai/v1/models", spark.models_url.?);
     try testing.expectEqual(@as(?f64, 0), spark.temperature);
     try testing.expectEqualStrings("muse-wonder-1.0", (try endpoint(&ctx, .wonder)).model);
-    try testing.expectEqualStrings("meta-models/muse-spark-open-1026", (try endpoint(&ctx, .baseten)).model);
+    const baseten = try endpoint(&ctx, .baseten);
+    try testing.expectEqualStrings("https://inference.baseten.co/v1/chat/completions", baseten.url);
+    try testing.expectEqualStrings("meta-models/muse-spark-open-1026", baseten.model);
+    try testing.expectEqualStrings("https://inference.baseten.co/v1/models", baseten.models_url.?);
 
     try env.put("KNAP_WONDER_MODEL", " muse-wonder-1.1 ");
     try env.put("KNAP_BASETEN_URL", "https://model-x.api.baseten.co/environments/production/sync/v1/chat/completions/");
