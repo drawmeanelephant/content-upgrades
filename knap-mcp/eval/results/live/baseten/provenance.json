@@ -7,11 +7,11 @@
   "effort": null,
   "expect": "*",
   "note": null,
-  "started": "2026-10-30T19:06:16Z",
-  "finished": "2026-10-30T19:14:36Z",
+  "started": "2026-10-30T22:49:14Z",
+  "finished": "2026-10-30T23:02:14Z",
   "knap_mcp": {
     "version": "0.1.0",
-    "git": "8b5c0c8+dirty"
+    "git": "7f3a4c9"
   },
   "engines": {
     "k4o": "k4o-aeba163",
@@ -19,24 +19,6 @@
   },
   "host": "Darwin arm64",
   "runs": [
-    {
-      "suite": "smoke",
-      "command": "knap-mcp smoke --backend baseten",
-      "exit": 0,
-      "seconds": 10,
-      "at": "2026-10-30T19:06:26Z",
-      "out": "smoke.out",
-      "err": "smoke.err"
-    },
-    {
-      "suite": "repair",
-      "command": "knap-mcp eval --corpus eval/seeds.json --backend baseten",
-      "exit": 0,
-      "seconds": 127,
-      "at": "2026-10-30T19:08:33Z",
-      "out": "repair-seeds.out",
-      "err": "repair-seeds.err"
-    },
     {
       "suite": "ratchet",
       "command": "knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend baseten",
@@ -54,6 +36,33 @@
       "at": "2026-10-30T19:14:36Z",
       "out": "voice.out",
       "err": "voice.err"
+    },
+    {
+      "suite": "smoke",
+      "command": "knap-mcp smoke --backend baseten",
+      "exit": 0,
+      "seconds": 11,
+      "at": "2026-10-30T22:49:25Z",
+      "out": "smoke.out",
+      "err": "smoke.err"
+    },
+    {
+      "suite": "repair",
+      "command": "knap-mcp eval --corpus eval/seeds.json --backend baseten",
+      "exit": 0,
+      "seconds": 121,
+      "at": "2026-10-30T22:51:26Z",
+      "out": "repair-seeds.out",
+      "err": "repair-seeds.err"
+    },
+    {
+      "suite": "repair",
+      "command": "knap-mcp eval --corpus eval/seeds.2nap.json --backend baseten",
+      "exit": 0,
+      "seconds": 648,
+      "at": "2026-10-30T23:02:14Z",
+      "out": "repair-seeds.2nap.out",
+      "err": "repair-seeds.2nap.err"
     }
   ]
 }
