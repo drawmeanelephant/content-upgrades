@@ -46,20 +46,20 @@ backend: baseten   model: meta-models/muse-spark-open-1026   effort: -   served:
 
 | row | ok | ms | finish | answer B | reasoning B | shape |
 |---|---|--:|---|--:|--:|---|
-| repair | yes | 1237 | stop | 17 | 815 | exact |
-| voice | yes | 1415 | stop | 16 | 967 | exact |
-| verify | yes | 1319 | stop | 17 | 903 | exact |
-| judge | yes | 1710 | stop | 16 | 953 | exact |
-| enrich | yes | 1052 | stop | 17 | 919 | exact |
-| repair-patch | yes | 2018 | - | 49 | - | exact |
+| repair | yes | 1652 | stop | 17 | 1247 | exact |
+| voice | yes | 1567 | stop | 16 | 1710 | exact |
+| verify | yes | 1847 | stop | 17 | 671 | exact |
+| judge | yes | 998 | stop | 16 | 724 | exact |
+| enrich | yes | 1019 | stop | 17 | 707 | exact |
+| repair-patch | yes | 2444 | - | 49 | - | exact |
 
-smoke: 6/6 ok, mean ~1.5 s/call.
+smoke: 6/6 ok, mean ~1.6 s/call.
 
 ## Results row (LIVE.md table columns)
 
 | profile | model (agent-reported) | smoke | repair `seeds.json` | ratchet `ratchet.live.json` | voice (verdict) |
 |---|---|---|---|---|---|
-| baseten | `meta-models/muse-spark-open-1026` | 6/6 ok, 1.5 s/call | 22/22 conv, 1.05 iters, 8/22 exact | 8/9 ok (`fixture-footnotes` accepted 1 < 2; `reading-note-min` +41.1, `apparatus-min` +25.2, `iteration-cap` +34.8) | 2/2 layout-identical (`mild` 7/8, `feral` 5/8, 3 rejected) |
+| baseten | `meta-models/muse-spark-open-1026` | 6/6 ok, 1.6 s/call | 22/22 conv, 1.05 iters, 9/22 exact; **2nap 165/167 conv (99%), 1.02 iters, 107/157 exact** | 8/9 ok (`fixture-footnotes` accepted 1 < 2; `reading-note-min` +41.1, `apparatus-min` +25.2, `iteration-cap` +34.8) | 2/2 layout-identical (`mild` 7/8, `feral` 5/8, 3 rejected) |
 
 Raw outputs, `provenance.json` and `summary.txt` are in
 `knap-mcp/eval/results/live/baseten/` (engines k4o `aeba163` /
@@ -72,8 +72,13 @@ dogbed `d96b125`).
   other model 403s. If the key is rotated to a full-access key,
   consider switching the default model to the public
   `meta-models/muse-spark-open`.
-- **No 2nap run.** `--full` adds 167 repair seeds; skipped per the
-  issue's budget note. Repair corpus coverage is `eval/seeds.json`
-  (22 seeds) only.
-- **Spend.** Suite ≈ 170 calls (smoke 6, repair 23, ratchet 32 + probe
-  renders, voice 8 + renders), ~150k tokens on the -1026 pricing.
+- **2nap misses.** `seeds.2nap.json` converged 165/167 (99%). The two
+  misses are `var-bracket-index/unclosed-output` and
+  `var-missing/unclosed-output` — each left 1 residual diag after one
+  iteration. Both are `unclosed-output` `remove` breaks.
+- **Repair re-run noise.** The `--full` pass re-ran `seeds.json` too;
+  exact count moved 8/22 → 9/22 run to run (live models are not
+  deterministic). Committed files are the latest run.
+- **Spend.** Full suite ≈ 340 calls (smoke 6, repair 23+171, ratchet
+  32 + probe renders, voice 8 + renders), ~400k tokens on the -1026
+  pricing — low single-digit dollars.
