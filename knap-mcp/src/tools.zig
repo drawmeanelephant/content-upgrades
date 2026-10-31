@@ -41,6 +41,7 @@ pub const all = [_]Tool{
     @import("tools/ingest.zig").tool,
     @import("tools/doc_voice.zig").tool,
     @import("tools/extract.zig").tool,
+    @import("tools/declaude.zig").tool,
 };
 
 pub const templatePath = common.templatePath;
