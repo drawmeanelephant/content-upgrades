@@ -9,6 +9,7 @@
 //!     knap-mcp lint <file.knap>             k4o lint passthrough
 //!     knap-mcp ingest <file>... [--force]   copy markdown docs into the store
 //!     knap-mcp format-check <doc_id|file>   advisory structure lint on a doc
+//!     knap-mcp declaude <doc|file|-> [..]   strip invisible marks; flag homoglyphs
 //!     knap-mcp eval [--corpus <seeds.json>] [--backend <b>]
 //!     knap-mcp backends [--probe]           backend availability + models
 //!     knap-mcp smoke [--backend <b>]        one live call per backend.Task
@@ -71,6 +72,7 @@ const commands = [_]Command{
     .{ .name = "lint", .usage = "lint <file.knap>", .summary = "k4o lint passthrough", .run = .{ .tool = .{ .tool = "knap_lint", .key = "template_text", .exactly_one = "template file", .read_file = true } } },
     .{ .name = "ingest", .usage = "ingest <file>... [--force]", .summary = "copy existing markdown docs into the store", .run = .{ .custom = @import("tools/ingest.zig").cli } },
     .{ .name = "format-check", .usage = "format-check <doc_id|file>", .summary = "advisory structure lint (warnings only)", .run = .{ .custom = @import("tools/format_check.zig").cli } },
+    .{ .name = "declaude", .usage = "declaude <doc_id|file|-> [--normalize] [--report]", .summary = "strip invisible marks; flag homoglyphs + slop", .run = .{ .custom = @import("tools/declaude.zig").cli } },
     .{ .name = "voice", .usage = "voice <id> --tone <t>", .summary = "rewrite voice: true values in a tone", .run = .{ .tool = .{ .tool = "knap_voice", .key = "template_id" } } },
     .{ .name = "doc-voice", .usage = "doc-voice <doc> --tone <t>", .summary = "guarded voice pass over a record (dry-run)", .run = .{ .custom = @import("tools/doc_voice.zig").cli } },
     .{ .name = "voice-tics", .usage = "voice-tics <before> <after>...", .summary = "profile a voice pass for repeated editorial tics", .run = .{ .custom = @import("voicetics.zig").cli } },
@@ -126,6 +128,7 @@ const usage_tail =
     \\  --jsonl <file>          audit: per-doc rows to file (default stdout)
     \\  --policy <file> | --no-policy   audit: collection policy (default $KNAP_POLICY, else knap-policy.json in or above <dir>)
     \\  --as <path>             publish-check: staged source path (raw profile)
+    \\  --normalize, --report   declaude: fold lookalikes to ASCII (lossy) | detect only, rewrite nothing
     \\  --dry-run | --apply --out <file>   doc-voice: dry-run (default) or write the patched doc to --out (never into content/)
     \\  --report <file>         doc-voice: report JSON to file; stdout then carries the patched doc
     \\  --replies <jsonl>       doc-voice: canned {"input","output"} replies, tried before the backend
@@ -642,6 +645,7 @@ test {
     _ = @import("boris.zig");
     _ = @import("borisrag.zig");
     _ = @import("ctx.zig");
+    _ = @import("declaude.zig");
     _ = @import("density.zig");
     _ = @import("engine.zig");
     _ = @import("eval.zig");
@@ -659,6 +663,7 @@ test {
     _ = @import("tools/boris_ask.zig");
     _ = @import("tools/boris_check.zig");
     _ = @import("tools/common.zig");
+    _ = @import("tools/declaude.zig");
     _ = @import("tools/density.zig");
     _ = @import("tools/doc_voice.zig");
     _ = @import("tools/extract.zig");
