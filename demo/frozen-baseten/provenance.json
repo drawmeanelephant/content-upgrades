@@ -1,0 +1,86 @@
+{
+  "label": "Muse Spark open (Baseten, direct API)",
+  "note": "Trial frozen takes with --backend baseten, mirroring the demo/frozen commands one for one. Direct OpenAI-compatible calls to inference.baseten.co; usage figures are model-only, unlike the ACP takes in demo/frozen. These are evidence, not the demo take: see quality notes per beat — several takes do not meet the curated bar and demo/frozen keeps the Muse Wonder takes.",
+  "probe": {
+    "command": "knap-mcp smoke --backend baseten",
+    "model": "meta-models/muse-spark-open-1026",
+    "effort": null,
+    "agent_reported": false
+  },
+  "date_utc": "2026-10-31",
+  "git": "1bdfe8e",
+  "engines": {
+    "k4o": "k4o-aeba163",
+    "dogbed": "dogbed-d96b125"
+  },
+  "takes": [
+    {
+      "beat": "2",
+      "name": "drafted verdict data",
+      "files": [
+        "demo/frozen/02-draft.system.txt",
+        "demo/frozen/02-draft.user.txt",
+        "demo/frozen-baseten/02-ask.json",
+        "demo/frozen-baseten/02-verdict.drafted.json",
+        "demo/frozen-baseten/02-verdict.drafted.md"
+      ],
+      "commands": [
+        "knap-mcp ask --backend baseten --task enrich --system ../demo/frozen/02-draft.system.txt --user ../demo/frozen/02-draft.user.txt > ../demo/frozen-baseten/02-ask.json",
+        "jq -r .content ../demo/frozen-baseten/02-ask.json | jq . > ../demo/frozen-baseten/02-verdict.drafted.json",
+        "knap-mcp validate verdict -d ../demo/frozen-baseten/02-verdict.drafted.json",
+        "knap-mcp render verdict -d ../demo/frozen-baseten/02-verdict.drafted.json --out ../demo/frozen-baseten/02-verdict.drafted.md"
+      ],
+      "quality": "good — draft validates, reaches its own verdict 'skip it for now', same story as the Wonder take"
+    },
+    {
+      "beat": "3",
+      "name": "live repair take",
+      "files": [
+        "demo/frozen-baseten/03-repair.json",
+        "demo/frozen-baseten/03-repaired.md"
+      ],
+      "commands": [
+        "awk '!done && /^\\{% endif %\\}$/ {done=1; next} {print}' templates/verdict.knap > /tmp/seeded/verdict.knap",
+        "KNAP_TEMPLATES_DIR=/tmp/seeded knap-mcp repair verdict -d data/verdict.sample.json --target markdown --backend baseten --out ../demo/frozen-baseten/03-repaired.md > ../demo/frozen-baseten/03-repair.json",
+        "knap-mcp render verdict -d data/verdict.sample.json --target markdown --out /tmp/clean.md",
+        "cmp ../demo/frozen-baseten/03-repaired.md /tmp/clean.md   # FAILS"
+      ],
+      "quality": "fails the curated bar — converged:true in 1 iteration, but the patch 'fixed' the unclosed {% if %} by deleting the doc body (repaired.md is frontmatter only, 332 B vs clean 2205 B). Renders with no diagnostics, so convergence is technically met while the result is semantically wrong. Kept as evidence for the repair-convergence finding."
+    },
+    {
+      "beat": "4b",
+      "name": "live ratchet take",
+      "files": [
+        "demo/frozen-baseten/04b-ratchet.json",
+        "demo/frozen-baseten/04b-ratchet.md",
+        "demo/frozen-baseten/04b-ratchet.data.json"
+      ],
+      "commands": [
+        "knap-mcp ratchet verdict -d data/verdict.min.json --backend baseten > ../demo/frozen-baseten/04b-ratchet.json",
+        "cp $KNAP_MCP_HOME/artifacts/doc-1793463425069803000-40695-65.md ../demo/frozen-baseten/04b-ratchet.md",
+        "cp $KNAP_MCP_HOME/artifacts/doc-1793463425069334000-40695-64.json ../demo/frozen-baseten/04b-ratchet.data.json"
+      ],
+      "quality": "weak — stalls at 43.9 vs 60.4 ceiling after 3 iterations, 4 declined slots, converged:false. Shows the loop working but underwhelming on tape."
+    },
+    {
+      "beat": "6",
+      "name": "live voice, mild and feral",
+      "files": [
+        "demo/frozen-baseten/06-voice-mild.json",
+        "demo/frozen-baseten/06-voice-feral.json",
+        "demo/frozen-baseten/06-verdict.mild.json",
+        "demo/frozen-baseten/06-verdict.feral.json",
+        "demo/frozen-baseten/06-verdict.{orig,mild,feral}.md",
+        "demo/frozen-baseten/06-structhash.txt"
+      ],
+      "commands": [
+        "knap-mcp voice verdict -d data/verdict.sample.json --tone mild --backend baseten > ../demo/frozen-baseten/06-voice-mild.json",
+        "knap-mcp voice verdict -d data/verdict.sample.json --tone feral --backend baseten > ../demo/frozen-baseten/06-voice-feral.json",
+        "jq .data ../demo/frozen-baseten/06-voice-$t.json > ../demo/frozen-baseten/06-verdict.$t.json",
+        "knap-mcp render verdict -d <data> --target markdown --out ../demo/frozen-baseten/06-verdict.{orig,mild,feral}.md",
+        "knap-mcp structhash ../demo/frozen-baseten/06-verdict.orig.md ../demo/frozen-baseten/06-verdict.mild.md ../demo/frozen-baseten/06-verdict.feral.md > ../demo/frozen-baseten/06-structhash.txt"
+      ],
+      "quality": "mixed — feral keeps the structhash; mild does not (rewrote field values, e.g. verdict 'give a shit' -> 'worth caring about', plus inserted emphasis). The same-suite run in eval/results/live/baseten reported both tones layout-identical, so this is run-to-run variance — evidence for the voice value-rewrite finding."
+    }
+  ]
+}
