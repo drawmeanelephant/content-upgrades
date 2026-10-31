@@ -32,7 +32,12 @@ ship deepseek, ship spark **plain only**, don't ship glm yet.
 - **#401:** extend the ledger to italicized terms — ironic italics are the
   only remaining tic and nothing guards them (12–30% of changed runs).
 - **#402:** glm ignores mild's one-span budget — ~55–70% of its rejections
-  are `mild: N formatting spans`; 15–19% discard rate.
+  are `mild: N formatting spans`; 15–19% discard rate. Fixed by spelling
+  the budget out in mild.md ("one `*italic*` span and nothing else — no
+  `**bold**`, `==highlight==`, `~~strikethrough~~`, no second `*italic*`"):
+  on 6 corpus records (78 runs/side), span-budget rejections went 8→0
+  and total rejections 11→2. Its remaining rejects drop apostrophes
+  (U+2019), a different quirk.
 - **#399:** `droid-deepseek` expect rejects the now-dated
   `deepseek-v4.1-flash-1017`; the eval ran via a private
   `KNAP_PROVIDERS_LOCAL` override (`expect='deepseek-v4.1-flash*'`).
