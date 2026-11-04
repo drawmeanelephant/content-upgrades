@@ -1,0 +1,52 @@
+{
+  "ok": true,
+  "converged": false,
+  "grounded": false,
+  "stop": "max_iterations",
+  "iterations": 1,
+  "calls": 2,
+  "renders": 16,
+  "ceiling_renders": 7,
+  "ms": 12282.9,
+  "score": {
+    "scorer": "density/3",
+    "start": 24.7,
+    "final": 34.4,
+    "ceiling": 34.8
+  },
+  "slot_fill": {
+    "start": "1/7",
+    "final": "2/7"
+  },
+  "data_id": "doc-1793825840447623000-22906-19",
+  "doc_id": "doc-1793825840448085000-22906-20",
+  "rejections": {
+    "parse": 0,
+    "schema": 0,
+    "inert": 0,
+    "render": 0,
+    "verifier": 0,
+    "no-gain": 0,
+    "new-warnings": 0,
+    "declined": 1,
+    "ungrounded": 0
+  },
+  "steps": [
+    {
+      "iteration": 1,
+      "slot": "apparatus_page",
+      "probe_gain": 10.0,
+      "gain": 0.0,
+      "accepted": false,
+      "reason": "declined"
+    },
+    {
+      "iteration": 1,
+      "slot": "receipts[+]",
+      "probe_gain": 9.4,
+      "gain": 9.6,
+      "accepted": true,
+      "reason": "ok"
+    }
+  ]
+}

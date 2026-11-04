@@ -1,0 +1,21 @@
+{
+  "backend": "baseten",
+  "model": "meta-models/muse-spark-open-1026",
+  "endpoint": "https://inference.baseten.co/v1/chat/completions",
+  "recorded_at": "2026-11-04T01:44:49.268531+00:00",
+  "api_elapsed_seconds": 12.262079500011168,
+  "live_call": true,
+  "mock": false,
+  "usage": {
+    "prompt_tokens": 2305,
+    "completion_tokens": 3476,
+    "total_tokens": 5781,
+    "reasoning_tokens": 2904
+  },
+  "validation_ok": true,
+  "render_ok": true,
+  "system_sha256": "97d8d9719120d77d683181ed48d45c0be676fe29941e50035eb8dcbc03dbbf13",
+  "user_sha256": "e2e2c933d86369d71d20a2b90e3b572366587ce0ebb7a5c9fc4cd5957d19243b",
+  "response_sha256": "4a45a925a9d8b148d5b517c50ddcd9666a915ba737147d8454a3a1334bbdac02",
+  "credential_in_public_output": false
+}

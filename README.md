@@ -2,63 +2,131 @@
 
 [![CI](https://github.com/drawmeanelephant/content-upgrades/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/drawmeanelephant/content-upgrades/actions/workflows/ci.yml)
 
-AI writes markdown in one flat barf: wall-paragraph, header, wall-paragraph, voice ironed out. `knap-mcp` fixes it with a loop, not a prompt. A model drafts and fills JSON *values*; the formatting — callouts, footnotes, tables, styled runs, a citations apparatus — lives in shipped, human-authored templates. A deterministic scorer (`density/3`, never a model call) scores the result, and a ratchet loop fills the highest-value empty slot until the score climbs. Maximum formatting, minimal formatting risk: the model never writes layout — a voice reply may insert only constrained inline emphasis (`**`, `*`, `~~`, code spans quoting the input, allowlisted emoji within the tone's budget), and an insert-only guard keeps everything else out, so it can't break the page.
+**Meta does the thinking. Give the content an upgrade.**
 
-## Install
+Content Upgrades turns model output and existing Markdown into richer documents:
+callouts, receipts tables, footnotes, source links, and prose with some personality.
+Meta Muse models supply content. Human-authored templates and deterministic checks
+control the structure.
 
-- Zig 0.17.0
-- `jq` for `make demo`; `boris` on PATH for the publish-check beat (optional — it's skipped without it)
+**Knap is the engine, not a second product name.** `knap-mcp` is one Zig binary
+with the same tools available through a stdio MCP server and a direct CLI.
+
+## An improvement loop, not another formatting prompt
+
+The server scores the rendered document, probes its empty template slots, and
+chooses the slot with the most promising formatting gain. It asks the model for
+one value, checks that value, and keeps it only if the rendered score improves.
+Existing nonempty values and the template do not change.
+
+The model does not choose layout during content generation. A separate repair
+path can ask for a template-region patch, which the engine must render again.
+
+The same toolchain also supports existing Markdown: read-only corpus audits,
+confined ingestion, extraction into template data, and policy-gated voice passes.
+Those paths keep source-tree writes separate from generated artifacts.
+
+## Run the demo without an API account
+
+Use Zig 0.17.0 and `jq`. Install `boris` to include the publication-reference
+check. Without it, `make demo` reports that beat as skipped.
+
+From the repository root:
 
 ```sh
-make           # -> knap-mcp/zig-out/bin/knap-mcp
-make engines   # pinned k4o + dogbed into ~/.cache/knap-engines
-make install   # -> ~/.local/bin/knap-mcp (PREFIX=/usr/local to relocate)
-make test
-```
-
-Put `~/.local/bin` on `PATH` for the bare `knap-mcp` commands below, or call `knap-mcp/zig-out/bin/knap-mcp` directly. An installed binary looks for templates at `<exe>/../../templates` first, then `./templates`, and keeps its artifact store in the cwd — point `KNAP_TEMPLATES_DIR` at `<repo>/knap-mcp/templates` and `KNAP_MCP_HOME` where you want artifacts when running it elsewhere.
-
-
-Engine pins live in `scripts/engines.sh` (k4o `aeba163`, dogbed `d96b125`). The Makefile exports `KNAP_K4O_PATH` / `KNAP_DOGBED_PATH` for every `make` target; for direct CLI runs outside make, `eval "$(scripts/engines.sh env)"`.
-
-## Quickstart — no accounts needed
-
-```sh
+make engines
+make
+export KNAP_MCP_HOME="$(mktemp -d)"
 make demo
 ```
 
-Runs the whole pipeline end-to-end on the built-in `mock` backend — draft data, seeded repair, render, format check, density ratchet, publish check, voice tones, three output targets — and leaves the transcript and artifacts in `demo/out/demo/`. Takes a few seconds.
+The demo uses the offline `mock` backend and recorded model takes. It makes no
+live model requests. Its transcript and generated documents are in
+`demo/out/demo/`. Initial engine setup may fetch pinned source revisions.
 
-Then drive it yourself from `knap-mcp/`:
+Try the core loop yourself:
 
 ```sh
-knap-mcp templates                                       # shipped templates + their JSON shapes
-knap-mcp render verdict -d data/verdict.sample.json      # -> {"ok":true,"doc_id":...}
-knap-mcp ratchet release-notes -d data/release-notes.min.json --backend mock
-# converges in 5 iterations: density/3 score 38.0 -> 81.8, values only — the template never changes
+eval "$(scripts/engines.sh env)"
+export KNAP_MCP_HOME="$(mktemp -d)"
+knap-mcp/zig-out/bin/knap-mcp ratchet release-notes \
+	-d knap-mcp/data/release-notes.min.json --backend mock
 ```
 
-## Model providers — use what you already have
+Inspect `steps`, `score`, `stop`, `data_id`, and `doc_id` in the response.
+`density/3` measures formatting density, not factual accuracy or writing quality.
+The loop can stop before filling every slot.
 
-No paid API is required. `mock` is the default backend and runs the full loop offline; everything above works with zero accounts. For a real model, point `acp` or `compat` at an agent or endpoint you already have:
+`make install` installs the binary under `~/.local/bin` by default. Set
+`KNAP_TEMPLATES_DIR` and `KNAP_MCP_HOME` when running an installed binary outside
+this checkout. See the [command and MCP reference](knap-mcp/README.md).
 
-| Path | Needs | How |
+## Where Meta and Baseten fit
+
+| Work | Model and route | Evidence |
 |---|---|---|
-| `mock` (default) | nothing | canned patches; proves the whole loop offline |
-| ACP agent | `devin` CLI (free tier), `gemini` CLI (Google account), `codex-acp` (ChatGPT account), or `opencode` | `KNAP_ACP_AGENT='devin acp --model swe-2-medium' knap-mcp ratchet release-notes -d data/release-notes.min.json --backend acp` |
-| ollama | local `ollama` + a pulled model | `OLLAMA_MODEL=<model> make live P=ollama`, or `KNAP_COMPAT_URL=http://127.0.0.1:11434/v1/chat/completions KNAP_COMPAT_MODEL=<model>` + `--backend compat` |
-| `compat` | any OpenAI-compatible endpoint | `KNAP_COMPAT_URL` + `KNAP_COMPAT_MODEL` (+ optional `KNAP_COMPAT_KEY`) |
-| `spark` / `wonder` / `baseten` | `MODEL_API_KEY` | Meta API endpoints |
+| Draft structured content | Meta Muse Spark open through Baseten's direct API | [Submission capture](demo/frozen-submission/README.md) |
+| Fill upgrade slots | Meta Muse Spark open through Baseten | Recorded upgrade input, output, and receipt in the submission capture |
+| Repair a template and vary voice | Meta Muse Wonder 1.0 through ACP | [Recorded takes and provenance](demo/frozen/provenance.json) |
+| Exercise the pipeline without credentials | `mock`, not a Meta model | `make demo` and `make eval` |
 
-`knap-mcp backends` shows what each resolves to; `backends --probe` handshakes the live ones. `scripts/live.sh --list` lists the bundled provider profiles and their readiness, and `make live P=<profile>` smoke-tests a profile before spending eval calls on it — `make live P=fake` needs nothing at all.
+Recorded cases are examples, not a claim that every model call succeeds.
+The video labels recorded takes, seeded failures, and shortened API waits.
+The typed API key is an invented joke, never a real key or key prefix.
 
-## Components
+## Use an existing model connection
 
-- `knap-mcp/` — one Zig binary: stdio MCP server **and** CLI. 8 shipped templates (`verdict`, `apparatus`, `release-notes`, `reading-note`, `runbook`, `filed-reference`, `filed-mascot`, `filed-lorelog`), k4o/dogbed engine dispatch, bounded repair loop, values-only density ratchet, voice tone presets (`mild`/`spicy`/`feral`), seeded-breakage eval harness. Command and tool reference: `knap-mcp/README.md`.
-- `docs/SPEC.md` — tool contracts and the repair-loop state machine.
-- `demo/` — the scripted end-to-end run behind `make demo`; reproducible transcript in `demo/out/demo/`.
-- `corpus/render.json` — vendored 188-case language-independent knap fixture set (MIT, upstream Obsidian knap).
+No paid provider is required for the offline demo. Live requests can consume
+provider credits.
+
+| Backend | Configuration |
+|---|---|
+| `baseten` | `MODEL_API_KEY`; requests `meta-models/muse-spark-open-1026` from Baseten |
+| `spark`, `wonder` | `MODEL_API_KEY` for the Meta API |
+| `acp` | `KNAP_ACP_AGENT` for an ACP agent you already have |
+| `compat` | `KNAP_COMPAT_URL`, `KNAP_COMPAT_MODEL`, and optional `KNAP_COMPAT_KEY` |
+| Local Ollama | Configure `compat`, or use the `ollama` profile in `scripts/live.sh` |
+
+Provide credentials privately through your environment or credential manager.
+Never put them in a tape, source file, or recording.
+`scripts/live.sh --list` describes provider profiles. `backends --probe` and live
+smoke tests contact providers; they are not part of the credential-free quickstart.
+
+## What the checks establish
+
+- Templates own document structure. Content generation fills values, not layout.
+- Accepted ratchet steps improve the deterministic formatting score.
+- Evidence-marked fields pass the configured verifier. The default is a heuristic,
+  not a general semantic fact-checker.
+- Voice guards protect named tokens and constrain markup, length, and tone.
+  They do not prove that arbitrary rewritten prose means the same thing.
+- Publication checks resolve references against a site graph. A resolved link
+  does not establish that its claims are true.
+
+## Verify the checkout
+
+```sh
+make test
+KNAP_MCP_HOME=$(mktemp -d) make eval
+make demo
+```
+
+The mock eval measures seeded repair behavior and controls, not Meta model
+performance. [Submission notes](docs/tracks/SUBMISSION.md) map the public claims
+to the commands and recorded artifacts that support them.
+
+## Components and credits
+
+- [`knap-mcp/`](knap-mcp/README.md): MCP server, CLI, scorer, upgrade loop, guards,
+  and eight shipped templates.
+- [`scripts/engines.sh`](scripts/engines.sh): pinned k4o and dogbed rendering
+  engines. The Makefile uses those pins, never a mutable neighboring build.
+- [`boris-site/`](boris-site/): the frozen site graph used by reference checks.
+- [`demo/`](demo/storyboard.md): executable recordings and the end-to-end demo.
+- `corpus/render.json`: a vendored 188-case fixture set from upstream Obsidian
+  knap, under MIT. Rendering engines and vendored fixtures are credited
+  dependencies, not model-generated project code.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
