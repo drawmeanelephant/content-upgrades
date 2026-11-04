@@ -1,13 +1,14 @@
 # knap-mcp
 
-AI can't do layout. So we don't let it.
+The engine behind **Content Upgrades**. Let the model work on content while
+human-authored templates control document structure.
 
 One Zig binary: a stdio JSON-RPC MCP server **and** a direct CLI — same
 tools either way. The server is a dispatcher + orchestration layer —
 rendering goes through `k4o` (markdown/oliver) and `dogbed` (html) as
 external binaries. The model writes JSON values and repair patches only;
 templates are shipped, server-side, human-authored. Layout, markup and
-fact-shaped tokens are verified before anything ships; the meaning of
+fact-shaped tokens are checked; the meaning of
 plain-word prose is not.
 
 ## Build
@@ -93,7 +94,7 @@ that returns `{"ok":false}` (the JSON still goes to stdout).
 `knap_lint` · `knap_format_check` · `knap_voice` · `knap_structure_hash` ·
 `knap_verify_citation` · `boris_ask` · `boris_check` ·
 `knap_publish_check` · `knap_density` · `knap_ratchet` · `knap_ingest` ·
-`knap_doc_voice` · `knap_extract` — plus
+`knap_doc_voice` · `knap_extract` · `knap_declaude` — plus
 `resources/list`/`resources/read` over `knap://templates/<id>` and
 `knap://docs/<doc_id>` artifact handles.
 
@@ -105,8 +106,9 @@ list-heavy docs. Warnings only — it never blocks.
 
 `knap_structure_hash(doc_id)` hashes a rendered doc's layout skeleton —
 block and inline kinds with all text dropped — for markdown or html.
-`strict` also keeps link targets and footnote labels. Equal hashes mean
-the same layout; this is how the voice demo proves only the words changed.
+`strict` also keeps link targets and footnote labels. `--ignore-formatting`
+allows comparisons that ignore permitted emphasis and code spans.
+Equal hashes establish the same skeleton, not identical words or meaning.
 
 `knap_verify_citation(claim, evidence)` is the advisory citation check:
 `entails | neutral | contradicts | unknown`. `heuristic` (the default) is
@@ -134,7 +136,11 @@ empty slot raises the density score most, ask the backend for one value,
 keep it only if schema, markup and evidence checks pass and the markdown
 score rises. A non-empty value and the template never change. Stops on
 ceiling, plateau, stalled, `--max-iters` (default 6) or the call budget.
-`ratchet-eval` runs the 35-case corpus in `eval/ratchet.json`.
+`evidence: data` reads bare source strings, flat `sources[*].quote` or
+`.text`, and the shipped source shape's `sources[*].quotes[*].text`.
+`evidence: record` enables the stricter extracted-record grounding contract.
+The `grounded` response field describes that mode, not a general fact-check grade.
+`ratchet-eval` runs the corpus in `eval/ratchet.json`.
 
 ## Threat model
 
@@ -160,13 +166,13 @@ The MCP surface is not a filesystem API. What it can reach:
 
 ## Voice
 
-`knap_voice` rewrites the `voice: true` string values of a data object in
-one tone (`--tone mild|spicy|feral`), one backend call per value; a
-rewrite that fails the guard keeps the original, so the structure —
-and the structure hash — is identical across tones. The guard keeps
-protected tokens verbatim, requires the reply's markup counts and inline
-skeleton to match the input's, and rejects meta prose, invalid UTF-8 and
-a trailing `!` on `footnote_abutting` fields. The contract
+`knap_voice` rewrites eligible `voice: true` string values in one tone
+(`--tone mild|spicy|feral`), with one backend call per value. A rejected
+reply keeps the original. The guard keeps protected tokens and the
+non-formatting skeleton, permits constrained inline formatting, and rejects
+meta prose, invalid UTF-8, and forbidden markup. Use `structhash
+--ignore-formatting` when comparing outputs with different permitted emphasis.
+The guard does not prove semantic equivalence of plain-word prose. The contract
 (eligibility walk, the never-rewritten list, the guard) is
 `prompts/voice/README.md`. Prompts load from `KNAP_PROMPTS_DIR`, default
 `../prompts` next to the templates dir.

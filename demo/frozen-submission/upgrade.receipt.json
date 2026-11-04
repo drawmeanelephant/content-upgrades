@@ -1,0 +1,23 @@
+{
+  "backend": "baseten",
+  "model": "meta-models/muse-spark-open-1026",
+  "live_call": true,
+  "recorded_at": "2026-11-04T20:57:08.143935+00:00",
+  "max_iterations": 1,
+  "max_model_calls": 2,
+  "calls": 2,
+  "accepted_steps": 1,
+  "score": {
+    "scorer": "density/3",
+    "start": 24.7,
+    "final": 34.4,
+    "ceiling": 34.8
+  },
+  "stop": "max_iterations",
+  "existing_values_unchanged": true,
+  "template_unchanged": true,
+  "template_sha256": "b60714cd0fdddd17300faed00cbcc4cf295d46cf2d9a0cb59016b623c3af6be2",
+  "source_draft_sha256": "d0a8996b3105bb79d4e1588bd789b8957b3aff099e2131c1573a8b6f761d5f69",
+  "credential_in_public_output": false,
+  "scope": "One bounded formatting-density example, not a model-quality benchmark."
+}
