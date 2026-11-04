@@ -1004,15 +1004,24 @@ fn codeVerbatim(value: Value, evidence: []const []const u8) bool {
     };
 }
 
-/// Evidence quotes from `data.sources[*]` (objects with `quote` or `text`,
-/// or bare strings).
+/// Evidence quotes from `data.sources[*]`: bare strings, flat `quote` or
+/// `text` fields, and the shipped source shape's nested `quotes[*].text`.
 pub fn dataEvidence(arena: std.mem.Allocator, data: ObjectMap) ![]const []const u8 {
     var out: std.ArrayList([]const u8) = .empty;
     const src = data.get("sources") orelse return out.items;
     if (src != .array) return out.items;
     for (src.array.items) |item| switch (item) {
         .string => |s| try out.append(arena, s),
-        .object => |o| if (str(o, "quote") orelse str(o, "text")) |q| try out.append(arena, q),
+        .object => |o| {
+            if (str(o, "quote") orelse str(o, "text")) |q| try out.append(arena, q);
+            if (o.get("quotes")) |quotes| {
+                if (quotes != .array) continue;
+                for (quotes.array.items) |quote| {
+                    if (quote != .object) continue;
+                    if (str(quote.object, "text")) |q| try out.append(arena, q);
+                }
+            }
+        },
         else => {},
     };
     return out.items;
@@ -2677,6 +2686,35 @@ test "isInert rejects markup anywhere in a value" {
     for (bad) |b| try testing.expectEqualStrings(b[1], inertString(b[0]).?);
     const good = [_][]const u8{ "Plain prose, with commas.", "3 < 4 and 5 > 2", "1.9.x", "C# is fine-ish", "wal_dir and storage.wal_path", "2 * 3 = 6", "a*b" };
     for (good) |g| try testing.expect(inertString(g) == null);
+}
+
+test "data evidence reads nested source quotes from the shipped draft shape" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const data = try std.json.parseFromSliceLeaky(Value, a,
+        \\{"sources":[{"name":"AcmeDB docs — backups","quotes":[
+        \\{"text":"Point-in-time snapshots are coming soon.","used_for":"the backup blocker"},
+        \\{"text":"Cross-region replication is on the roadmap."}]}]}
+    , .{});
+    const evidence = try dataEvidence(a, data.object);
+    try testing.expectEqual(@as(usize, 2), evidence.len);
+    try testing.expectEqualStrings("Point-in-time snapshots are coming soon.", evidence[0]);
+    try testing.expectEqualStrings("Cross-region replication is on the roadmap.", evidence[1]);
+}
+
+test "data evidence keeps legacy sources and ignores malformed nested quotes" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const data = try std.json.parseFromSliceLeaky(Value, a,
+        \\{"sources":["Bare source",{"quote":"Flat quote","quotes":[{"text":"Nested quote"}]},
+        \\{"text":"Flat text"},{"quotes":null},{"quotes":[null,3,{},{"text":false}]}]}
+    , .{});
+    const evidence = try dataEvidence(a, data.object);
+    try testing.expectEqual(@as(usize, 4), evidence.len);
+    for ([_][]const u8{ "Bare source", "Flat quote", "Nested quote", "Flat text" }, evidence) |want, got|
+        try testing.expectEqualStrings(want, got);
 }
 
 test "verifier gate: claims come from evidence-flagged strings; only verbatim entails" {
