@@ -16,7 +16,7 @@ demo/build.sh smoke          # toolchain smoke test -> demo/out/smoke.mp4
 the mock backend, with no vhs and no network. It uses the same shipped commands
 the tapes now run (`voice`, `structhash`, `publish-check`, `density`, `ratchet`)
 and writes a normalized transcript and the beat artifacts to `demo/out/demo/`
-(see `docs/tracks/I1.md`). Use it as the per-beat reference text when
+(see `docs/demo-e2e.md`). Use it as the per-beat reference text when
 re-recording a tape.
 
 Status key:
@@ -47,7 +47,7 @@ and cut beat 4 (30s to 20s), beat 2 (20s to 15s), and beat 6 (20s to 15s): that
 brings the rendered beats to about 2:02, and trimming the three tapes still
 over their targets (5, 7 and 8) lands just under 2:00. Typing can also be sped
 up in Kdenlive. The video length limit is still unconfirmed (see
-`docs/tracks/V0.md`).
+`docs/demo-video.md`).
 
 **Engines and targets.** Tapes take the engine pins from `scripts/engines.sh`, now k4o
 main `aeba163` and dogbed main `d96b125`. That k4o has no gfm or textile output, so

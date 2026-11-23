@@ -11,7 +11,7 @@
 //! - `judgeStep` is the accept / keep_iterating / escalate gate for the
 //!   repair, voice and ratchet loops.
 //!
-//! Heuristic constants are pinned below; docs/tracks/M2.md explains them.
+//! Heuristic constants are pinned below; docs/verifier-design.md explains them.
 
 const std = @import("std");
 const Ctx = @import("ctx.zig").Ctx;

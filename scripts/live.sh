@@ -11,7 +11,7 @@
 #   --out <dir>      results root (default ${XDG_CACHE_HOME:-~/.cache}/knap-live,
 #                    outside the repo; pass --out knap-mcp/eval/results/live
 #                    to update the committed record, see
-#                    docs/tracks/LIVE-HYGIENE.md)
+#                    docs/live-hygiene.md)
 #   --force          keep going after a failed smoke
 #
 # `all` means every ready profile except `fake`. smoke always runs first: it

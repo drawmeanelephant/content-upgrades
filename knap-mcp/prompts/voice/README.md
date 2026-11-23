@@ -113,7 +113,7 @@ Caching: there are exactly three system messages, one per tone, each 6.8 to 7.7 
 
 These are the rules `voice.awk` applies to the examples. C1 ports the hard rules to Zig and runs them on every reply. Lengths are in UTF-8 bytes. The two guards enforce the same contract with one exception: the insert-only skeleton clause of rule 3 is runtime-only (marked in place); everything else is mirrored in `voice.awk`.
 
-Scope: the guard verifies tokens — facts, markup and structure — not meaning. At runtime a reply that adds a claim in plain words (`ships on schedule; vendor recalled units, refunded buyers`) or flips the input with a negation (`never ships on schedule`) passes every rule. A cap on new content words can't tell those from legitimate voice, so there is none; the measurements are in `docs/tracks/VOICE-SCOPE.md`.
+Scope: the guard verifies tokens — facts, markup and structure — not meaning. At runtime a reply that adds a claim in plain words (`ships on schedule; vendor recalled units, refunded buyers`) or flips the input with a negation (`never ships on schedule`) passes every rule. A cap on new content words can't tell those from legitimate voice, so there is none; the measurements are in `docs/voice-guard-scope.md`.
 
 Hard rules. A failure keeps the original value.
 

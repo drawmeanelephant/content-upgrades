@@ -112,8 +112,7 @@ make demo
 ```
 
 The mock eval measures seeded repair behavior and controls, not Meta model
-performance. [Submission notes](docs/tracks/SUBMISSION.md) map the public claims
-to the commands and recorded artifacts that support them.
+performance.
 
 ## Components and credits
 

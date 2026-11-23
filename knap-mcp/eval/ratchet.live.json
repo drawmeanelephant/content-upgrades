@@ -1,5 +1,5 @@
 {
-  "about": "Ratchet eval corpus for live backends: knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend <b>. Same rows as eval/ratchet.json minus every case whose 'expect' depends on a per-case mock override — on a live backend those prove nothing (see docs/tracks/D2.md, 'For other lanes'). The mock table stays so the file still runs under --backend mock. Paths resolve against this file's directory, then the cwd.",
+  "about": "Ratchet eval corpus for live backends: knap-mcp ratchet-eval --corpus eval/ratchet.live.json --backend <b>. Same rows as eval/ratchet.json minus every case whose 'expect' depends on a per-case mock override — on a live backend those prove nothing (see docs/ratchet-notes.md, 'For other lanes'). The mock table stays so the file still runs under --backend mock. Paths resolve against this file's directory, then the cwd.",
   "mock": "ratchet-mock.json",
   "cases": [
     {

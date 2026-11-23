@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "comment": "Seeded-breakage corpus derived from 2nap@38b2ffc (41 output triples in fixtures/, 3 in examples/, 16 error cases). Each triple is mutated through every applicable pinned error class; 8 template-error cases are added as pre-broken seeds (break none, explicit class). Fixture templates and data are inline; examples live in eval/templates/2nap/ and are referenced by template_path. A triple is used only if its template renders clean under the pinned k4o main (which has no textile, so 2nap's byte-exact textile gate is gone), and a seed only if it fails there. See docs/tracks/E1.md and docs/tracks/P1.md for the rules, skip and drop reasons.",
+  "comment": "Seeded-breakage corpus derived from 2nap@38b2ffc (41 output triples in fixtures/, 3 in examples/, 16 error cases). Each triple is mutated through every applicable pinned error class; 8 template-error cases are added as pre-broken seeds (break none, explicit class). Fixture templates and data are inline; examples live in eval/templates/2nap/ and are referenced by template_path. A triple is used only if its template renders clean under the pinned k4o main (which has no textile, so 2nap's byte-exact textile gate is gone), and a seed only if it fails there. See docs/seeded-corpus.md and docs/k4o-main-line.md for the rules, skip and drop reasons.",
   "classes": [
     "unclosed-if",
     "unclosed-for",

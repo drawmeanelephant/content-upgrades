@@ -25,7 +25,7 @@
 #                         of the corpus, so repeats should collapse to ~0
 #   --out <dir>           results root (default ~/.cache/knap-voice-tics)
 #
-# Read the table with docs/tracks/VOICE-TICS.md: "tic runs" is the share of
+# Read the table with docs/voice-tics.md: "tic runs" is the share of
 # changed runs carrying a stock interjection or an ironic one-word italic;
 # "density +" is the mean density gain, the reason the pass runs at all.
 # Repeat share and distinct ratio grow with sample size: compare rows over
