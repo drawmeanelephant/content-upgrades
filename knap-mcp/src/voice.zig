@@ -2149,7 +2149,7 @@ test "guard: C1 controls, separators and format chars are banned by code point" 
     try testing.expect(c.passes());
 }
 
-// The guard's documented scope (#306, docs/tracks/VOICE-SCOPE.md): it
+// The guard's documented scope (#306, docs/voice-guard-scope.md): it
 // verifies tokens, not meaning. If a semantic rule ever lands, this test
 // should flip and the README/SPEC scope statements change with it.
 test "guard scope: plain-word claims and negation flips pass (token-level only)" {

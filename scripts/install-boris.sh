@@ -5,7 +5,7 @@
 #
 #   tag          git tag in drawmeanelephant/boris (default v0.8.2: the
 #                version boris-site/ and knap_publish_check were measured
-#                against — see docs/tracks/B1.md; the default is checked
+#                against — see docs/boris-artifact.md; the default is checked
 #                against BORIS_COMMIT, other tags are not pinned)
 #   zig-version  toolchain for the build (default 0.16.0; boris migrated to
 #                Zig 0.17.0 after v0.8.2, so the tag does not build on the

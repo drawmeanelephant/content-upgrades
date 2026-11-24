@@ -5,7 +5,7 @@ the research pack behind the AcmeDB verdict that `knap-mcp/data/*.sample.json`
 renders. knap-mcp reads its artifacts and stages rendered docs into a copy of
 it. It never indexes live and never writes here.
 
-Measurements, command shapes, and design notes: [`docs/tracks/B1.md`](../docs/tracks/B1.md).
+Measurements, command shapes, and design notes: [`docs/boris-artifact.md`](../docs/boris-artifact.md).
 
 ## Layout
 

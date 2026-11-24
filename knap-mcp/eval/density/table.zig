@@ -1,4 +1,4 @@
-//! Prints the density fixture table for docs/tracks/D1.md: one row per
+//! Prints the density fixture table for docs/density-scorer.md: one row per
 //! file, the total, the top contributors, and the scoring time. With
 //! `--json`, prints each file's full `density.writeJson` breakdown instead.
 //!

@@ -193,7 +193,7 @@ cmd_rough() {
   concat "$OUT/rough-cut.mp4" "${clips[@]}"
   verify "$OUT/rough-cut.mp4"
   log "demo/out/rough-cut.mp4: ${#clips[@]} clips, $(describe "$OUT/rough-cut.mp4")"
-  log "timing reference only; the real cut is assembled in Kdenlive (docs/tracks/V0.md)"
+  log "timing reference only; the real cut is assembled in Kdenlive (docs/demo-video.md)"
 }
 
 case "${1:-smoke}" in

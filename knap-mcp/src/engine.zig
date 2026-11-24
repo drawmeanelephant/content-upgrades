@@ -83,7 +83,7 @@ pub fn lint(ctx: *Ctx, template_path: []const u8) Error!LintResult {
 fn runEngine(ctx: *Ctx, argv: []const []const u8, stdout_limit: std.Io.Limit) Error!std.process.RunResult {
     const secs = ctx.envSecs("KNAP_ENGINE_TIMEOUT", 60);
     // No retry on a signal kill: the CI "flake" was a deterministic SIGILL
-    // (AVX-512 binary on a non-AVX-512 runner, see docs/tracks/CI2.md), so a
+    // (AVX-512 binary on a non-AVX-512 runner, see docs/ci-demo.md), so a
     // rerun on the same machine only doubles the cost of a real crash.
     return std.process.run(ctx.arena, ctx.io, .{
         .argv = argv,

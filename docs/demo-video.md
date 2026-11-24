@@ -1,0 +1,241 @@
+# Demo video pipeline: smoke test, storyboard, tapes
+
+Owner files: `demo/` and this note. Rendered media goes to `demo/out/`, which is
+gitignored. No mp4, gif, or png is committed.
+
+## What landed
+
+- `demo/build.sh` runs the pipeline: vhs tape -> mp4 -> ffmpeg trim and normalize -> concat.
+  - `smoke` (default): renders `demo/tapes/00-smoke.tape` (dummy content, no knap-mcp),
+    keeps the first and last 40% of the take, and concatenates them into
+    `demo/out/smoke.mp4`. Then it decodes every frame to prove the file plays.
+  - `check`: dependency check plus a `zig build` of knap-mcp.
+  - `tapes [NN ...]`: renders beat tapes and prints target vs rendered duration.
+  - `rough [NN ...]`: normalizes rendered beats and concatenates them into
+    `demo/out/rough-cut.mp4`, a timing reference for the Kdenlive edit.
+- `demo/storyboard.md` maps SPEC's 8 beats to shots: duration, on-screen content,
+  exact commands, dependencies, and status.
+- `demo/tapes/`: one tape per beat, plus an optional 4b for the density ratchet
+  (the README pitch, which SPEC's beat list predates).
+  - ready: 1 (cold open), 3 (repair), 5 (boris catch — runs `knap_publish_check`
+    since B2 shipped)
+  - ready (mock): 4b (density ratchet, D1+D2), 6 (voice — `knap_voice` and
+    `structhash` shipped with C1/C2)
+  - partial: 2, 4, 7, 8
+  - (Status list updated Oct 26; the stand-ins named above have all landed.)
+  - Tapes use only the markdown and html targets. The k4o main pin (#15) has no gfm
+    or textile output, and lane P1 narrows targets to markdown | oliver | html. Beat 7
+    shows html where SPEC says `verdict.oliver` — oliver renders byte-identical to
+    markdown for this template, so html is what makes the second view visible.
+- `demo/lib/env.sh` is sourced (hidden) by each tape. It takes the engine paths from
+  `scripts/engines.sh path` unless the caller already set them (it never builds a
+  pin), and sets the mock backend, a fresh scratch workdir and artifact store per take,
+  short on-screen paths through symlinks (`data/`, `templates/`, `prompts/`,
+  `boris-site/`, ...), a pinned glow config, and a fixed prompt. It also has the
+  take-time seed helpers (`demo_seed_unclosed_if`, `demo_seed_hallucinated_source`,
+  `demo_seed_voice`) and the slate helper.
+- `demo/fixtures/generic-ai-doc.md`: the cold-open stand-in for flat model output.
+
+## Toolchain findings (the D3 surprises)
+
+1. vhs 0.12.1 records through ttyd and renders in headless Chrome (go-rod), then
+   encodes with ffmpeg. All of it was already on this machine: ttyd 1.7.7, ffmpeg 9.0.2,
+   Google Chrome. Nothing was installed. On a fresh machine, run `brew install vhs`
+   (the formula pulls in ffmpeg and ttyd). If no Chrome or Chromium is present, go-rod
+   downloads Chromium into `~/.cache/rod` on the first render. Beat tapes also need
+   `brew install jq glow`, and beat 5 needs `boris` on `PATH` (B1 used 0.8.2).
+2. vhs writes mp4 at 25 fps even with `Set Framerate 30`. `build.sh` re-encodes every
+   clip to one format (1920x1080, 30 fps, h264, yuv420p, CRF 18) before concatenating.
+   The Kdenlive project must use the same profile.
+3. The vhs parser rejects bare absolute paths: `Output /tmp/x.mp4` fails with "Expected
+   file path". Tapes use repo-relative paths, so run them from the repo root.
+   `build.sh` does that for you.
+4. This Homebrew ffmpeg build has no libfreetype, so the `drawtext` filter is not
+   available. Title cards and slates must be images (Muse Image PNGs) or Kdenlive
+   titles. To turn a still into a clip:
+   `ffmpeg -loop 1 -t 3 -i card.png -vf fps=30,format=yuv420p -c:v libx264 card.mp4`
+5. Render cost on this machine: about 16s for the smoke test, and about 2.5 to 3.5
+   minutes for all 9 beat tapes (about 156s of footage). Tapes render one at a time.
+6. glow piped into another command drops its styling, so tapes use `glow -p` (pager on
+   a real tty). Under the old f97c5db pin, the markdown target emitted an HTML
+   `<table>` that glow collapsed into one line; k4o `bdfb838`'s markdown target emits a
+   pipe table, which glow renders.
+7. BSD `find` does not descend into a symlinked directory given as an argument
+   (`find src` returns nothing when `src` is a symlink). Use `find src/`.
+8. The terminal is 121 columns wide at these settings (1920 px, padding 40, Menlo 24).
+   A longer command or output line wraps on screen. Check new tape commands, and the
+   output they print, against that width; beat 5 uses short file names for this.
+
+## Bugs found in files other lanes own (not fixed here)
+
+Filed against `origin/main` at c74696d. Re-verified Oct 26 on main at 0038082
+(pins k4o `aeba163`, dogbed `188ccac`): items 1–3, 5, 8, 11 and 12 are
+resolved — notes inline. Items 6, 7, 9 and 10 remain open.
+
+1. **Fixed:** ~~the MCP `initialize` response is invalid JSON~~. `initialize`,
+   `tools/list`, `tools/call` and error responses all parse as valid JSON over
+   stdio on main. (Was: `mcp.zig` never closed `result`, so every real client
+   failed the handshake.)
+2. **Not reproducible:** ~~knap-mcp stdout overwrites content when redirected
+   to a file~~. `{ echo AAAA; knap-mcp backends; } > f` keeps the AAAA line on
+   main; the positional-write behavior is gone.
+3. **Fixed:** ~~the CLI exits 0 when a render fails~~. A render that returns
+   `{"ok":false,...}` (e.g. a seeded template break) exits 1 on main, matching
+   "exit 1 = any error" in `main.zig`'s header.
+4. **Fixed by #15:** the html target failed on both shipped templates with the old
+   dogbed pin. dogbed `d7ffaba` renders verdict and apparatus to html, so beat 7 now
+   shows html.
+5. **Fixed:** ~~the markdown `table` output has an empty header row~~. The
+   receipts table renders `| Claim | Evidence | Source |` on the pinned k4o
+   `aeba163` (fixed by T3); the old `|  |  |` header and the "claim | evidence"
+   data row are gone from beats 3 and 4.
+6. **The mock unknown-filter patch converges but is wrong.** It deletes `| head2`
+   instead of fixing it to `| h2`, so the heading is lost. E1's new `exact` column
+   now catches this (exact 0/6 under mock). It is still why beat 3 uses the
+   unclosed-if seed. M1 owns the mock.
+7. **Repair steps do not include the patch.** SPEC's beat 3 wants the patch visible.
+   The owner of repair/tools could add region + patch to `steps[]`, or print them under
+   `KNAP_DEBUG`.
+8. **Fixed:** ~~the verdict template fails format-check~~. The sample render
+   returns zero warnings — every footnote key is referenced in-text
+   (`[^benchmark]`, `[^backup-gap]`) and there are no bare URLs.
+9. **Deferred (cut):** ~~one data file can't drive both views yet~~. apparatus
+   rendered from `verdict.sample.json` still has no subtitle and no quotes, but
+   SPEC's "one data.json" shared shape (T2/I5) is cut — beat 7 keeps
+   `data/apparatus.sample.json` for the apparatus render.
+10. **The pin moved to k4o main (#15), which has no gfm or textile output.** `render
+    --target gfm|textile` now fails with `invalid --format (expected markdown or
+    oliver)`, and `repair --target gfm` reports `converged: false`. The tapes switched
+    to markdown and html. SPEC's beat 7 now names `verdict.oliver` (captain
+    updated it; the textile reference is gone).
+11. **Fixed:** ~~`knap-mcp density <doc_id>` can't score the cold-open doc~~.
+    The density CLI shipped as `density <doc_id|file>` — it scores a file path
+    directly, and the fixture measures 3.7 on density/1.
+12. **Done:** E1's corpora were re-baselined and the README numbers match a
+    fresh `make eval` on `aeba163`: `seeds.json` converged 12/22 (mean iters
+    1.25, exact 4/12, controls 3/3 clean) and `seeds.2nap.json` converged
+    120/167 (mean iters 1.19, exact 58/115, controls 2/2 clean), zero no-op
+    seeds in either corpus. The old `bdfb838` numbers quoted here (36/179,
+    5/18) are historical.
+
+## Notes for lanes that will change a beat
+
+- **B2:** beat 5 shows `stage-check.sh`'s output format: `doc:line:col: error: CODE:
+  message`, then `[[Original Target]] -> slug`, then one FAIL line, with exit 1. That
+  reads well on screen. If `knap_publish_check` keeps the original line and column and
+  the link-to-slug line, the beat only needs its command swapped.
+- **C1:** beat 6 applies `prompts/voice/mock/<tone>.jsonl` to
+  `data/verdict.sample.json` with jq. If the mock voice backend returns the same
+  values, the on-screen diff won't change when the tape switches to `knap-mcp voice`.
+- **C2:** beat 6 needs a CLI that prints both structure hashes on one screen, for
+  example `knap-mcp structhash mild.md feral.md`.
+- **D1/D2:** the 04b slate stays until the scorer has a CLI and the ratchet exists;
+  the commands in its tape follow the next-phase plan's proposed CLI and output shapes.
+- **P1:** beat 7 is where oliver should appear on screen. The tapes use no target
+  outside markdown | html.
+
+## What the human must do in Kdenlive
+
+Kdenlive and OBS are not installed here: `brew install --cask kdenlive` (and
+`brew install --cask obs` if any live segment is recorded). The Kdenlive step of
+GAMEPLAN's D3 smoke test is the one link I could not verify. A one-minute check:
+import `demo/out/smoke.mp4`, export it, and run `ffprobe` on the result.
+
+1. Render: `demo/build.sh tapes`, then `demo/build.sh rough`. Import the normalized
+   clips from `demo/out/rough/`, not the 25 fps raw takes in `demo/out/tapes/`.
+2. Project settings: HD 1080p, 30 fps (1920x1080, square pixels), 48 kHz stereo audio.
+3. Put the beat clips on V1 in storyboard order. Optionally, put `rough-cut.mp4` on a
+   muted track as a timing guide.
+4. Trim to the storyboard targets. Each take starts a fraction of a second after the
+   hidden setup and holds its last frame for 1 to 2 seconds. Cut dead air, and speed up
+   long typing with the Speed effect.
+5. On V2: the Muse Image title card and section slates (1920x1080 PNG), the beat 4 art
+   overlay, and the beat 8 numbers card (a still from I4).
+6. When a placeholder beat's lane lands, re-render that beat
+   (`demo/build.sh tapes 05 && demo/build.sh rough 05`) and replace the clip in the bin.
+   Clips of similar duration keep their timeline positions.
+7. Voiceover on A1, recorded per beat. An optional music bed goes on A2; check its
+   license.
+8. Captions, if wanted or required: Kdenlive's subtitle track.
+9. Export: MP4 (H.264 + AAC), 1920x1080, 30 fps, about 8 to 12 Mbps video, AAC 192k.
+   Write it outside the repo or under `demo/out/`.
+10. Verify the export:
+    `ffprobe -v error -show_entries format=duration:stream=codec_name,width,height,r_frame_rate -of default=nw=1 final.mp4`,
+    watch it end to end, and check its length against the cap.
+11. Keep the `.kdenlive` project file out of the repo unless the captain decides
+    otherwise. It stores absolute paths.
+
+## Submission video constraints still unconfirmed
+
+The public event page (searched Oct 26) confirms only these: submissions are due
+Nov 4 at 9:00 PM ET, judging runs Nov 4 to 8, and the indie track is judged on
+creativity, technical ambition, and whether it works. It publishes no video spec.
+Still to confirm in the participant portal, kickoff materials, or Discord:
+
+- Maximum length. The plan says about 2:00, but the beat targets add up to 2:20.
+- Hosting: a YouTube, Vimeo, or Loom link vs a direct upload, and public vs unlisted.
+- Resolution, container, and file-size limits.
+- Whether a recorded demo is accepted, or a live one is expected, and whether
+  terminal recordings count as the demo.
+- Voiceover, caption, and language requirements.
+- "Show only work built during the event" (GAMEPLAN, Oct 26 drop): how to label the
+  pre-existing engines (k4o, dogbed) on screen.
+- Rules for Meta/Muse branding, Muse Image output, and music licensing.
+- Whether slides or a backup video are also required.
+
+## Determinism
+
+- Fixed: data (`knap-mcp/data`), the mock backend, 1920x1080, Menlo 24, Catppuccin
+  Mocha, 30ms typing speed, no cursor blink, the pinned glow config, `TZ`/`LC_ALL`,
+  and a fresh scratch workdir and artifact store per take (removed on exit).
+- Varies between takes: the `doc_id` handle in beat 3's repair result, which embeds a
+  nanosecond timestamp. Other beats filter handles out.
+- Machine-specific: Menlo is a macOS font. On Linux the font falls back and line
+  wrapping changes.
+
+## Gate output
+
+Run on Oct 26 after rebasing onto `origin/main` at c74696d (T1, E1, K3, S0, B1, C3,
+the formatcheck test fix, the k4o/dogbed main pin bump #15, and D1 #14 merged).
+Engines from `scripts/engines.sh path`: k4o-bdfb838, dogbed-d7ffaba. boris 0.8.2.
+
+```text
+$ make test
+cd knap-mcp && zig build test
+(exit 0)
+
+$ KNAP_MCP_HOME=$(mktemp -d) make eval
+| all | 18 | 5 | 28% | 1.00 | 0/5 | 4 |
+converged 5/18 breaks   mean iters 1.00   exact 0/5   no-op seeds 4   controls 3/3 clean
+
+$ demo/build.sh smoke
+==> vhs 0.12.1, ttyd 1.7.7-unknown, ffmpeg 9.0.2, browser: found
+==> vhs demo/tapes/00-smoke.tape
+==> raw take: h264,1920,1080,yuv420p,25/1, 10.120000s
+==> trim: segment A [0, 4.048s) + segment B [6.072s, end)
+==> demo/out/smoke.mp4: h264,1920,1080,yuv420p,30/1, 8.066667s
+
+$ demo/build.sh tapes
+==> engines: k4o=~/.cache/knap-engines/k4o-bdfb838/k4o dogbed=~/.cache/knap-engines/dogbed-d7ffaba/dogbed
+tape                    target  rendered  status
+01-cold-open                5s      4.9s  ready (fixture doc); density score blocked on D1
+02-verdict-data            20s     20.8s  partial (tools/shape/data/validate ready; ...)
+03-repair                  25s     23.2s  ready (mock backend); real Spark patches need M1
+04-the-doc                 30s     29.4s  partial (renders now; callouts need T2; ...)
+04b-density-ratchet        15s     14.6s  placeholder (blocked on D1 scorer + D2 ratchet loop)
+05-boris-catch             15s     14.4s  partial (B1's stage-check.sh stands in for knap_publish_check until B2)
+06-voice                   20s     18.4s  partial (C3 mock replies stand in for knap_voice; structure hash needs C2)
+07-one-source              15s     18.6s  partial (md + html ready; one shared data file needs T2/I5)
+08-numbers                 10s     12.0s  partial (mock eval, conformance totals, LOC ready; ...)
+
+$ demo/build.sh rough
+==> demo/out/rough-cut.mp4: 9 clips, h264,1920,1080,yuv420p,30/1, 156.333333s
+```
+
+`verify` in `build.sh` decodes every frame of `smoke.mp4` and `rough-cut.mp4`
+(`ffmpeg -v error -f null`) and fails on any decode error; both passed. On the final
+render I checked frames from beats 3 through 8 by eye: the commands run, the output is
+the expected output on the new pins, commands don't wrap, and the receipts table
+renders in glow. Beats 1, 2, and 4b did not change and match the first round. In
+beat 6, `diff` wraps the two long summary lines, which is prose and reads fine.
+`shellcheck` is clean on `build.sh` and `env.sh`.

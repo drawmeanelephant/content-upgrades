@@ -256,6 +256,6 @@ with the pin.
 - `templates/` — 8 shipped templates + `shapes/*.json` descriptors
 - `data/` — sample, minimal (`.min.json`) and hallucinated data sets
 - `prompts/voice/` — voice prompt contract, tone prompts, mock replies
-- `eval/` — seeded-breakage corpora + lane harnesses (voice, boris, ratchet, verifier, density fixtures)
+- `eval/` — seeded-breakage corpora + harnesses (voice, boris, ratchet, verifier, density fixtures)
 - `../scripts/engines.sh` — pinned k4o/dogbed builds (`make engines`)
 - `../boris-site/` — frozen boris site: publish-check staging source, the boris_ask/check artifact

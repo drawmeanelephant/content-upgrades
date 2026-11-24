@@ -1,7 +1,7 @@
 //! knap_publish_check core: stage one rendered markdown doc into a
 //! throwaway copy of a boris site and run `boris validate` there.
 //! A port of boris-site/stage-check.sh (--validate mode); keep the two in
-//! parity, rule for rule (docs/tracks/B2.md).
+//! parity, rule for rule (docs/publish-check.md).
 //!
 //! The staging profile says how the doc is adapted. `frozen` (the
 //! default, and the only behavior stage-check.sh has) adapts the doc

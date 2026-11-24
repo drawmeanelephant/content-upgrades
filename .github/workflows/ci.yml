@@ -118,7 +118,7 @@ jobs:
       - name: Demo
         run: KNAP_BORIS_PATH="$HOME/.cache/knap-boris/v0.8.2/boris" KNAP_ENGINES_DIR="$HOME/.cache/knap-engines" make demo
 
-      # The B-lane gate: exercises far more of the boris binary (check,
+      # Extra boris coverage: exercises far more of the boris binary (check,
       # validate, artifact regen) than publish-check alone — catches a subtly
       # wrong boris build.
       - name: Boris site selftest

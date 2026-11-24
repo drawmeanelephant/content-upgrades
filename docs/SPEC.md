@@ -153,7 +153,7 @@ Seventeen tools, in `tools/list` order:
   budget; an insert-only guard keeps values layout-safe. Same template
   renders all tones — layout untouched. The guard verifies tokens (facts,
   markup, structure), not meaning: a new claim or a negation flip written
-  in plain words passes (`docs/tracks/VOICE-SCOPE.md`).
+  in plain words passes (`docs/voice-guard-scope.md`).
 - `knap_structure_hash(doc_id, strict?, ignore_formatting?)` — layout
   skeleton hash of a rendered doc: block and inline kinds with all text
   dropped; equal hashes mean the same layout. `strict` also keeps link

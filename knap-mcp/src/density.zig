@@ -1259,7 +1259,7 @@ test "scoring every fixture takes under 2s" {
     // Canary, not a benchmark — scoring all ten fixtures is ~6ms in a
     // debug build, so this ceiling has ~300x of slack. Any tighter
     // wall-clock bound (this was 50ms) only measures machine load, not
-    // the code (see docs/tracks/TEST-INFRA.md, #246). What the assert
+    // the code (see docs/test-infra.md, #246). What the assert
     // still catches is a pathological regression: accidental quadratic
     // scoring that turns milliseconds into seconds.
     try testing.expect(ns < 2 * std.time.ns_per_s);

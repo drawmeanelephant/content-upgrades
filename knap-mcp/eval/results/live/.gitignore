@@ -1,5 +1,5 @@
 # Raw run litter from scripts/live.sh --out knap-mcp/eval/results/live.
-# What stays tracked and why: docs/tracks/LIVE-HYGIENE.md.
+# What stays tracked and why: docs/live-hygiene.md.
 *.err
 *.stderr.txt
 voice-*.json
